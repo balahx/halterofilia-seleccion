@@ -55,6 +55,8 @@
     ['hanghighpullbajorod', 'Below-Knee Hang High Pull', 'Tirón alto desde suspensión bajo rodilla'],
     ['hang pull clean', 'Hang Clean Pull', 'Tirón de cargada suspendido'],
     ['clean speed pull', 'Clean Speed Pull', 'Tirón de cargada veloz'],
+    ['drop / DR', 'Drop Set', 'Serie descendente (drop)'],
+    ['MOVILIDAD Y MASAJES', 'Mobility and Massage', 'Movilidad y masajes'],
     ['iso carga', 'Overload Isometric Hold', 'Isométrico con sobrecarga (sobre 100%)'],
     ['jalon envion / jalon de envion', 'Clean Pull', 'Tirón de cargada'],
     ['jerk', 'Split Jerk (if split reception)', 'Segundo tiempo en tijera'],
@@ -122,7 +124,7 @@
   }
 
   /* ---------- Un texto de ejercicio → partes ---------- */
-  const NUMTAIL = /\s+[\d(\/][^\s]*$/;
+  const NUMTAIL = /\s+(?:[\d(\/][^\s]*|[oO])$/;
   function candidates(t, simple) {
     const out = [], seen = {}, add = x => { x = x.trim(); if (x && !seen[x]) { seen[x] = 1; out.push(x); } };
     add(t);
@@ -141,12 +143,14 @@
     if (HOLD_BARE[entry.exId]) { const b = tail.match(/^\s*(\d+)(?=\s|$)/); if (b) return +b[1]; }
     return undefined;
   }
+  /* «drop 46K 65%»: serie descendente al 65% del máximo del mismo ejercicio (normalmente la última serie) */
+  function dropPctOf(src) { const m = String(src).match(/(\d+(?:[.,]\d+)?)\s*%/); return m ? parseFloat(m[1].replace(',', '.')) : undefined; }
   function resolvePart(src, D, simple) {
     let t = src.trim(), max = false, mult = 1;
     if (/\s+MAX$/i.test(t)) { max = true; t = t.replace(/\s+MAX$/i, ''); }
     for (let k = 0; k < 2; k++) {
       const cs = candidates(t, simple);
-      for (let i = 0; i < cs.length; i++) { const e = D[norm(cs[i])]; if (e) return { src: src.trim(), entry: e, mult: mult, max: max, hold: holdOf(e, t, cs[i]) }; }
+      for (let i = 0; i < cs.length; i++) { const e = D[norm(cs[i])]; if (e) return { src: src.trim(), entry: e, mult: mult, max: max, hold: holdOf(e, t, cs[i]), dropPct: e.exId === 'drop-set' ? dropPctOf(src) : undefined }; }
       const m = t.match(/^(\d)\s*(.+)$/); if (!m) break;                                              // «2hang clean» = 2 × hang clean
       mult = +m[1]; t = m[2];
     }
@@ -155,7 +159,7 @@
   const INLINE = /(\d+)\s*reps?\s*RIR\s*(\d+)\s*x\s*(\d+)\s*s/i; // «Leg extension12repsRIR2x1s»
 
   function resolveCell(text, D) {
-    let t = String(text).replace(/\s+/g, ' ').trim(), tag = '';
+    let t = String(text).replace(/\s+/g, ' ').replace(/\s+apenas\b.*$/i, '').trim(), tag = '';   // «apenas power jerk»: comentario personal del entrenador, se descarta
     const mt = t.match(/^\((PES|MOD)\)\s*/i); if (mt) { tag = mt[1].toUpperCase(); t = t.slice(mt[0].length); }
     // 1. la celda completa (cubre «les ext/flex», «Exc gastroc/ flex platar» y los complejos del glosario)
     // (con «/» solo vale si la celda completa, sin cargas al final, es un término del glosario)
@@ -167,11 +171,12 @@
   }
 
   /* ---------- Prescripción ---------- */
-  const PRESC = /^\(?\s*(max\s*\d+k\)?\s*)?\d+(\.\d+)?(\s*-\s*\d+|\s+\d+)*\s*%|^\(\d+k\s*max\)|^\d+\s*[xX]\s*\d|^\(\d+%/i;
+  const PRESC = /^(?:max|mac)$|^\(?\s*(max\s*\d+k\)?\s*)?\d+(\.\d+)?(\s*-\s*\d+|\s+\d+)*\s*%|^\(\d+k\s*max\)|^\d+\s*[xX]\s*\d|^\(\d+%/i;
   const SEG = /(\d+(?:[.,]\d+)?)\s*%\s*(\d+(?:\s*-\s*\d+)?)\s*(?:reps?|r)?\s*[xX]\s*(\d+)/gi;
   const isPresc = t => PRESC.test(t.trim());
   function parsePresc(t) {
     const out = []; let m; SEG.lastIndex = 0;
+    if (/^(max|mac)$/i.test(t.trim())) return [{ pct: 100, reps: '', sets: null, max: true, adjustable: true }];   // «max»: el máximo, 100 % o un nuevo 100 %
     while ((m = SEG.exec(t))) out.push({ pct: parseFloat(m[1].replace(',', '.')), reps: m[2].replace(/\s/g, ''), sets: +m[3] });
     if (!out.length) {                                   // «90% 95% 100 o más»: solo porcentajes, sin repeticiones ni series
       const re = /(\d+(?:[.,]\d+)?)\s*%/g; while ((m = re.exec(t))) out.push({ pct: parseFloat(m[1].replace(',', '.')), reps: '', sets: null });
@@ -203,11 +208,22 @@
     const hdr = []; for (let r = 0; r < R; r++) if (/^(caracteris|max (rend|deriv))/i.test(B(r))) hdr.push(r);
     if (!weekRows.length) throw new Error('No se encontraron semanas («semana 1», «semana 2»…) en la columna B');
     if (!stages.length) { stage = { id: 'e1', name: 'Plan', order: 1 }; stages.push(stage); weekRows.forEach(w => { w.stage = stage; }); }
+    // Filas de recuperación («MOVILIDAD Y MASAJES» en todos los días) que están justo encima de una semana de texto: son de esa semana
+    const rowText = (r, c) => cell(r, c), claimed = {};
+    weekRows.forEach((w, i) => {
+      if (!w.text || !i) return; let r = w.r - 1; while (r > 0 && rowHas(r)) r--;
+      for (; r > weekRows[i - 1].r; r--) {
+        const vals = []; for (let c = 3; c <= 7; c++) if (rowText(r, c)) vals.push(norm(rowText(r, c)));
+        if (B(r) || Cc(r) || vals.length < 3 || vals.some(v => v !== vals[0]) || isPresc(rowText(r, 3) || rowText(r, 4) || rowText(r, 5))) break;
+        (w.rec = w.rec || []).unshift(r); weekRows[i - 1].trim = r - 1;
+      }
+    });
+    function rowHas(r) { for (let c = 1; c <= 7; c++) if (cell(r, c)) return false; return true; }
     const weeks = [], used = {}, unknownMap = {}, exercises = {}; let nItems = 0, nDiscard = 0, nNoPresc = 0;
     weekRows.forEach((w, i) => {
       const r0 = w.r, nxt = i + 1 < weekRows.length ? weekRows[i + 1].r : R + 1;
       const stops = hdr.filter(h => h > r0 && h < nxt).concat(stageRows.filter(x => x > r0 && x < nxt), [nxt]);
-      const end = Math.min.apply(null, stops) - 1;
+      let end = Math.min.apply(null, stops) - 1; if (w.trim != null) end = Math.min(end, w.trim);
       const mm = w.label.match(/^semana\s*(\d+)\s*(.*)$/i), num = +mm[1];
       let label = mm[2].replace(/\s+/g, ' ').trim();
       const notes = [];
@@ -216,6 +232,14 @@
       if (w.text) {
         wk.notes.unshift(w.label.replace(/\s+/g, ' ')); wk.label = '';
         if (/transici/i.test(w.label)) { wk.kind = 'transition'; wk.label = 'Transición'; wk.notes.unshift(TRANSITION_NOTE); }
+        (w.rec || []).forEach(r => {
+          for (let c = 3; c <= 7; c++) {
+            const t = cell(r, c); if (!t) continue;
+            const rc = resolveCell(t, D), ses = wk.sessions.filter(x => x.day === c - 2)[0] || (wk.sessions.push({ day: c - 2, name: DAY_NAMES[c - 3], items: [] }), wk.sessions[wk.sessions.length - 1]);
+            ses.items.push({ block: null, tag: '', raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold, dropPct: p.dropPct }))), sets: [], presc: '' });
+            rc.alts.forEach(a => a.forEach(p => collect(p, num, c, r))); nItems++;
+          }
+        });
         weeks.push(wk); return;
       }
       if (used[wk.id]) { warnings.push('La semana ' + num + ' aparece dos veces en «' + w.stage.name + '». Se conserva la primera.'); return; }
@@ -227,7 +251,7 @@
           if (isPresc(t)) { cur = { raw: t, sets: parsePresc(t) }; if (!cur.sets.length) warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): no se pudo interpretar «' + t + '»'); continue; }
           block = blockOf(Cc(r)) || blockOf(Cc(r - 1)) || block;
           const rc = resolveCell(t, D);
-          const it = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
+          const it = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold, dropPct: p.dropPct }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
           if (rc.inline) it.inline = rc.inline;
           if (!cur) { nNoPresc++; warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» no tiene series ni % arriba'); }
           rc.alts.forEach(a => a.forEach(p => collect(p, num, c, r)));
@@ -281,7 +305,7 @@
       let it = order ? ses.items.filter(i => i.order === order)[0] : null;
       if (it) { if (scheme) it.sets.push(scheme); continue; }
       const rc = resolveCell(ex, D);
-      it = { block: g(col['Bloque']) || null, tag: rc.tag, raw: ex, order: order || null, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold }))), sets: scheme ? [scheme] : [], presc: '' };
+      it = { block: g(col['Bloque']) || null, tag: rc.tag, raw: ex, order: order || null, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold, dropPct: p.dropPct }))), sets: scheme ? [scheme] : [], presc: '' };
       if (rc.inline) it.inline = rc.inline;
       if (!scheme) warnings.push('Fila ' + (r + 1) + ': «' + ex + '» sin %, repeticiones ni series');
       rc.alts.forEach(a => a.forEach(p => {

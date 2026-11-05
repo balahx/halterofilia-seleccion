@@ -77,7 +77,7 @@
   function weekDoc(w) {
     return clean({ stageId: w.stageId, week: w.week, label: w.label || '', kind: w.kind || '', notes: (w.notes || []).slice(0, 12).map(n => String(n).slice(0, 300)),
       sessions: w.sessions.map(s => ({ day: s.day, name: s.name, items: s.items.map(it => ({ block: it.block || '', tag: it.tag || '', raw: String(it.raw).slice(0, 200), presc: it.presc || '',
-        sets: it.sets, inline: it.inline || null, alts: it.alts.map(a => ({ p: a.map(p => ({ src: p.src, ex: p.exId, mult: p.mult, max: !!p.max, hold: p.hold })) })) })) })) });
+        sets: it.sets, inline: it.inline || null, alts: it.alts.map(a => ({ p: a.map(p => ({ src: p.src, ex: p.exId, mult: p.mult, max: !!p.max, hold: p.hold, dropPct: p.dropPct })) })) })) })) });
   }
   async function publish() {
     const I = window.PlanImport, pv = P.preview; if (!pv || P.busy) return;
@@ -109,9 +109,9 @@
   /* Muestra de la primera semana para comprobar que cada prescripción quedó con su ejercicio */
   function sampleHTML(pv) {
     const w = pv.weeks.filter(x => x.sessions.length)[0]; if (!w) return '';
-    const s = w.sessions[0], nm = p => (p.exId && pv.exercises[p.exId] ? pv.exercises[p.exId].en : p.src) + (p.mult > 1 ? ' ×' + p.mult : '') + (p.hold ? ' (' + p.hold + ' s isométrico)' : '');
+    const s = w.sessions[0], nm = p => (p.exId && pv.exercises[p.exId] ? pv.exercises[p.exId].en : p.src) + (p.mult > 1 ? ' ×' + p.mult : '') + (p.hold ? ' (' + p.hold + ' s isométrico)' : '') + (p.dropPct ? ' (a ' + p.dropPct + '%)' : '');
     const rows = s.items.slice(0, 8).map(it => {
-      const sets = it.sets.length ? it.sets.map(x => (x.pct != null ? x.pct + '% ' : '') + x.reps + ' × ' + x.sets).join(' · ') : '<i>sin prescripción</i>';
+      const sets = it.sets.length ? it.sets.map(x => x.max ? 'máximo (100% o nuevo 100%)' : (x.pct != null ? x.pct + '% ' : '') + (x.reps ? x.reps + ' × ' + x.sets : '')).join(' · ') : '<i>sin prescripción</i>';
       return `<li><b>${esc(it.alts.map(a => a.map(nm).join(' + ')).join(' / '))}</b><small>${sets}</small></li>`;
     }).join('');
     return `<div class="card sec"><span class="eyebrow">Muestra · semana ${w.week}, ${esc(s.name)}</span><ul class="plain">${rows}</ul>

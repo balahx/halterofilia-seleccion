@@ -71,4 +71,26 @@ const pr = P.parsePresc('90% 95% |00 o más ');
 ok(pr.length === 3 && pr[2].pct === 100 && pr[2].orMore && pr.every(x => x.adjustable), '«90% 95% |00 o más» → 90, 95 y 100 o más, todos ajustables');
 const tw = r5.weeks.find(w => w.week === 2);
 ok(tw && tw.kind === 'transition' && tw.sessions.length === 0 && /descarga física y mental/.test(tw.notes[0]) && r5.stats.transicion === 1, 'fila «Transición» = semana de transición, sin sesiones');
+
+console.log('6. Drop, max, movilidad y masajes (5-nov, 2.ª tanda)');
+const g6 = [head, ['E', 1, 'Lunes', 1, '', 'AA fuerza + drop 46K 65%', 80, '3', 3, ''], ['E', 1, 'Lunes', 2, '', 'AA fuerza + drop', 80, '3', 3, ''], ['E', 1, 'Lunes', 3, '', 'drop O 65%', 80, '3', 3, ''],
+  ['E', 1, 'Lunes', 4, '', 'Jerk drive +2power jerk apenas power jerk', 70, '2', 3, '']];
+const i6 = P.parsePlan(g6, []).weeks[0].sessions[0].items;
+ok(i6[0].alts[0][1].exId === 'drop-set' && i6[0].alts[0][1].dropPct === 65, '«drop 46K 65%» = serie descendente al 65% (los 46 kg no se guardan)');
+ok(i6[1].alts[0][1].exId === 'drop-set' && i6[1].alts[0][1].dropPct === undefined, '«drop» sin % queda como serie descendente sin porcentaje');
+ok(i6[2].alts[0][0].exId === 'drop-set' && i6[2].alts[0][0].dropPct === 65, '«drop O 65%» → drop al 65%');
+ok(i6[3].alts[0].length === 2 && i6[3].alts[0][1].exId === 'power-jerk' && i6[3].alts[0][1].mult === 2, 'el comentario personal «apenas power jerk» se elimina');
+ok(JSON.stringify(P.parsePresc('max')) === '[{"pct":100,"reps":"","sets":null,"max":true,"adjustable":true}]' && P.parsePresc('mac')[0].max === true, '«max» y «mac» = máximo (100% o nuevo 100%)');
+// planilla de Cristian en miniatura: «max» arriba del ejercicio y filas de movilidad encima de la semana de transición
+const cg = []; const put = (r, c, v) => { while (cg.length <= r) cg.push(new Array(8).fill(null)); cg[r][c] = v; };
+put(1, 1, 'Etapa A'); put(3, 1, 'caracteris meso'); put(4, 1, 'semana 1'); put(4, 3, 'lunes'); put(5, 1, 'EQUIPO'); put(5, 3, '70% 3X3'); put(6, 2, 'TEC AA'); put(6, 3, 'AA');
+put(7, 3, 'max'); put(7, 4, 'max'); put(7, 5, 'max'); put(8, 3, 'SQ'); put(8, 4, 'FSQ'); put(8, 5, 'pull up');
+[3, 4, 5, 6, 7].forEach(c => put(9, c, 'MOVILIDAD Y MASAJES '));
+put(11, 1, 'semana 2 de agosto transicion, descanso');
+const c6 = P.parsePlan(cg, [{ r1: 1, c1: 1, r2: 1, c2: 7 }, { r1: 11, c1: 1, r2: 11, c2: 7 }]);
+const sq = c6.weeks[0].sessions[0].items[1];
+ok(sq.alts[0][0].exId === 'squat' && sq.sets[0].max === true, '«max» arriba de «SQ» = máximo en sentadilla');
+ok(c6.weeks[0].sessions[0].items.length === 2, 'las filas de movilidad ya no quedan en la semana anterior');
+const tw6 = c6.weeks[1];
+ok(tw6.kind === 'transition' && tw6.sessions.length === 5 && tw6.sessions[0].items[0].alts[0][0].exId === 'mobility-and-massage', 'esas filas pasan a la semana de transición: movilidad y masajes de lunes a viernes');
 console.log(fails ? '\n' + fails + ' fallo(s)' : '\nTodo bien'); process.exit(fails ? 1 : 0);
