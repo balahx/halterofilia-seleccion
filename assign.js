@@ -68,16 +68,11 @@
     }
     return { kg: 0, how: 'none' };
   }
-  /* Referencia de un ejercicio de la planilla. En un complejo (a + b + c), por prioridad:
-       1. el máximo del complejo mismo, si el atleta lo tiene (Máximos o «Proyectar máximo»);
-       2. el del primer movimiento que tenga máximo de referencia (propio o derivado).
-     Así un complejo al 120 % de un arranque de 100 kg pide 120 kg. */
+  /* Referencia de un ejercicio de la planilla. Un complejo (a + b + c) no tiene máximo propio: su % se aplica al máximo
+     del ejercicio principal del primer movimiento que tenga uno (propio o derivado). Arranque + sentadilla de arranque →
+     máximo de arranque; cargada + sentadilla frontal → máximo de cargada. Un complejo al 120 % de un arranque de 100 kg pide 120 kg. */
   function refFor(S, item, adj) {
     const ps = mainParts(item);
-    if (ps.length > 1) {
-      const own = S.exercises.find(q => q.id === exerciseFor(item).id);
-      if (own && own.max > 0) return { kg: own.max, how: 'own', cx: true };
-    }
     for (let i = 0; i < ps.length; i++) { const r = refMax(S, partId(ps[i]), adj); if (r.kg > 0) return ps.length > 1 ? Object.assign({ via: partId(ps[i]) }, r) : r; }
     return { kg: 0, how: 'none' };
   }
@@ -223,33 +218,19 @@
       if (key !== weekKey) { weekKey = key; watchMyWeek(d, !!was && was.planId === d.planId && was.weekId === d.weekId); }
       saveCache(); rerender(); flush();
     }, e => { A.err = H.err(e); rerender(); }));
-    unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); saveCache(); ensureComplexes(); rerender(); }, () => { /* opcional */ }));
+    unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); saveCache(); rerender(); }, () => { /* opcional */ }));
     flush();
   }
   function watchMyWeek(a, keepCache) {
     unwatch(weekUnsub); const r = H.remote(), pre = a.planId + '_' + a.weekId + '_';
     if (!keepCache) { A.me.week = null; A.me.adj = {}; A.me.done = {}; }
     weekUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
-    weekUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); ensureComplexes(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
+    weekUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
     weekUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
     weekUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {
       const done = {}; list.forEach(x => { if (x.id.indexOf(pre) === 0 && typeof x.sessionIdx === 'number') done[x.sessionIdx] = true; });
       A.me.done = done; saveCache(); rerender();
     }, () => { /* sin conexión */ }));
-  }
-  /* Los complejos de la semana pasan a la lista de ejercicios del atleta desde que ve la semana, para poder
-     guardarles un máximo (p. ej. estimado con «Proyectar máximo») antes de iniciar la sesión. */
-  function ensureComplexes() {
-    const w = A.me.week, S = H && H.state && H.state(); if (A.role !== 'athlete' || !w || !S) return;
-    const miss = [];
-    (w.sessions || []).forEach(ses => (ses.items || []).forEach(it => {
-      const ps = mainParts(it); if (ps.length < 2) return;
-      if (ps.some(p => p.ex && !A.names[p.ex])) return;   // espera al catálogo para ponerle bien el nombre
-      const x = exerciseFor(it, A.names);
-      if (!S.exercises.some(q => q.id === x.id) && !miss.some(m => m.id === x.id)) miss.push(x);
-    }));
-    if (!miss.length) return;
-    H.commit(st => miss.forEach(x => { if (!st.exercises.some(q => q.id === x.id)) st.exercises.push({ id: x.id, name: x.name, en: x.en, es: x.es, cat: x.cat, rest: st.profile.rest || 120, max: 0, maxDate: null, builtin: false }); }));
   }
   function saveCache() {
     if (A.role !== 'athlete' || !A.me.asg) return;
@@ -301,9 +282,9 @@
       }).join(' | ');
       const nb = ps.map(p => both(p, A.names, lang)), prim = nb.map(q => q.p).join(' + '), sec = nb.map(q => q.s || q.p).join(' + ');
       const alt = (it.alts || []).slice(1).map(a => (a.p || []).map(p => both(p, A.names, lang).p).join(' + ')).join(' o ');
-      const cxHow = ps.length > 1 ? (ref.cx ? ' · con el máximo de tu complejo' : ref.via ? ' · % de tu ' + both({ ex: ref.via, src: ref.via }, A.names, lang).p + ' (primer movimiento con máximo)' : '') : '';
+      const cxHow = ps.length > 1 ? (ref.via ? ' · % de tu ' + both({ ex: ref.via, src: ref.via }, A.names, lang).p + ' (primer movimiento con máximo)' : '') : '';
       const how = cxHow + (ref.how === 'derived' ? ' · calculado desde tu ' + both({ ex: ref.base, src: ref.base }, A.names, lang).p + (ref.f !== 1 ? ' × ' + ref.f + (ref.set ? ' (indicado por tu entrenador)' : '') : (ref.set ? ' (indicado por tu entrenador)' : '')) : '');
-      h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? (ps.length > 1 ? ' · sin máximo: anota el de un movimiento o el del complejo en «Máximos» (puedes estimarlo con «Proyectar máximo»)' : ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)') : ''}</small></li>`;
+      h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? (ps.length > 1 ? ' · sin máximo: anota el de uno de sus movimientos en «Máximos»' : ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)') : ''}</small></li>`;
     });
     h += '</ul>';
     if (w.kind !== 'transition') h += `<div class="actions"><button class="btn${done ? ' ghost' : ''}" data-act="as-start" data-i="${si}">${done ? 'Registrar de nuevo' : 'Iniciar esta sesión'}</button></div>`;
