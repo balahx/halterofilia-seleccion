@@ -89,6 +89,10 @@ const WEEKS = {
   let v = await txt('#view');
   ok(/70 %.*3 rep.*× 2.*70 kg/s.test(v), 'muestra 70 % · 3 rep × 2 → 70 kg');
   ok(/95 % \(ajustado\).*95 kg/s.test(v), 'el 92 % aparece ajustado a 95 % → 95 kg');
+  ok(/Snatch\s*\n\s*Arranque/.test(v), 'inglés principal y español debajo (ajuste por defecto)');
+  await page.click('#gear'); await page.waitForSelector('#sLang'); await page.selectOption('#sLang', 'es'); await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  ok(/Arranque\s*\n\s*Snatch/.test(await txt('#view')), 'al cambiar el ajuste, español principal e inglés debajo');
+  await page.click('#gear'); await page.waitForSelector('#sLang'); await page.selectOption('#sLang', 'en'); await page.keyboard.press('Escape'); await page.waitForTimeout(300);
   await shot('03-atleta-semana');
   await page.click('[data-act="as-start"][data-i="0"]'); await page.waitForSelector('.tick');
   ok(/Hoy|Arranque/.test(await txt('#view')), 'la sesión se abre lista para registrar');

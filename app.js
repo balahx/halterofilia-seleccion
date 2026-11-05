@@ -197,12 +197,23 @@ let KEY = 'halterofilia.v1.local';
 let APP = { tabs: [], accountHTML: null, onAct: null, onSave: null, cloud: false }; // lo define cloud.js al iniciar
 const CATS = [['comp', 'Competencia'], ['cmplx', 'Complejos'], ['tec', 'Técnica'], ['tiron', 'Tirones'], ['fuerza', 'Fuerza'], ['acc', 'Accesorios']];
 const REST_OPTS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
-const DEFAULT_PROFILE = { name: '', bw: 0, bar: 20, rounding: 1, rest: 120, timerEnabled: true, autoTimer: false, timerMode: 'down', sound: true, vibrate: true, keepAwake: true, showRpe: true, prefs: 2 };
+const DEFAULT_PROFILE = { name: '', bw: 0, bar: 20, rounding: 1, rest: 120, timerEnabled: true, autoTimer: false, timerMode: 'down', sound: true, vibrate: true, keepAwake: true, showRpe: true, prefs: 2, exLang: 'en' };
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/* Nombres de los ejercicios: inglés principal y español debajo (o al revés, según el ajuste de cada atleta) */
+const EN_NAMES = { snatch: 'Snatch', cj: 'Clean & Jerk', psnatch: 'Power Snatch', clean: 'Clean', pclean: 'Power Clean', jerk: 'Jerk', ohsq: 'Overhead Squat', snpull: 'Snatch Pull', clpull: 'Clean Pull',
+  bsq: 'Back Squat', fsq: 'Front Squat', pp: 'Push Press', press: 'Military Press', rdl: 'Romanian Deadlift', row: 'Barbell Row', 'cx-clfj': 'Clean + Front Squat + Jerk', 'cx-snoh': 'Snatch + Overhead Squat' };
+function exNames(e) {
+  const en = e.en || EN_NAMES[e.id] || '', es = e.es || e.name || '';
+  if (!en || en === es) return { p: es || en || e.name, s: '' };
+  return S && S.profile.exLang === 'es' ? { p: es, s: en } : { p: en, s: es };
+}
+const nm = e => exNames(e).p;
+const nmSub = e => { const x = exNames(e).s; return x ? '<small class="exsub">' + esc(x) + '</small>' : ''; };
 
 function defaultExercises() {
   const L = [
@@ -429,7 +440,7 @@ function weekStrip() {
 function planItemsList(day) {
   return '<ul class="plan-list">' + day.items.map(p => {
     const e = ex(p.exId);
-    return '<li>' + plateDot(zoneOf(p.pct)) + '<span class="pl-n">' + esc(e.name) + '</span><span class="pl-d">' + esc(planPreview(p, e)) + (p.pct > 0 ? ' · ' + fmtNum(p.pct, 1) + '%' : '') + '</span></li>';
+    return '<li>' + plateDot(zoneOf(p.pct)) + '<span class="pl-n">' + esc(nm(e)) + '</span><span class="pl-d">' + esc(planPreview(p, e)) + (p.pct > 0 ? ' · ' + fmtNum(p.pct, 1) + '%' : '') + '</span></li>';
   }).join('') + '</ul>';
 }
 function viewHoy() {
@@ -475,7 +486,7 @@ function setRowHTML(i, j, st, it) {
 }
 function exerciseCard(it, i) {
   const e = ex(it.exId), rpe = S.profile.showRpe;
-  return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(e.name) + '</h3>' +
+  return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) +
     '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button></div>' +
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
     '<div class="set sethead' + (rpe ? ' rpe' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
@@ -500,8 +511,8 @@ function viewLogger(s) {
 /* ----- PLAN ----- */
 function planRow(d, i, p, k) {
   const e = ex(p.exId), id = i + '-' + k;
-  return '<div class="prow" data-d="' + i + '" data-k="' + k + '"><div class="prow-h"><span class="pn">' + plateDot(zoneOf(p.pct)) + esc(e.name) + '</span><span class="pv" id="pv-' + id + '">' + esc(planPreview(p, e)) + '</span>' +
-    '<button class="icon-btn sm" data-act="plan-rm" data-d="' + i + '" data-k="' + k + '" aria-label="Quitar ' + esc(e.name) + ' del plan">' + svg('close') + '</button></div>' +
+  return '<div class="prow" data-d="' + i + '" data-k="' + k + '"><div class="prow-h"><span class="pn">' + plateDot(zoneOf(p.pct)) + esc(nm(e)) + '</span><span class="pv" id="pv-' + id + '">' + esc(planPreview(p, e)) + '</span>' +
+    '<button class="icon-btn sm" data-act="plan-rm" data-d="' + i + '" data-k="' + k + '" aria-label="Quitar ' + esc(nm(e)) + ' del plan">' + svg('close') + '</button></div>' +
     '<div class="prow-f"><label><span>Series</span><input class="num sm" id="ps-' + id + '" data-f="psets" inputmode="numeric" value="' + p.sets + '"></label>' +
     '<label><span>Reps</span><input class="num sm" id="pr-' + id + '" data-f="preps" inputmode="text" value="' + esc(p.reps) + '"></label>' +
     '<label><span>% máx.</span><input class="num sm" id="pp-' + id + '" data-f="ppct" inputmode="decimal" value="' + (p.pct > 0 ? fmtNum(p.pct, 1) : '') + '"></label>' +
@@ -576,7 +587,7 @@ function viewMax() {
     for (const e of list) {
       const est = bestSetE1rm(S.sessions, e.id, since);
       const better = est > e.max + 0.9;
-      h += '<div class="mrow"><button class="mmain" data-act="edit-max" data-ex="' + esc(e.id) + '"><span class="mn">' + esc(e.name) + '</span><span class="mv">' + (e.max > 0 ? fmtNum(e.max, 1) + '<small> kg</small>' : '<small>definir</small>') + '</span></button>' +
+      h += '<div class="mrow"><button class="mmain" data-act="edit-max" data-ex="' + esc(e.id) + '"><span class="mn">' + esc(nm(e)) + nmSub(e) + '</span><span class="mv">' + (e.max > 0 ? fmtNum(e.max, 1) + '<small> kg</small>' : '<small>definir</small>') + '</span></button>' +
         (est > 0 ? '<span class="me">mejor serie ≈ ' + fmtNum(est, 1) + '</span>' : '') +
         (better ? '<button class="btn ghost sm" data-act="use-est" data-ex="' + esc(e.id) + '">Usar ' + fmtNum(roundTo(est, S.profile.rounding), 1) + '</button>' : '') + '</div>';
     }
@@ -590,7 +601,7 @@ function viewMax() {
   h += '<section class="card sec"><h2>Proyectar máximo</h2><p class="muted">Calcula tu 1RM desde una serie con menos repeticiones.</p><div class="row2"><label class="fl"><span>Peso (kg)</span><input class="num" id="cKg" data-f="cKg" inputmode="decimal" value="' + fmtNum(ui.calc.kg, 2) + '"></label>' +
     '<label class="fl"><span>Repeticiones</span><input class="num" id="cReps" data-f="cReps" inputmode="numeric" value="' + ui.calc.reps + '"></label></div>' +
     '<div id="calcOut" aria-live="polite">' + calcOut(ui.calc.kg, ui.calc.reps) + '</div>' +
-    '<div class="row2 save-as"><label class="fl"><span>Guardar como máximo de</span><select class="sel tall" id="cEx" data-f="cEx">' + S.exercises.map(e => '<option value="' + esc(e.id) + '"' + (e.id === ui.calc.exId ? ' selected' : '') + '>' + esc(e.name) + '</option>').join('') + '</select></label>' +
+    '<div class="row2 save-as"><label class="fl"><span>Guardar como máximo de</span><select class="sel tall" id="cEx" data-f="cEx">' + S.exercises.map(e => '<option value="' + esc(e.id) + '"' + (e.id === ui.calc.exId ? ' selected' : '') + '>' + esc(nm(e)) + '</option>').join('') + '</select></label>' +
     '<button class="btn ghost" data-act="calc-save">' + confirmLabel('csave', 'Guardar', 'Confirmar') + '</button></div></section>';
   h += '<section class="card sec fold"><button class="fold-h" data-act="plates-toggle" aria-expanded="' + !!ui.platesOpen + '"><span>Calculadora de discos</span><span class="fold-i" aria-hidden="true">' + (ui.platesOpen ? '−' : '+') + '</span></button>' +
     (ui.platesOpen ? '<p class="muted">Qué discos poner a cada lado de la barra.</p>' + platesBlock('t', ui.platesKg || 0, ui.platesBar || S.profile.bar) : '') + '</section>';
@@ -612,7 +623,7 @@ function histRow(s) {
       const gaps = [];
       for (let k = 1; k < it.sets.length; k++) { const dgap = (it.sets[k].doneAt - it.sets[k - 1].doneAt) / 1000; if (dgap > 10 && dgap < 600) gaps.push(dgap); }
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
-      h += '<div class="hex"><b>' + esc(ex(it.exId).name) + '</b><span>' + groups.map(g => fmtNum(g.kg, 1) + ' kg · ' + g.n + '×' + esc(g.reps)).join('  /  ') + (avg ? ' · descanso real ~' + fmtTime(avg) : '') + '</span></div>';
+      h += '<div class="hex"><b>' + esc(nm(ex(it.exId))) + '</b><span>' + groups.map(g => fmtNum(g.kg, 1) + ' kg · ' + g.n + '×' + esc(g.reps)).join('  /  ') + (avg ? ' · descanso real ~' + fmtTime(avg) : '') + '</span></div>';
     }
     if (s.notes) h += '<p class="notes">“' + esc(s.notes) + '”</p>';
     h += '<div class="row-end"><button class="lnk danger" data-act="del-sess" data-id="' + s.id + '">' + confirmLabel('ds' + s.id, 'Eliminar sesión', 'Confirmar eliminar') + '</button></div></div>';
@@ -641,7 +652,7 @@ function viewProg() {
     const b0 = parseYmd(base[0].week);
     const pr = project(base.map(p => ({ x: daysBetween(b0, parseYmd(p.week)) / 7, y: p.y })));
     const e = ex(ui.progEx);
-    h += '<section class="sec"><div class="sec-h"><h2>1RM estimado</h2><select class="sel" id="progEx" data-f="progEx" aria-label="Ejercicio">' + withData.map(x => '<option value="' + esc(x.id) + '"' + (x.id === ui.progEx ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></div>' +
+    h += '<section class="sec"><div class="sec-h"><h2>1RM estimado</h2><select class="sel" id="progEx" data-f="progEx" aria-label="Ejercicio">' + withData.map(x => '<option value="' + esc(x.id) + '"' + (x.id === ui.progEx ? ' selected' : '') + '>' + esc(nm(x)) + '</option>').join('') + '</select></div>' +
       '<p class="muted">Mejor serie de cada semana. Con pocas repeticiones es un piso, no tu máximo real.</p>';
     const pts = shown.map(p => ({ t: parseYmd(p.week), y: p.y, label: 'Semana del ' + shortDate(parseYmd(p.week)) }));
     let proj = null;
@@ -649,7 +660,7 @@ function viewProg() {
       const last = pts[pts.length - 1];
       proj = { from: { t: last.t, y: last.y }, to: { t: addDays(last.t, 56), y: pr.p8 } };
     }
-    ui.charts.c1 = { kind: 'line', pts: pts, proj: proj, name: e.name };
+    ui.charts.c1 = { kind: 'line', pts: pts, proj: proj, name: nm(e) };
     h += '<div class="chart" data-c="c1"></div>';
     h += pr ? '<p class="proj-t"><b>Tendencia (referencial):</b> ≈ ' + fmtNum(pr.p4, 1) + ' kg en 4 semanas · ≈ ' + fmtNum(pr.p8, 1) + ' kg en 8 semanas. Línea recta sobre tus últimas semanas, con avance limitado a +1,5 % semanal.</p>' : '<p class="muted">Para proyectar necesito al menos 4 semanas con registros de este ejercicio.</p>';
     h += tableTwin(['Semana', '1RM estimado (kg)'], shown.map(p => [shortDate(parseYmd(p.week)), fmtNum(p.y, 1)])) + '</section>';
@@ -870,7 +881,7 @@ function setMode(m) {
 function startRest(it) {
   if (!S.profile.timerEnabled || !S.profile.autoTimer) return;
   primeAudio();
-  T.label = ex(it.exId).name;
+  T.label = nm(ex(it.exId));
   if (T.mode === 'up') { tReset(); tStart(); } else { tReset(it.rest > 0 ? it.rest : S.profile.rest); tStart(); }
   renderDock();
 }
@@ -918,7 +929,7 @@ function toggleDone(i, j) {
   if (e.max > 0 && r.total === 1 && !r.complex && st.kg > e.max) {
     const prev = { max: e.max, date: e.maxDate };
     e.max = st.kg; e.maxDate = ymd(new Date()); recalcPct(e.id); save(); render();
-    toast('Nuevo máximo de ' + e.name + ': ' + fmtNum(st.kg, 1) + ' kg', 'Deshacer', () => { e.max = prev.max; e.maxDate = prev.date; recalcPct(e.id); save(); render(); });
+    toast('Nuevo máximo de ' + nm(e) + ': ' + fmtNum(st.kg, 1) + ' kg', 'Deshacer', () => { e.max = prev.max; e.maxDate = prev.date; recalcPct(e.id); save(); render(); });
   }
 }
 function addExerciseToSession(exId) {
@@ -945,8 +956,8 @@ function finalize(mode) {
   s.items.forEach(it => {
     const e = ex(it.exId), best = Math.max(0, ...it.sets.map(setE1rm)), pb = bestSetE1rm(prior, it.exId);
     const single = Math.max(0, ...it.sets.filter(x => { const r = parseReps(x.reps); return r.total === 1 && !r.complex; }).map(x => x.kg)), ps = topSingle(prior, it.exId);
-    if (single > 0 && ps > 0 && single > ps) records.push(e.name + ': ' + fmtNum(single, 1) + ' kg a 1 repetición (antes ' + fmtNum(ps, 1) + ')');
-    else if (best > 0 && pb > 0 && best > pb + 0.4) records.push(e.name + ': 1RM estimado ' + fmtNum(best, 1) + ' kg (antes ' + fmtNum(pb, 1) + ')');
+    if (single > 0 && ps > 0 && single > ps) records.push(nm(e) + ': ' + fmtNum(single, 1) + ' kg a 1 repetición (antes ' + fmtNum(ps, 1) + ')');
+    else if (best > 0 && pb > 0 && best > pb + 0.4) records.push(nm(e) + ': 1RM estimado ' + fmtNum(best, 1) + ' kg (antes ' + fmtNum(pb, 1) + ')');
   });
   s.endedAt = Date.now();
   const stt = sessionStats(s);
@@ -1004,9 +1015,9 @@ function pickList(q) {
   q = q.trim().toLowerCase();
   let h = '';
   for (const c of CATS) {
-    const list = S.exercises.filter(e => e.cat === c[0] && (!q || e.name.toLowerCase().indexOf(q) >= 0));
+    const list = S.exercises.filter(e => e.cat === c[0] && (!q || (e.name + ' ' + (e.en || EN_NAMES[e.id] || '')).toLowerCase().indexOf(q) >= 0));
     if (!list.length) continue;
-    h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(e.name) + '</span><small>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
+    h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(nm(e)) + nmSub(e) + '</span><small>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
   }
   return h || '<p class="muted">No hay coincidencias.</p>';
 }
@@ -1019,6 +1030,7 @@ function settingsHTML() {
     '<p class="eyebrow">Cargas</p><div class="row2"><label class="fl"><span>Redondeo de pesos</span>' + sel('rounding', [0.5, 1, 2.5, 5], v => fmtNum(v, 1) + ' kg', 'sRound') + '</label>' +
     '<label class="fl"><span>Descanso predeterminado</span>' + restSelect(p.rest, 'id="sRest" data-f="set" data-k="rest" data-num="1"').replace('class="sel"', 'class="sel tall"') + '</label></div>' +
     '<p class="eyebrow">Temporizador</p><div class="checks">' + chk('timerEnabled', 'Mostrar temporizador y cronómetro') + chk('autoTimer', 'Iniciar solo al marcar una serie como hecha') + chk('sound', 'Sonido al terminar el descanso') + chk('vibrate', 'Vibración al terminar') + '</div>' +
+    '<p class="eyebrow">Nombres de los ejercicios</p><label class="fl"><span>Idioma principal</span>' + sel('exLang', ['en', 'es'], v => v === 'en' ? 'English (principal) · Español debajo' : 'Español (principal) · English debajo', 'sLang').replace(' data-num="1"', '') + '</label>' +
     '<p class="eyebrow">Sesión</p><div class="checks">' + chk('keepAwake', 'Mantener la pantalla encendida durante la sesión') + chk('showRpe', 'Anotar esfuerzo percibido (RPE) por serie') + '</div>' +
     '<p class="eyebrow">Tus datos</p><p class="muted">' + (APP.cloud ? 'Se guardan en este dispositivo y se copian solos en tu cuenta, así los ves en cualquier dispositivo donde entres. ' : 'Se guardan en este dispositivo. ') + 'Descarga un respaldo de vez en cuando.</p><div class="stack">' +
     '<button class="btn ghost" data-act="export-json">Exportar respaldo (JSON)</button><button class="btn ghost" data-act="export-csv">Exportar historial (CSV para Excel)</button></div>' +
@@ -1057,7 +1069,7 @@ function renderSheet() {
     case 'settings': title = 'Ajustes'; body = settingsHTML(); break;
     case 'pick': title = 'Elegir ejercicio'; body = '<input class="txt" id="pickQ" data-f="pickQ" type="search" placeholder="Buscar ejercicio" autocomplete="off" aria-label="Buscar ejercicio"><div id="pickList">' + pickList(sh.q || '') + '</div><div class="row-end"><button class="btn ghost sm" data-act="ex-new">+ Crear ejercicio</button></div>'; break;
     case 'ex': title = sh.id ? 'Editar ejercicio' : 'Nuevo ejercicio'; body = exSheetHTML(sh.id); break;
-    case 'max': title = 'Máximo · ' + ex(sh.exId).name; body = maxSheetHTML(sh.exId); break;
+    case 'max': title = 'Máximo · ' + nm(ex(sh.exId)); body = maxSheetHTML(sh.exId); break;
     case 'plates': title = 'Discos'; body = platesBlock('s', sh.kg, sh.bar); break;
     case 'finish': title = 'Terminar sesión'; body = sh.empty ? '<p>No marcaste ninguna serie como hecha.</p><div class="actions"><button class="btn" data-act="discard">Descartar sesión</button><button class="btn ghost" data-act="sheet-close">Volver</button></div>' : '<p>Tienes <b>' + sh.pending + '</b> ' + (sh.pending === 1 ? 'serie sin marcar' : 'series sin marcar') + '.</p><div class="stack"><button class="btn" data-act="fin-mark">Marcarlas como hechas y terminar</button><button class="btn ghost" data-act="fin-drop">Descartarlas y terminar</button><button class="btn ghost" data-act="sheet-close">Volver a la sesión</button></div>'; break;
     case 'summary': title = 'Sesión terminada'; body = summaryHTML(sh.sum); break;
@@ -1094,7 +1106,7 @@ function onSetting(t) {
   else v = t.value;
   S.profile[k] = v; save();
   if (k === 'timerEnabled') { if (!v) tPause(); renderDock(); }
-  if (k === 'showRpe' || k === 'rounding' || k === 'bar') render();
+  if (k === 'showRpe' || k === 'rounding' || k === 'bar' || k === 'exLang') refresh();
 }
 function onField(t) {
   const f = t.dataset.f, s = activeSession();
@@ -1226,13 +1238,13 @@ document.addEventListener('click', e => {
     }
     case 'use-est': {
       const e = ex(t.dataset.ex), est = bestSetE1rm(S.sessions, e.id, ymd(addDays(new Date(), -84)));
-      e.max = roundTo(est, S.profile.rounding); e.maxDate = ymd(new Date()); save(); render(); toast('Máximo de ' + e.name + ' actualizado a ' + fmtNum(e.max, 1) + ' kg.'); break;
+      e.max = roundTo(est, S.profile.rounding); e.maxDate = ymd(new Date()); save(); render(); toast('Máximo de ' + nm(e) + ' actualizado a ' + fmtNum(e.max, 1) + ' kg.'); break;
     }
     case 'calc-save': {
       const e = ex(ui.calc.exId), v = ui.calc.kg > 0 && ui.calc.reps >= 1 ? roundTo(e1rm(ui.calc.kg, Math.round(ui.calc.reps)), S.profile.rounding) : 0;
       if (!(v > 0)) { toast('Escribe un peso y repeticiones válidos.'); break; }
       if (e.max > 0 && !askConfirm('csave')) break;
-      e.max = v; e.maxDate = ymd(new Date()); save(); render(); toast('Máximo de ' + e.name + ' guardado: ' + fmtNum(v, 1) + ' kg.'); break;
+      e.max = v; e.maxDate = ymd(new Date()); save(); render(); toast('Máximo de ' + nm(e) + ' guardado: ' + fmtNum(v, 1) + ' kg.'); break;
     }
     case 'export-json': saveFile('halterofilia-respaldo-' + ymd(new Date()) + '.json', JSON.stringify(S, null, 1)); break;
     case 'export-csv': saveFile('halterofilia-historial-' + ymd(new Date()) + '.csv', csvHistory()); break;

@@ -61,6 +61,27 @@ ok(S.exercises.some(e => e.id === 'cx-tall-snatch+drop-snatch' && e.name === 'Ar
 ok(S.exercises.some(e => e.id === 'core-training') && ses.items.find(i => i.exId === 'core-training').sets.length === 1, 'un ejercicio sin prescripción queda con una serie vacía');
 ok(S.exercises.filter(e => e.id === 'snatch').length === 1, 'no duplica ejercicios que ya existen');
 
+console.log('4b. Derivados: máximo propio o, si no lo hay, el del ejercicio principal');
+Object.keys(A.DERIVED).forEach(k => ok(slugs.has(k) && slugs.has(A.DERIVED[k][0]), 'derivado válido en el glosario: ' + k + ' ← ' + A.DERIVED[k][0] + ' ×' + A.DERIVED[k][1]));
+const S2 = () => ({ profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', name: 'Arranque', max: 100 }, { id: 'ohsq', name: 'Sentadilla sobre la cabeza', max: 0 }] });
+let r2 = A.refMax(S2(), 'overhead-squat');
+ok(r2.kg === 120 && r2.how === 'derived', 'sin máximo de sentadilla de arranque: 120 % del arranque = ' + r2.kg);
+const S3 = S2(); S3.exercises[1].max = 124; r2 = A.refMax(S3, 'overhead-squat');
+ok(r2.kg === 124 && r2.how === 'own', 'con 124 kg propios se usa el propio');
+r2 = A.refMax(S2(), 'power-snatch'); ok(r2.kg === 100 && r2.how === 'derived', 'el arranque de potencia se calcula del arranque (100 %)');
+r2 = A.refMax(S2(), 'snatch-pull'); ok(r2.kg === 0 && r2.how === 'none', 'un tirón sin máximo ni derivado no inventa kilos');
+const wk2 = { sessions: [{ day: 1, name: 'Lunes', items: [{ alts: [{ p: [{ src: 'OHS', ex: 'overhead-squat' }] }], sets: [{ pct: 70, reps: '3', sets: 1 }] },
+  { alts: [{ p: [{ src: 'AA', ex: 'snatch' }, { src: 'AASQ', ex: 'overhead-squat' }, { src: 'balance', ex: 'snatch-balance' }] }], sets: [{ pct: 60, reps: '1', sets: 1 }] }] }] };
+let b2 = A.buildSession(S2(), wk2, 0, { planId: 'p', weekId: 'w' });
+ok(b2.items[0].sets[0].kg === 84, 'sentadilla de arranque 70 % sin máximo propio = 84 kg');
+b2 = A.buildSession(S3, wk2, 0, { planId: 'p', weekId: 'w' });
+ok(b2.items[0].sets[0].kg === 87, 'con 124 kg propios, 70 % = 87 kg');
+ok(b2.items[1].sets[0].kg === 60 && b2.items[1].exId.startsWith('cx-'), 'complejo arranque + sentadilla + balance: 60 % del arranque = 60 kg');
+const nm = { snatch: { en: 'Snatch', es: 'Arranque' } };
+ok(A.both({ ex: 'snatch', src: 'AA' }, nm, 'en').p === 'Snatch' && A.both({ ex: 'snatch', src: 'AA' }, nm, 'en').s === 'Arranque', 'inglés principal y español debajo');
+ok(A.both({ ex: 'snatch', src: 'AA' }, nm, 'es').p === 'Arranque' && A.both({ ex: 'snatch', src: 'AA' }, nm, 'es').s === 'Snatch', 'al cambiar el ajuste se invierte');
+ok(A.both({ ex: 'zzz', src: 'ejercicio raro' }, nm, 'en').p === 'ejercicio raro', 'sin catálogo usa el texto de la planilla');
+
 console.log('5. Pasar a la semana siguiente');
 const asg = { weekEndsAt: Date.parse('2026-11-07T02:59:00Z') }, wk = { next: 'e1_4', kind: '', sessions: [{ name: 'Lunes' }, { name: 'Viernes' }] };
 let st = A.advanceState(asg, wk, { 0: true }, asg.weekEndsAt + 1000);

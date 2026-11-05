@@ -86,13 +86,16 @@ La app muestra una revisión antes de publicar: una muestra de la primera semana
 ## Semana asignada (fase 4)
 
 - **Entrenador:** en **Equipo**, el botón **Semana** de cada atleta abre su ficha: asigna o mueve la semana del plan activo, ve qué sesiones cumplió (con fecha y hora) y ajusta los porcentajes de 90 % o más solo para ese atleta (los deja vacíos para usar el del plan).
-- **Atleta:** la pestaña **Semana** muestra «Semana N · Etapa», cada sesión con sus series y los kilos (su máximo × %). **Iniciar esta sesión** la deja armada en «Hoy». Si falta su máximo de un ejercicio, lo avisa y deja los kilos en blanco. Un complejo (`a + b`) se arma como un solo ejercicio con el % del primer movimiento que tenga máximo. Al terminar la sesión queda registrada como cumplida con la hora del servidor.
+- **Atleta:** la pestaña **Semana** muestra «Semana N · Etapa», cada sesión con sus series y los kilos (su máximo × %). **Iniciar esta sesión** la deja armada en «Hoy». El % se calcula sobre el **máximo propio** del ejercicio y, si no lo tiene, sobre el del **ejercicio principal** (derivados: el arranque de potencia y las variantes del arranque o la cargada salen del arranque o la cargada al 100 %; la sentadilla de arranque, del 120 % del arranque; ver `DERIVED` en `assign.js`). Ejemplo: 70 % de sentadilla de arranque = 70 % de 124 kg si ese es su máximo, o 70 % de 120 kg (120 % de un arranque de 100) si no lo tiene. Si no hay forma de calcularlo, lo avisa y deja los kilos en blanco. Un complejo (`a + b + c`) se arma como un solo ejercicio con el % del primer movimiento que tenga máximo de referencia. Al terminar la sesión queda registrada como cumplida con la hora del servidor.
 - **Cambio de semana:** el botón **Pasar a la semana siguiente** se habilita desde el viernes a las 23:59 (hora de Chile) de la semana asignada y con la **última sesión de la semana cumplida**; una semana de transición no exige sesiones. Solo avanza de a una semana. Todo lo demás (mover de semana o de etapa) lo hace el entrenador.
 - **Qué impiden las reglas** (`firestore.rules`): que el atleta se asigne una semana, falsee la fecha de una sesión, registre una de otra semana, reescriba una cumplida, cambie sus ajustes o avance antes del corte o sin la última sesión. No pueden impedir que marque como hecha una sesión que no entrenó; para eso están los informes del entrenador.
 - **Sin conexión:** la última semana vista queda guardada en el dispositivo; las sesiones cumplidas se envían al volver la conexión.
 - **Datos:** `assignments/{uid}` (semana asignada y hora de corte), `users/{uid}/completions/{plan_semana_n}` (sesiones cumplidas, solo se crean) y `adjustments/{uid}_{plan}_{semana}` (ajustes de %). Cada semana del plan guarda `next` (la semana siguiente), por eso un plan publicado antes de la fase 4 debe volver a cargarse.
 
+## Nombres de los ejercicios
+
+El inglés es el idioma principal y el español va debajo, en pequeño: en la semana, la sesión, los máximos, el historial y las listas. Cada atleta puede invertirlo en **Ajustes → Nombres de los ejercicios** (se sincroniza con su cuenta). Los ejercicios que el atleta crea por su cuenta tienen un solo nombre.
+
 ## Lo que viene
 
 - Informes para el entrenador (planificado vs realizado y observaciones de los atletas): ahora que existe la base de datos del plan y las sesiones cumplidas, son la fase 4b.
-- Ajuste «Idioma de los ejercicios» (inglés o español como principal); hoy la semana muestra el nombre en español y, si falta, en inglés.

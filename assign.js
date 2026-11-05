@@ -43,6 +43,30 @@
   const LOCAL = { 'snatch': 'snatch', 'clean': 'clean', 'power-snatch': 'psnatch', 'overhead-squat': 'ohsq', 'snatch-pull': 'snpull', 'clean-pull': 'clpull',
     'split-jerk': 'jerk', 'push-press': 'pp', 'back-squat': 'bsq', 'front-squat': 'fsq', 'romanian-deadlift': 'rdl' };
   const localIdFor = catId => LOCAL[catId] || catId;
+  /* Derivados: si el atleta no tiene máximo propio de un ejercicio, el % se calcula sobre el máximo del ejercicio
+     principal multiplicado por este factor ([ejercicio principal, factor]). Con máximo propio, se usa ese.
+     Ejemplo: sentadilla de arranque 70 % → con 124 kg propios, 70 % de 124; sin máximo, 70 % de 120 % del arranque.
+     Lista a confirmar con Cristian (agregar un ejercicio es una línea). */
+  const DERIVED = {
+    'power-snatch': ['snatch', 1], 'hip-power-snatch': ['snatch', 1], 'hang-power-snatch': ['snatch', 1], 'hang-snatch': ['snatch', 1], 'below-knee-hang-snatch': ['snatch', 1],
+    'tall-snatch': ['snatch', 1], 'drop-snatch': ['snatch', 1], 'deficit-snatch': ['snatch', 1], 'hip-snatch': ['snatch', 1], 'overhead-squat': ['snatch', 1.2],
+    'hang-clean': ['clean', 1], 'below-knee-hang-clean': ['clean', 1], 'hang-muscle-clean': ['clean', 1], 'clean-from-power-position': ['clean', 1], 'floating-clean': ['clean', 1],
+    'no-jump-clean': ['clean', 1], 'deficit-clean': ['clean', 1], 'three-position-clean': ['clean', 1], 'two-position-clean': ['clean', 1]
+  };
+  /* Máximo de referencia de un ejercicio del catálogo: el propio si lo tiene; si no, el derivado del principal */
+  function refMax(S, catId) {
+    const own = S.exercises.find(q => q.id === localIdFor(catId));
+    if (own && own.max > 0) return { kg: own.max, how: 'own' };
+    const d = DERIVED[catId];
+    if (d) { const b = S.exercises.find(q => q.id === localIdFor(d[0])); if (b && b.max > 0) return { kg: b.max * d[1], how: 'derived', base: d[0], f: d[1] }; }
+    return { kg: 0, how: 'none' };
+  }
+  /* En un complejo (a + b + c) el % se toma del primer movimiento que tenga máximo de referencia */
+  function refFor(S, item) {
+    const ps = mainParts(item);
+    for (let i = 0; i < ps.length; i++) { const r = refMax(S, partId(ps[i])); if (r.kg > 0) return r; }
+    return { kg: 0, how: 'none' };
+  }
   const slugOf = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'ejercicio';
   const partId = p => p.ex || slugOf(p.src);
 
@@ -64,11 +88,18 @@
   /* Ejercicio de la app del atleta para una prescripción: uno solo, o un complejo «a + b» */
   function exerciseFor(item, names) {
     const ps = mainParts(item);
-    if (ps.length === 1) { const id = localIdFor(partId(ps[0])); return { id: id, name: nameOf(ps[0], names), cat: 'acc', parts: [id] }; }
+    const en = p => (names && names[p.ex] && names[p.ex].en) || p.src || 'Exercise', es = p => (names && names[p.ex] && (names[p.ex].es || names[p.ex].en)) || p.src || 'Ejercicio';
+    if (ps.length === 1) { const id = localIdFor(partId(ps[0])); return { id: id, name: es(ps[0]), en: en(ps[0]), es: es(ps[0]), cat: 'acc', parts: [id] }; }
     const ids = ps.map(p => localIdFor(partId(p)));
-    return { id: 'cx-' + ids.join('+').slice(0, 100), name: ps.map(p => nameOf(p, names)).join(' + '), cat: 'cmplx', parts: ids };
+    return { id: 'cx-' + ids.join('+').slice(0, 100), name: ps.map(es).join(' + '), en: ps.map(en).join(' + '), es: ps.map(es).join(' + '), cat: 'cmplx', parts: ids };
   }
-  function nameOf(p, names) { const c = names && names[p.ex]; return (c && (c.es || c.en)) || p.src || 'Ejercicio'; }
+  /* Nombre con idioma principal según el ajuste del atleta (inglés por defecto) y el otro como secundario */
+  function nameOf(p, names, lang) { return both(p, names, lang).p; }
+  function both(p, names, lang) {
+    const c = names && names[p.ex], en = (c && c.en) || p.src || 'Exercise', es = (c && c.es) || '';
+    if (!es || es === en) return { p: en, s: '' };
+    return lang === 'es' ? { p: es, s: en } : { p: en, s: es };
+  }
 
   /* Sesión lista para registrar. S = estado de la app (se agregan los ejercicios que falten). */
   function buildSession(S, week, si, ctx) {
@@ -79,12 +110,12 @@
       const ps = mainParts(it); if (!ps.length) return;
       const x = exerciseFor(it, names);
       let e = S.exercises.find(q => q.id === x.id);
-      if (!e) { e = { id: x.id, name: x.name, cat: x.cat, rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }; S.exercises.push(e); }
-      // el % es del máximo del mismo ejercicio; en un complejo, del primer movimiento que tenga máximo
-      const base = x.parts.map(id => S.exercises.find(q => q.id === id)).find(q => q && q.max > 0) || (e.max > 0 ? e : null);
+      if (!e) { e = { id: x.id, name: x.name, en: x.en, es: x.es, cat: x.cat, rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }; S.exercises.push(e); }
+      // el % es del máximo propio del ejercicio o, si no lo tiene, del derivado del principal (ver DERIVED)
+      const ref = refFor(S, it);
       const sets = expandSets(it, adj, si, ii).map(s => {
         const pct = s.pct || 0;
-        return { kg: base && pct > 0 ? roundTo(base.max * pct / 100, rounding) : 0, reps: s.max ? '1' : String(s.reps || ''), pct: pct, rpe: null, done: false, doneAt: null };
+        return { kg: ref.kg > 0 && pct > 0 ? roundTo(ref.kg * pct / 100, rounding) : 0, reps: s.max ? '1' : String(s.reps || ''), pct: pct, rpe: null, done: false, doneAt: null };
       });
       if (!sets.length) sets.push({ kg: 0, reps: '', pct: 0, rpe: null, done: false, doneAt: null });
       const prev = items.find(q => q.exId === e.id);
@@ -108,7 +139,7 @@
   const cutFmt = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const fmtCut = ms => cutFmt.format(new Date(ms)) + ' (hora de Chile)';
 
-  const pure = { cutoffFor, nextCutoff, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
+  const pure = { refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
   if (!root.document) { root.HalterAssignPure = pure; return; }
 
@@ -128,6 +159,7 @@
   const pendKey = () => 'halterofilia.v1.' + A.uid + '.pend';
   const rerender = () => { if (H) H.render(); };
   const unwatch = list => { list.splice(0).forEach(u => { try { u(); } catch (e) { /* ya cerrado */ } }); };
+  const lang = () => { const S = window.HalterApp.state(); return (S && S.profile && S.profile.exLang) || 'en'; };
   const dayLabel = d => ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][d] || '';
   const stageName = id => { const s = A.stages.find(x => x.id === id); return s ? s.name : ''; };
   const weekTitle = w => 'Semana ' + w.week + (w.kind === 'transition' ? ' · Transición' : '');
@@ -221,23 +253,24 @@
 
   /* ---------- Atleta ---------- */
   function sessionCard(w, si, ses) {
-    const asg = A.me.asg, S = window.HalterApp.state(), done = !!A.me.done[si], adj = A.me.adj, rounding = (S.profile && S.profile.rounding) || 1;
+    const S = window.HalterApp.state(), done = !!A.me.done[si], adj = A.me.adj, rounding = (S.profile && S.profile.rounding) || 1, lang = (S.profile && S.profile.exLang) || 'en';
     let block = null, h = `<div class="card sec"><div class="person"><div><b>${esc(dayLabel(ses.day))}${ses.name && ses.name !== dayLabel(ses.day) ? ' · ' + esc(ses.name) : ''}</b><small>${(ses.items || []).length} ${(ses.items || []).length === 1 ? 'ejercicio' : 'ejercicios'}</small></div>` +
       (done ? '<span class="badge ok">Cumplida</span>' : '') + '</div><ul class="plain">';
     (ses.items || []).forEach((it, ii) => {
       if (it.block && it.block !== block) { block = it.block; h += `<li class="blk"><span class="eyebrow">${esc(block)}</span></li>`; }
-      const ps = mainParts(it), x = ps.length ? exerciseFor(it, A.names) : null;
-      const base = x ? x.parts.map(id => S.exercises.find(q => q.id === id)).find(q => q && q.max > 0) : null;
+      const ps = mainParts(it), ref = refFor(S, it);
       const sets = expandSets(it, adj, si, ii);
       const rows = [], seen = {};
       sets.forEach(s => { const key = s.k; if (seen[key]) { seen[key].n++; return; } seen[key] = { s: s, n: 1 }; rows.push(seen[key]); });
       const line = rows.map(r => {
         const s = r.s; if (s.max) return 'Máximo (100 % o nuevo 100 %)' + (s.adjusted ? ' · ajustado' : '');
-        const kg = base && s.pct > 0 ? ' → ' + roundTo(base.max * s.pct / 100, rounding) + ' kg' : '';
+        const kg = ref.kg > 0 && s.pct > 0 ? ' → ' + roundTo(ref.kg * s.pct / 100, rounding) + ' kg' : '';
         return (s.pct ? s.pct + ' %' + (s.adjusted ? ' (ajustado)' : s.adjustable ? ' (referencia)' : '') : '') + (s.orMore ? ' o más' : '') + (s.reps ? ' · ' + s.reps + ' rep' : '') + (r.n > 1 || (it.sets[s.k] && it.sets[s.k].sets) ? ' × ' + r.n : '') + kg;
       }).join(' | ');
-      const alt = (it.alts || []).slice(1).map(a => (a.p || []).map(p => nameOf(p, A.names)).join(' + ')).join(' o ');
-      h += `<li><b>${esc(ps.length ? ps.map(p => nameOf(p, A.names)).join(' + ') : it.raw)}</b>${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${x && !base && sets.some(s => s.pct) ? ' · sin tu máximo de ' + esc(x.name) : ''}</small></li>`;
+      const nb = ps.map(p => both(p, A.names, lang)), prim = nb.map(q => q.p).join(' + '), sec = nb.map(q => q.s || q.p).join(' + ');
+      const alt = (it.alts || []).slice(1).map(a => (a.p || []).map(p => both(p, A.names, lang).p).join(' + ')).join(' o ');
+      const how = ref.how === 'derived' ? ' · calculado desde tu ' + both({ ex: ref.base, src: ref.base }, A.names, lang).p + (ref.f !== 1 ? ' × ' + ref.f : '') : '';
+      h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)' : ''}</small></li>`;
     });
     h += '</ul>';
     if (w.kind !== 'transition') h += `<div class="actions"><button class="btn${done ? ' ghost' : ''}" data-act="as-start" data-i="${si}">${done ? 'Registrar de nuevo' : 'Iniciar esta sesión'}</button></div>`;
@@ -311,7 +344,7 @@
       (it.sets || []).forEach((p, k) => {
         if (!p.adjustable) return;
         const key = adjKey(si, ii, k), ps = mainParts(it), val = A.draft && typeof A.draft[key] === 'number' ? A.draft[key] : '';
-        rows += `<div class="adj"><div><b>${esc(ps.map(q => nameOf(q, A.names)).join(' + ') || it.raw)}</b><small>${esc(dayLabel(s.day))} · plan: ${p.max ? 'máximo' : p.pct + ' %'}${p.reps ? ' · ' + esc(p.reps) + ' rep' : ''}${p.sets ? ' × ' + p.sets : ''}</small></div>` +
+        rows += `<div class="adj"><div><b>${esc(ps.map(q => nameOf(q, A.names, lang())).join(' + ') || it.raw)}</b><small>${esc(dayLabel(s.day))} · plan: ${p.max ? 'máximo' : p.pct + ' %'}${p.reps ? ' · ' + esc(p.reps) + ' rep' : ''}${p.sets ? ' × ' + p.sets : ''}</small></div>` +
           `<input class="txt" inputmode="decimal" data-f="asx" data-as="pct" data-key="${key}" value="${val}" placeholder="${p.pct}" aria-label="% para este atleta (plan ${p.pct})"></div>`;
       });
     }));
