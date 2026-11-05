@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso) y 2 (datos propios de cada atleta).
+// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso), 2 (datos propios de cada atleta) y 3 (plan anual).
 // Todo lo que no está permitido aquí queda prohibido.
-// Las reglas de las fases siguientes (plan, asignaciones, cumplimiento) se agregarán en este mismo archivo.
+// Fase 3: plan anual (más abajo). Las reglas de las fases siguientes (asignaciones, cumplimiento) se agregarán en este mismo archivo.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -16,6 +16,11 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/config/team)
         && get(/databases/$(database)/documents/config/team).data.coachUid == request.auth.uid;
     }
+
+    function isMember() {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+    function canReadPlan() { return isCoach() || isMember(); }
 
     // Quién es el entrenador. Solo lectura: no se puede escribir desde la app.
     match /config/team {
@@ -39,10 +44,10 @@ service cloud.firestore {
     // Un registro por documento: users/{uid}/records/{clave}. Solo escribe su dueño, y solo si está aprobado
     // (o es el entrenador). El entrenador puede leer los de todos (informes de la fase 4b).
     // Los registros no se borran de verdad: se marcan con del = true para avisar a los otros dispositivos.
-    function isMember(uid) { return exists(/databases/$(database)/documents/members/$(uid)); }
+    function isMemberOf(uid) { return exists(/databases/$(database)/documents/members/$(uid)); }
     match /users/{uid}/records/{key} {
-      allow read: if signedIn() && ((request.auth.uid == uid && (isMember(uid) || isCoach())) || isCoach());
-      allow create, update: if signedIn() && request.auth.uid == uid && (isMember(uid) || isCoach())
+      allow read: if signedIn() && ((request.auth.uid == uid && (isMemberOf(uid) || isCoach())) || isCoach());
+      allow create, update: if signedIn() && request.auth.uid == uid && (isMemberOf(uid) || isCoach())
         && request.resource.data.keys().hasOnly(['t', 'd', 'u', 'del', 'at'])
         && request.resource.data.keys().hasAll(['t', 'u', 'at'])
         && request.resource.data.t in ['profile', 'plan', 'exercise', 'session']
@@ -71,6 +76,54 @@ service cloud.firestore {
         && request.resource.data.status == 'rejected';
       // La persona puede retirar la suya (para volver a pedir acceso); el entrenador también
       allow delete: if signedIn() && (request.auth.uid == uid || isCoach());
+    }
+
+    // ---- Fase 3: plan anual ----
+
+    // Plan que ven los atletas. Solo el entrenador lo cambia.
+    match /config/plan {
+      allow read: if canReadPlan();
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['activePlanId', 'at'])
+        && request.resource.data.activePlanId is string && request.resource.data.activePlanId.size() > 0 && request.resource.data.activePlanId.size() <= 60
+        && request.resource.data.at == request.time;
+      allow delete: if isCoach();
+    }
+
+    // Catálogo de ejercicios (inglés, español y los textos con que aparece en las planillas)
+    match /exercises/{exId} {
+      allow read: if canReadPlan();
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['en', 'es', 'aliases'])
+        && request.resource.data.en is string && request.resource.data.en.size() > 0 && request.resource.data.en.size() <= 120
+        && request.resource.data.es is string && request.resource.data.es.size() <= 160
+        && request.resource.data.aliases is list && request.resource.data.aliases.size() <= 40;
+      allow delete: if isCoach();
+    }
+
+    // Planes: ficha, etapas y semanas. Cada año puede haber uno nuevo; los anteriores se conservan.
+    match /plans/{planId} {
+      allow read: if canReadPlan();
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['name', 'year', 'format', 'stages', 'weeks', 'createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isCoach();
+
+      match /stages/{stageId} {
+        allow read: if canReadPlan();
+        allow create, update: if isCoach()
+          && request.resource.data.keys().hasOnly(['name', 'order'])
+          && request.resource.data.name is string && request.resource.data.name.size() <= 160 && request.resource.data.order is int;
+        allow delete: if isCoach();
+      }
+      match /weeks/{weekId} {
+        allow read: if canReadPlan();
+        allow create, update: if isCoach()
+          && request.resource.data.keys().hasOnly(['stageId', 'week', 'label', 'kind', 'notes', 'sessions'])
+          && request.resource.data.week is int && request.resource.data.sessions is list && request.resource.data.sessions.size() <= 7;
+        allow delete: if isCoach();
+      }
     }
   }
 }

@@ -321,3 +321,15 @@ dialog::backdrop { background: rgba(8, 11, 15, .55); }
 .person small { color: var(--muted); overflow-wrap: anywhere; }
 .person .acts { display: flex; gap: 8px; flex-shrink: 0; }
 .acct { margin: 0 0 8px; }
+
+/* Plan anual (entrenador) */
+.plain { list-style: none; margin: 0 0 8px; padding: 0; }
+.plain li { padding: 9px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.plain li:last-child { border-bottom: 0; }
+.plain li b { display: block; }
+.plain small { display: block; color: var(--muted); }
+.unk { padding: 10px 0; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.unk:last-child { border-bottom: 0; }
+.unk b { overflow-wrap: anywhere; }
+.unk small { color: var(--muted); }
+details > summary { cursor: pointer; }

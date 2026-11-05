@@ -17,9 +17,9 @@
   function allowed(op, path, data, prev) {
     const u = curUser(), s = rd();
     if (!u) return false;
-    const [col, id] = path.split('/'), coach = isCoach(s, u.uid);
+    const [col, id] = path.split('/'), coach = isCoach(s, u.uid), member = !!s.docs['members/' + u.uid];
     if (col === 'users') { // users/{uid}/records/{clave}
-      const owner = u.uid === id, member = !!s.docs['members/' + u.uid];
+      const owner = u.uid === id;
       if (op === 'get' || op === 'list') return coach || (owner && member);
       if (op === 'delete') return false;
       const d = data || {}, key = path.split('/')[3] || '';
@@ -27,7 +27,23 @@
         && ['profile', 'plan', 'exercise', 'session'].includes(d.t) && typeof d.u === 'number' && d.u <= Date.now() + 600000
         && (!('d' in d) || (typeof d.d === 'string' && d.d.length <= 300000)) && (!('del' in d) || typeof d.del === 'boolean') && key.length <= 120;
     }
+    if (col === 'config' && id === 'plan') {
+      if (op === 'get' || op === 'list') return coach || member;
+      if (op === 'delete') return coach;
+      return coach && keysOnly(data, ['activePlanId', 'at']) && typeof data.activePlanId === 'string' && data.activePlanId.length > 0;
+    }
     if (col === 'config') return op === 'get' || op === 'list';
+    if (col === 'exercises' || col === 'plans') {
+      if (op === 'get' || op === 'list') return coach || member;
+      if (!coach) return false;
+      if (op === 'delete') return true;
+      const depth = path.split('/').length;
+      if (col === 'exercises') return keysOnly(data, ['en', 'es', 'aliases']) && typeof data.en === 'string' && data.en.length > 0 && Array.isArray(data.aliases) && data.aliases.length <= 40;
+      if (depth === 2) return keysOnly(data, ['name', 'year', 'format', 'stages', 'weeks', 'createdAt']) && typeof data.name === 'string' && data.name.length > 0;
+      const hasNested = o => Array.isArray(o) ? o.some(x => Array.isArray(x) || hasNested(x)) : (o && typeof o === 'object' ? Object.keys(o).some(k => hasNested(o[k])) : false);
+      if (hasNested(data)) return false;   // Firestore no admite listas dentro de listas
+      return path.split('/')[2] === 'stages' ? keysOnly(data, ['name', 'order']) : keysOnly(data, ['stageId', 'week', 'label', 'kind', 'notes', 'sessions']);
+    }
     if (col === 'members') {
       if (op === 'get') return u.uid === id || coach;
       if (op === 'list') return coach;
@@ -53,7 +69,7 @@
         w.cb(Object.keys(s.docs).filter(k => k.startsWith(pre) && s.docs[k].at >= w.since).map(k => Object.assign({ id: k.slice(pre.length) }, s.docs[k])), { fromCache: false });
       } else if (w.col) {
         if (!allowed('list', w.path + '/x', null)) { w.err && w.err(err('permission-denied')); return; }
-        w.cb(Object.keys(s.docs).filter(k => k.startsWith(w.path + '/')).map(k => Object.assign({ id: k.split('/')[1] }, s.docs[k])), { fromCache: false });
+        w.cb(Object.keys(s.docs).filter(k => k.startsWith(w.path + '/') && k.split('/').length === w.path.split('/').length + 1).map(k => Object.assign({ id: k.split('/')[1] }, s.docs[k])), { fromCache: false });
       } else {
         if (!allowed('get', w.path)) { w.err && w.err(err('permission-denied')); return; }
         w.cb(s.docs[w.path] ? Object.assign({}, s.docs[w.path]) : null, { fromCache: false });
@@ -93,6 +109,19 @@
     async rejectRequest(uid) { mutate('update', 'requests/' + uid, { status: 'rejected' }); }
     async approve(uid, name, email) { mutate('create', 'members/' + uid, { name, email, approvedAt: Date.now() }); mutate('delete', 'requests/' + uid); }
     async removeMember(uid) { mutate('delete', 'members/' + uid); }
+    async publishPlan(p) {
+      const base = 'plans/' + p.planId;
+      p.stages.forEach(x => mutate('create', base + '/stages/' + x.id, x.data));
+      p.weeks.forEach(x => mutate('create', base + '/weeks/' + x.id, x.data));
+      p.exercises.forEach(x => mutate('create', 'exercises/' + x.id, x.data));
+      mutate('create', base, Object.assign({}, p.meta, { createdAt: Date.now() }));
+    }
+    async setActivePlan(id) { mutate('create', 'config/plan', { activePlanId: id, at: Date.now() }); }
+    async deletePlan(id, wasActive) {
+      Object.keys(rd().docs).filter(k => k.startsWith('plans/' + id + '/')).forEach(k => mutate('delete', k));
+      if (wasActive) mutate('delete', 'config/plan');
+      mutate('delete', 'plans/' + id);
+    }
   }
   window.HALTER_REMOTE_FACTORY = () => new FakeRemote();
   window.__fake = {
