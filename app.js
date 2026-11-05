@@ -484,10 +484,12 @@ function setRowHTML(i, j, st, it) {
     (rpe ? rpeSelect(st, id + '-rpe') : '') +
     '<button class="tick" data-act="tick" aria-pressed="' + st.done + '" aria-label="Marcar serie ' + (j + 1) + ' como hecha">' + svg('check') + '</button></div>';
 }
+/* Complejo: ejercicio de la categoría «Complejos» o con «+» en el nombre (p. ej. «Arranque con pausa + tirón»). No tiene máximo propio. */
+const isComplex = e => !!e && (e.cat === 'cmplx' || /\s\+\s/.test(e.en || e.name || ''));
 function exerciseCard(it, i) {
   const e = ex(it.exId), rpe = S.profile.showRpe;
   return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) +
-    (e.cat === 'cmplx' ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
+    (isComplex(e) ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
       : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') + '</div>' +
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
     '<div class="set sethead' + (rpe ? ' rpe' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
@@ -583,7 +585,7 @@ function viewMax() {
   if (sn.max > 0 && cj.max > 0) h += '<section class="card sec totalc"><p class="eyebrow">Total de competencia</p><p class="big">' + fmtNum(sn.max + cj.max, 1) + ' <small>kg</small></p><p class="muted">Arranque ' + fmtNum(sn.max, 1) + ' + Dos tiempos ' + fmtNum(cj.max, 1) + '</p></section>';
   for (const c of CATS) {
     if (c[0] === 'cmplx') continue;   // un complejo no tiene máximo propio: el plan usa el de su movimiento principal
-    const list = S.exercises.filter(e => e.cat === c[0]);
+    const list = S.exercises.filter(e => e.cat === c[0] && !isComplex(e));
     if (!list.length) continue;
     h += '<section class="sec"><p class="eyebrow">' + c[1] + '</p><div class="mlist">';
     for (const e of list) {
@@ -600,11 +602,11 @@ function viewMax() {
     const b = bestRecentSet();
     ui.calc = b ? { kg: b.kg, reps: b.reps, exId: b.exId } : { kg: 80, reps: 3, exId: 'snatch' };
   }
-  if ((ex(ui.calc.exId) || {}).cat === 'cmplx') ui.calc.exId = 'snatch';
+  if (isComplex(ex(ui.calc.exId))) ui.calc.exId = 'snatch';
   h += '<section class="card sec"><h2>Proyectar máximo</h2><p class="muted">Calcula tu 1RM desde una serie con menos repeticiones.</p><div class="row2"><label class="fl"><span>Peso (kg)</span><input class="num" id="cKg" data-f="cKg" inputmode="decimal" value="' + fmtNum(ui.calc.kg, 2) + '"></label>' +
     '<label class="fl"><span>Repeticiones</span><input class="num" id="cReps" data-f="cReps" inputmode="numeric" value="' + ui.calc.reps + '"></label></div>' +
     '<div id="calcOut" aria-live="polite">' + calcOut(ui.calc.kg, ui.calc.reps) + '</div>' +
-    '<div class="row2 save-as"><label class="fl"><span>Guardar como máximo de</span><select class="sel tall" id="cEx" data-f="cEx">' + S.exercises.filter(e => e.cat !== 'cmplx').map(e => '<option value="' + esc(e.id) + '"' + (e.id === ui.calc.exId ? ' selected' : '') + '>' + esc(nm(e)) + '</option>').join('') + '</select></label>' +
+    '<div class="row2 save-as"><label class="fl"><span>Guardar como máximo de</span><select class="sel tall" id="cEx" data-f="cEx">' + S.exercises.filter(e => !isComplex(e)).map(e => '<option value="' + esc(e.id) + '"' + (e.id === ui.calc.exId ? ' selected' : '') + '>' + esc(nm(e)) + '</option>').join('') + '</select></label>' +
     '<button class="btn ghost" data-act="calc-save">' + confirmLabel('csave', 'Guardar', 'Confirmar') + '</button></div></section>';
   h += '<section class="card sec fold"><button class="fold-h" data-act="plates-toggle" aria-expanded="' + !!ui.platesOpen + '"><span>Calculadora de discos</span><span class="fold-i" aria-hidden="true">' + (ui.platesOpen ? '−' : '+') + '</span></button>' +
     (ui.platesOpen ? '<p class="muted">Qué discos poner a cada lado de la barra.</p>' + platesBlock('t', ui.platesKg || 0, ui.platesBar || S.profile.bar) : '') + '</section>';

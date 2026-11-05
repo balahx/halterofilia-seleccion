@@ -51,7 +51,7 @@
      Lista a confirmar con Cristian (agregar un ejercicio es una línea). */
   const DERIVED = {
     'power-snatch': ['snatch', 1], 'hip-power-snatch': ['snatch', 1], 'hang-power-snatch': ['snatch', 1], 'hang-snatch': ['snatch', 1], 'below-knee-hang-snatch': ['snatch', 1],
-    'tall-snatch': ['snatch', 1], 'drop-snatch': ['snatch', 1], 'deficit-snatch': ['snatch', 1], 'hip-snatch': ['snatch', 1], 'overhead-squat': ['snatch', 1.2],
+    'tall-snatch': ['snatch', 1], 'snatch-with-2-s-pause-below-knee-and-1-s-pause-above-knee-sn': ['snatch', 1], 'snatch-with-above-knee-pause-snatch-pull': ['snatch', 1], 'drop-snatch': ['snatch', 1], 'deficit-snatch': ['snatch', 1], 'hip-snatch': ['snatch', 1], 'overhead-squat': ['snatch', 1.2],
     'hang-clean': ['clean', 1], 'below-knee-hang-clean': ['clean', 1], 'hang-muscle-clean': ['clean', 1], 'clean-from-power-position': ['clean', 1], 'floating-clean': ['clean', 1],
     'no-jump-clean': ['clean', 1], 'deficit-clean': ['clean', 1], 'three-position-clean': ['clean', 1], 'two-position-clean': ['clean', 1]
   };
@@ -98,7 +98,7 @@
   function exerciseFor(item, names) {
     const ps = mainParts(item);
     const en = p => (names && names[p.ex] && names[p.ex].en) || p.src || 'Exercise', es = p => (names && names[p.ex] && (names[p.ex].es || names[p.ex].en)) || p.src || 'Ejercicio';
-    if (ps.length === 1) { const id = localIdFor(partId(ps[0])); return { id: id, name: es(ps[0]), en: en(ps[0]), es: es(ps[0]), cat: 'acc', parts: [id] }; }
+    if (ps.length === 1) { const id = localIdFor(partId(ps[0])); return { id: id, name: es(ps[0]), en: en(ps[0]), es: es(ps[0]), cat: / \+ /.test(en(ps[0])) ? 'cmplx' : 'acc', parts: [id] }; }   // «A + B» dentro de un solo ejercicio del glosario también es un complejo
     const ids = ps.map(p => localIdFor(partId(p)));
     const key = ids.join('+');
     return { id: COMPLEX_LOCAL[key] || 'cx-' + key.slice(0, 100), name: ps.map(es).join(' + '), en: ps.map(en).join(' + '), es: ps.map(es).join(' + '), cat: 'cmplx', parts: ids };

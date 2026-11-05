@@ -91,6 +91,10 @@ ok(A.refFor(S5, cxItem(80)).kg === 100, 'aunque exista un «máximo del complejo
 const cleanCx = { alts: [{ p: [{ src: 'CL', ex: 'clean' }, { src: 'FSQ', ex: 'front-squat' }] }], sets: [{ pct: 70, reps: '2', sets: 1 }] };
 const SC = { profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', max: 100 }, { id: 'clean', max: 120 }] };
 ok(A.refFor(SC, cleanCx).kg === 120 && A.refFor(SC, cleanCx).via === 'clean', 'cargada + sentadilla frontal: máximo de cargada (120)');
+const pauseItem = { alts: [{ p: [{ src: 'AA P2° jalon', ex: 'snatch-with-above-knee-pause-snatch-pull' }] }], sets: [{ pct: 50, reps: '6-8', sets: 2 }] };
+const pnames = { 'snatch-with-above-knee-pause-snatch-pull': { en: 'Snatch with Above-Knee Pause + Snatch Pull', es: 'Arranque con pausa sobre rodilla + tirón' } };
+ok(A.exerciseFor(pauseItem, pnames).cat === 'cmplx', 'un ejercicio del glosario con «A + B» en el nombre se trata como complejo');
+ok(A.buildSession(S4(), { sessions: [{ day: 1, name: 'L', items: [pauseItem] }] }, 0, { planId: 'p', weekId: 'w', names: pnames }).items[0].sets[0].kg === 50, 'arranque con pausa + tirón al 50 %: sobre el máximo de arranque (100) = 50 kg');
 const S7 = { profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', name: 'Arranque', max: 0 }, { id: 'ohsq', name: 'OHS', max: 110 }] };
 ok(A.refFor(S7, cxItem(80)).kg === 110 && A.refFor(S7, cxItem(80)).via === 'overhead-squat', 'si el primer movimiento no tiene máximo, sigue con el siguiente que lo tenga');
 

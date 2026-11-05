@@ -169,7 +169,9 @@ const WEEKS = {
   await logout(); await login('ana@correo.cl');
   await page.evaluate(W => {
     __fake.admin('exercises/overhead-squat', { en: 'Overhead Squat', es: 'Sentadilla sobre la cabeza', aliases: [] });
-    const w = JSON.parse(JSON.stringify(W)); w.sessions.push({ day: 5, name: 'Viernes', items: [{ block: 'Complejo', tag: '', raw: 'AA + OHS', presc: '', inline: null, sets: [{ pct: 80, reps: '1', sets: 1 }], alts: [{ p: [{ src: 'AA', ex: 'snatch', mult: 1, max: false }, { src: 'OHS', ex: 'overhead-squat', mult: 1, max: false }] }] }] });
+    __fake.admin('exercises/snatch-with-above-knee-pause-snatch-pull', { en: 'Snatch with Above-Knee Pause + Snatch Pull', es: 'Arranque con pausa sobre rodilla + tirón', aliases: [] });
+    const w = JSON.parse(JSON.stringify(W)); w.sessions.push({ day: 5, name: 'Viernes', items: [{ block: 'Complejo', tag: '', raw: 'AA + OHS', presc: '', inline: null, sets: [{ pct: 80, reps: '1', sets: 1 }], alts: [{ p: [{ src: 'AA', ex: 'snatch', mult: 1, max: false }, { src: 'OHS', ex: 'overhead-squat', mult: 1, max: false }] }] },
+      { block: 'Complejo', tag: '', raw: 'AA P2 jalon', presc: '', inline: null, sets: [{ pct: 50, reps: '6-8', sets: 2 }], alts: [{ p: [{ src: 'AA P2° jalon', ex: 'snatch-with-above-knee-pause-snatch-pull', mult: 1, max: false }] }] }] });
     __fake.admin('plans/p1/weeks/e1_1', w);
   }, WEEKS.e1_1);
   await tab('semana'); await page.waitForTimeout(800);
@@ -177,6 +179,8 @@ const WEEKS = {
   ok(/80 %[^|]*→ 80 kg/.test(await txt('#view')) && /primer movimiento con máximo/.test(await txt('#view')), '80 % del arranque (100 kg) = 80 kg, y avisa de dónde sale');
   await page.click('[data-act="as-start"][data-i="2"]'); await page.waitForTimeout(500); await tab('hoy'); await page.waitForTimeout(300);
   ok(/Snatch \+ Overhead Squat/.test(await txt('#view')) && (await page.locator('#view .exc [data-act="edit-max"]').filter({ hasText: /máximo|1RM/ }).count()) === 0 && /sin máximo propio/.test(await txt('#view')), 'en la sesión, el complejo no ofrece «Definir máximo»: avisa que usa el de su primer movimiento');
+  ok((await page.locator('#view .exc [data-act="edit-max"]').count()) === 0, 'tampoco el complejo «Arranque con pausa + tirón» (un solo ejercicio del glosario con «+»)');
+  ok(/Arranque con pausa sobre rodilla|Snatch with Above-Knee Pause/.test(await txt('#view')) && await page.locator('#view .exc').nth(1).locator('input[data-f="kg"]').first().inputValue() === '50', 'y sus kilos salen del arranque: 50 % de 100 = 50 kg');
   await page.screenshot({ path: (process.env.SHOTS || '/tmp') + '/semana-08-sesion-complejo.png' });
   await tab('max');
   const mx = await txt('#view');
