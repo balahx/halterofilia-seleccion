@@ -342,6 +342,7 @@ details > summary { cursor: pointer; }
 .adj small { color: var(--muted); }
 .adj .txt { text-align: center; }
 /* Informe del entrenador (fase 4b) */
+.chip-note { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
 .rp-seg { margin: 6px 0 10px; border-color: var(--line-strong); }
 .rp-seg button { color: var(--ink); } .rp-seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .rp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin: 10px 0; }

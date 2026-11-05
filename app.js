@@ -487,7 +487,8 @@ function setRowHTML(i, j, st, it) {
 function exerciseCard(it, i) {
   const e = ex(it.exId), rpe = S.profile.showRpe;
   return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) +
-    '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button></div>' +
+    (e.cat === 'cmplx' ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
+      : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') + '</div>' +
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
     '<div class="set sethead' + (rpe ? ' rpe' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
     it.sets.map((st, j) => setRowHTML(i, j, st, it)).join('') +
