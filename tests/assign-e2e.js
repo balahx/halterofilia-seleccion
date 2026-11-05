@@ -165,6 +165,28 @@ const WEEKS = {
   await tab('planual'); await page.waitForTimeout(300);
   ok(/Plan 2026/.test(await txt('#view')), 'y la pestaña Planes muestra el plan publicado');
 
+  console.log('8. Complejos: sin máximo propio usa el primer movimiento; el atleta puede estimarle uno con la calculadora y pasa a ser la prioridad');
+  await logout(); await login('ana@correo.cl');
+  await page.evaluate(W => {
+    __fake.admin('exercises/overhead-squat', { en: 'Overhead Squat', es: 'Sentadilla sobre la cabeza', aliases: [] });
+    const w = JSON.parse(JSON.stringify(W)); w.sessions.push({ day: 5, name: 'Viernes', items: [{ block: 'Complejo', tag: '', raw: 'AA + OHS', presc: '', inline: null, sets: [{ pct: 80, reps: '1', sets: 1 }], alts: [{ p: [{ src: 'AA', ex: 'snatch', mult: 1, max: false }, { src: 'OHS', ex: 'overhead-squat', mult: 1, max: false }] }] }] });
+    __fake.admin('plans/p1/weeks/e1_1', w);
+  }, WEEKS.e1_1);
+  await tab('semana'); await page.waitForTimeout(800);
+  if (process.env.DBG) console.log((await txt('#view')).slice(0, 900));
+  ok(/Snatch \+ Overhead Squat/.test(await txt('#view')), 'la semana muestra el complejo');
+  ok(/primer movimiento con máximo/.test(await txt('#view')), 'sin máximo del complejo avisa que usa el del primer movimiento');
+  await tab('max');
+  const opt = await page.locator('#cEx option', { hasText: 'Snatch + Overhead Squat' }).count();
+  ok(opt >= 1, 'el complejo ya está en la calculadora «Guardar como máximo de» sin iniciar la sesión');
+  const cid = await page.locator('#cEx option', { hasText: 'Snatch + Overhead Squat' }).first().getAttribute('value');
+  await page.selectOption('#cEx', cid); await page.fill('#cKg', '90'); await page.fill('#cReps', '1');
+  await page.click('[data-act="calc-save"]'); await page.waitForTimeout(150); await page.click('[data-act="calc-save"]'); await page.waitForTimeout(300);
+  if (process.env.DBG) console.log(JSON.stringify(await page.evaluate(() => HalterApp.state().exercises.filter(e => e.max > 0 || /^cx/.test(e.id)).map(e => [e.id, e.max]))), cid);
+  await tab('semana');
+  ok(/con el máximo de tu complejo/.test(await txt('#view')), 'con el máximo del complejo guardado pasa a ser la referencia (prioridad 1)');
+  ok(/80 %[^|]*→ 72 kg/.test(await txt('#view')), '80 % del complejo (90 kg) = 72 kg');
+
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   await br.close(); srv.close();
   console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

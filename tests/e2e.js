@@ -95,7 +95,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   ok(!(await page.evaluate(u => JSON.parse(localStorage.getItem('halterofilia.v1.' + u)).demo, au)), 'sin datos de ejemplo');
   await page.click('#gear'); await page.waitForSelector('.acct');
   ok(/Atleta/.test(await txt('.acct')) && /ana@correo.cl/.test(await txt('.acct')), 'Ajustes muestra correo y rol');
-  await shot('05-ajustes'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm');
+  await shot('05-ajustes'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500);
   await login('beto@correo.cl', 'clave123');
   await page.waitForFunction(() => /no aprobada/.test(document.querySelector('#gate h1')?.textContent || ''));
   ok(true, 'Beto ve «Solicitud no aprobada»');

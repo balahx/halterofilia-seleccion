@@ -77,6 +77,26 @@ ok(b2.items[0].sets[0].kg === 84, 'sentadilla de arranque 70 % sin máximo propi
 b2 = A.buildSession(S3, wk2, 0, { planId: 'p', weekId: 'w' });
 ok(b2.items[0].sets[0].kg === 87, 'con 124 kg propios, 70 % = 87 kg');
 ok(b2.items[1].sets[0].kg === 60 && b2.items[1].exId.startsWith('cx-'), 'complejo arranque + sentadilla + balance: 60 % del arranque = 60 kg');
+console.log('4c. Complejos: 1) máximo del complejo, 2) máximo del primer movimiento');
+const cxItem = pct => ({ alts: [{ p: [{ src: 'AA', ex: 'snatch' }, { src: 'AASQ', ex: 'overhead-squat' }] }], sets: [{ pct: pct, reps: '1', sets: 1 }] });
+const cxId = A.exerciseFor(cxItem(100)).id;
+const wk3 = pct => ({ sessions: [{ day: 1, name: 'Lunes', items: [cxItem(pct)] }] });
+const S4 = () => ({ profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', name: 'Arranque', max: 100 }] });
+let rc = A.refFor(S4(), cxItem(80));
+ok(rc.kg === 100 && !rc.cx && rc.via === 'snatch', 'sin máximo del complejo se toma el del primer movimiento (arranque 100)');
+let b4 = A.buildSession(S4(), wk3(120), 0, { planId: 'p', weekId: 'w' });
+ok(b4.items[0].sets[0].kg === 120, 'un complejo al 120 % con arranque de 100 kg pide 120 kg');
+const S5 = S4(); S5.exercises.push({ id: cxId, name: 'cx', max: 90 });
+rc = A.refFor(S5, cxItem(80));
+ok(rc.kg === 90 && rc.cx === true && rc.how === 'own', 'con máximo propio del complejo (90) ese es la prioridad 1');
+b4 = A.buildSession(S5, wk3(80), 0, { planId: 'p', weekId: 'w' });
+ok(b4.items[0].sets[0].kg === 72, 'complejo al 80 % con su propio máximo de 90 kg = 72 kg');
+const S6 = S4(); S6.exercises.push({ id: cxId, name: 'cx', max: 0 });
+ok(A.refFor(S6, cxItem(80)).kg === 100, 'un complejo con máximo 0 vuelve al primer movimiento');
+const S7 = { profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', name: 'Arranque', max: 0 }, { id: 'ohsq', name: 'OHS', max: 110 }] };
+ok(A.refFor(S7, cxItem(80)).kg === 110 && A.refFor(S7, cxItem(80)).via === 'overhead-squat', 'si el primer movimiento no tiene máximo, sigue con el siguiente');
+
+ok(A.exerciseFor({ alts: [{ p: [{ src: 'AA', ex: 'snatch' }, { src: 'OHS', ex: 'overhead-squat' }] }] }).id === 'cx-snoh', 'el complejo arranque + sentadilla sobre la cabeza comparte id con el de la app (mismo máximo)');
 const nm = { snatch: { en: 'Snatch', es: 'Arranque' } };
 ok(A.both({ ex: 'snatch', src: 'AA' }, nm, 'en').p === 'Snatch' && A.both({ ex: 'snatch', src: 'AA' }, nm, 'en').s === 'Arranque', 'inglés principal y español debajo');
 ok(A.both({ ex: 'snatch', src: 'AA' }, nm, 'es').p === 'Arranque' && A.both({ ex: 'snatch', src: 'AA' }, nm, 'es').s === 'Snatch', 'al cambiar el ajuste se invierte');
