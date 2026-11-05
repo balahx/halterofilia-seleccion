@@ -28,7 +28,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500); };
   const signup = async (name, email, pass, pass2) => {
     await page.click('[data-g="mode"][data-v="signup"]');
-    await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.fill('#gPass2', pass2 == null ? pass : pass2);
+    await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.fill('#gPass2', pass2 == null ? pass : pass2); await page.check('#gPriv');
     await page.click('#gForm button[type=submit]');
   };
   const login = async (email, pass) => { await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.click('#gForm button[type=submit]'); };
@@ -47,7 +47,11 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   await signup('Ana Rojas', 'ana@correo.cl', 'clave123', 'otra123');
   ok(/no coinciden/.test(await txt('#gErr')), 'contraseñas distintas → aviso');
   ok((await page.inputValue('#gName')) === 'Ana Rojas', 'los campos no se borran al fallar');
-  await page.fill('#gPass2', 'clave123'); await page.click('#gForm button[type=submit]');
+  await page.fill('#gPass2', 'clave123'); await page.uncheck('#gPriv'); await page.click('#gForm button[type=submit]'); await page.waitForTimeout(200);
+  ok(/aviso de privacidad/.test(await txt('#gErr')), 'sin marcar el aviso de privacidad no se crea la cuenta');
+  ok((await page.locator('#gForm details.priv').count()) === 1 && /Qué se guarda/.test(await page.locator('#gForm details.priv').textContent()) && /Cristian Mateluna/.test(await page.locator('#gForm details.priv').textContent()), 'el aviso está en el formulario de registro y dice qué se guarda y quién lo ve');
+  await page.click('#gForm details.priv summary'); await shot('02b-aviso-privacidad');
+  await page.check('#gPriv'); await page.click('#gForm button[type=submit]');
   await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || ''));
   ok(true, 'queda en «Solicitud enviada»');
   const rq = await page.evaluate(() => Object.entries(__fake.srv().docs).filter(([k]) => k.startsWith('requests/')).map(([k, v]) => v));
@@ -95,6 +99,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   ok(!(await page.evaluate(u => JSON.parse(localStorage.getItem('halterofilia.v1.' + u)).demo, au)), 'sin datos de ejemplo');
   await page.click('#gear'); await page.waitForSelector('.acct');
   ok(/Atleta/.test(await txt('.acct')) && /ana@correo.cl/.test(await txt('.acct')), 'Ajustes muestra correo y rol');
+  ok((await page.locator('details.priv').count()) === 1 && /Borrar todos mis datos/.test(await page.locator('details.priv').textContent()), 'Ajustes incluye el aviso de privacidad');
   await shot('05-ajustes'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500);
   await login('beto@correo.cl', 'clave123');
   await page.waitForFunction(() => /no aprobada/.test(document.querySelector('#gate h1')?.textContent || ''));

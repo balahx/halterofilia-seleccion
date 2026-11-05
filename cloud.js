@@ -19,6 +19,8 @@
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* sin almacenamiento */ } }
   };
   const K_LAST = 'halterofilia.lastAccess';       // último acceso aprobado en este dispositivo (para abrir sin conexión)
+  const K_PRIV = 'halterofilia.privacySeen.';          // versión del aviso de privacidad que ya vio cada cuenta en este dispositivo
+  const K_PRIVNEW = 'halterofilia.privacyNewAccount';  // cuenta recién creada: aceptó el aviso al crearla
   const K_NAME = 'halterofilia.signupName';       // nombre escrito al crear la cuenta, hasta enviar la solicitud
 
   /* ---------- Mensajes de error (mismos que en finanzas) ---------- */
@@ -172,10 +174,12 @@
     f += field('gEmail', 'Correo electrónico', 'email', 'autocomplete="username" required placeholder="tu@correo.com" inputmode="email"');
     if (m !== 'reset') f += field('gPass', m === 'signup' ? 'Contraseña (mínimo 6 caracteres)' : 'Contraseña', 'password', `autocomplete="${m === 'signup' ? 'new-password' : 'current-password'}" required`);
     if (m === 'signup') f += field('gPass2', 'Repite la contraseña', 'password', 'autocomplete="new-password" required');
+    if (m === 'signup' && window.HalterPrivacy) f += window.HalterPrivacy.html(false) + '<label class="chk"><input type="checkbox" id="gPriv"> <span>He leído el aviso de privacidad y acepto que mis datos se guarden así.</span></label>';
     const alt = m === 'login' ? '<button type="button" class="lnk" data-g="mode" data-v="signup">Crear cuenta</button><button type="button" class="lnk" data-g="mode" data-v="reset">Olvidé mi contraseña</button>'
       : '<button type="button" class="lnk" data-g="mode" data-v="login">Ya tengo cuenta: iniciar sesión</button>';
     return `<h1>${t[0]}</h1><p class="lead">${t[1]}</p><form id="gForm" data-g-form="${m}" novalidate>${f}<p id="gErr" class="form-error" role="alert">${esc(C.err)}</p>` +
-      `<div class="stack"><button class="btn" type="submit"${C.busy ? ' disabled' : ''}>${C.busy ? 'Un momento…' : t[2]}</button></div></form><div class="alt">${alt}</div>`;
+      `<div class="stack"><button class="btn" type="submit"${C.busy ? ' disabled' : ''}>${C.busy ? 'Un momento…' : t[2]}</button></div></form><div class="alt">${alt}</div>` +
+      (m !== 'signup' && window.HalterPrivacy ? window.HalterPrivacy.html(false) : '');
   }
   function msgView(icon, title, body, actions) {
     const ico = { clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', ban: '<circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/>', cloud: '<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>', user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>' }[icon];
@@ -279,12 +283,22 @@
   const nameFromEmail = () => (C.user.email || '').split('@')[0];
   function readLast() { try { return JSON.parse(LS.get(K_LAST) || 'null'); } catch (e) { return null; } }
 
+  /* Quien ya usaba la app y no ha visto la versión actual del aviso de privacidad recibe un aviso (una vez) */
+  function noticePrivacy() {
+    if (!window.HalterPrivacy || !C.user) return;
+    const k = K_PRIV + C.user.uid;
+    if (LS.get(k) === window.HalterPrivacy.VERSION) return;
+    const mine = LS.get(K_PRIVNEW); LS.set(k, window.HalterPrivacy.VERSION); LS.del(K_PRIVNEW);
+    if (!mine) setTimeout(() => toast('Publicamos el aviso de privacidad: lo encuentras en Ajustes → Cuenta.'), 1500);
+  }
+
   /* ---------- Arranque de la app ---------- */
   function activate(role, name, offline) {
     const changed = !C.appRunning || C.role !== role;
     C.role = role; C.name = name || C.name; C.phase = 'active'; C.offlineCache = !!offline;
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
     if (!changed) { if (!offline) startLive(); window.HalterApp.render(); return; }
+    noticePrivacy();
     C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI();
     hideGate();
     const fresh = window.HalterApp.start({
@@ -326,7 +340,8 @@
     return `<p class="eyebrow">Cuenta</p><div class="acct"><div class="kv"><span>Correo</span><b>${esc(C.user ? C.user.email : '')}</b></div><div class="kv"><span>Rol</span><b>${C.role === 'coach' ? 'Entrenador' : 'Atleta'}</b></div>` +
       (C.offlineCache ? '<div class="kv"><span>Estado</span><b><span class="badge warn">Sin confirmar con el servidor</span></b></div>' : '') +
       `<div class="kv"><span>Datos en la nube</span><b id="syncStat">${esc(syncText(C.sync && C.sync.current))}</b></div>` +
-      '</div><div class="row-end"><button class="lnk" data-act="sync-now">Sincronizar ahora</button><button class="lnk" data-act="cl-logout">Cerrar sesión</button></div>';
+      '</div><div class="row-end"><button class="lnk" data-act="sync-now">Sincronizar ahora</button><button class="lnk" data-act="cl-logout">Cerrar sesión</button></div>' +
+      (window.HalterPrivacy ? window.HalterPrivacy.html(false) : '');
   }
   const when = ms => ms ? new Date(ms).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }) : '';
   function personRow(p, acts) { return `<div class="person"><div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}${p.createdAt || p.approvedAt ? ' · ' + when(p.createdAt || p.approvedAt) : ''}</small></div><div class="acts">${acts}</div></div>`; }
@@ -394,17 +409,18 @@
       if (name.length < 2) err = 'Escribe tu nombre y apellido';
       else if (pass.length < 6) err = 'La contraseña debe tener al menos 6 caracteres';
       else if (pass !== v('gPass2')) err = 'Las contraseñas no coinciden';
+      else if (window.HalterPrivacy && !(document.getElementById('gPriv') || {}).checked) err = 'Para crear la cuenta, marca que leíste el aviso de privacidad';
     }
     if (err) { setForm(err, false); return; }
     setForm('', true, 'Un momento…');
     try {
       if (kind === 'login') await C.remote.signIn(email, pass);
-      else if (kind === 'signup') { LS.set(K_NAME, name); await C.remote.signUp(email, pass); }
+      else if (kind === 'signup') { LS.set(K_NAME, name); LS.set(K_PRIVNEW, '1'); await C.remote.signUp(email, pass); }
       else { await C.remote.resetPassword(email); toast('Listo: revisa tu correo (y la carpeta de spam)'); C.mode = 'login'; C.busy = false; showGate(true); return; }
       /* con éxito, onAuth cambia la pantalla */
     } catch (e) {
       const msg = authErr(e), code = e && e.code ? ` [${e.code}]` : '';
-      if (kind === 'signup') LS.del(K_NAME);
+      if (kind === 'signup') { LS.del(K_NAME); LS.del(K_PRIVNEW); }
       setForm(msg + (msg.startsWith('No se pudo') ? '' : code), false, kind === 'login' ? 'Entrar' : kind === 'signup' ? 'Crear cuenta y pedir acceso' : 'Enviar correo');
     }
   }

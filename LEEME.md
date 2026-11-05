@@ -27,6 +27,7 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalación y funcionamiento sin conexión |
 | `sync.js` | Sincronización de los datos propios (fase 2) |
 | `assign.js` | Semana asignada (fase 4): asignación y ajustes del entrenador, pestaña **Semana** del atleta, cumplimiento y avance semanal |
+| `privacy.js` | Aviso de privacidad (texto y versión). Se muestra al crear la cuenta (hay que marcarlo), en el ingreso y en Ajustes → Cuenta |
 | `report.js` | Informes del entrenador (fase 4b): planificado vs realizado y observaciones, por semana o por día |
 | `tests/` | Pruebas automáticas |
 
@@ -106,6 +107,12 @@ En **Equipo → Semana** de cada atleta, la tarjeta **Informe del atleta** → �
 - **Observaciones:** las «Notas de la sesión» que escribe el atleta (técnica, sensaciones, molestias) se reúnen al final y también van en el texto.
 - **Salida:** «Copiar texto», «Compartir» (donde el equipo lo permita) e «Imprimir o guardar PDF». Con el plan gratuito no hay envío automático (sin correos ni avisos programados): el informe se arma al abrirlo y refleja lo que el atleta ya sincronizó.
 - Si una sesión del plan se registró más de una vez, cuenta la última. Lo que el atleta no ha sincronizado todavía (sin conexión) aparece como «Sin registrar».
+
+## Aviso de privacidad y observaciones por ejercicio (fase 5)
+
+- **Aviso de privacidad** (`privacy.js`): texto breve sobre qué se guarda (incluidas notas que pueden hablar de molestias: datos de salud), para qué, quién lo ve (el atleta y el entrenador), dónde (Firebase, base de datos en Santiago) y los derechos. Al **crear la cuenta** hay que marcar que se leyó. Quien ya usaba la app recibe un aviso una vez; queda siempre en Ajustes → Cuenta. Si cambia lo que la app guarda, hay que editar el texto y subir `VERSION`. **No es asesoría legal**: conviene que lo revise quien corresponda (Ley 19.628, reformada por la Ley 21.719, vigente desde el 1-dic-2026), y confirmar con Cristian que acepta ser el contacto para consultas.
+- **Borrar todos mis datos** deja en la nube solo el nombre y correo (cuenta) y el registro de las sesiones cumplidas (fecha y semana): las reglas impiden borrarlos desde la app. Para eliminar también eso hay que hacerlo desde la consola de Firebase.
+- **Observación por ejercicio:** cada ejercicio de la sesión tiene un campo «Observación» (200 caracteres). Se ve en el historial y llega al informe del entrenador, junto a las notas de la sesión.
 
 ## Lo que viene
 

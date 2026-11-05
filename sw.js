@@ -1,7 +1,7 @@
 /* Service worker: permite abrir la app sin conexión.
    Estrategia: red primero (así se ven las actualizaciones), con respaldo en caché. */
 const CACHE = 'halterofilia-v1';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './sync.js', './plan-import.js', './plan-ui.js', './assign.js', './report.js', './firebase-config.js', './manifest.webmanifest',
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './sync.js', './plan-import.js', './plan-ui.js', './privacy.js', './assign.js', './report.js', './firebase-config.js', './manifest.webmanifest',
   './icons/icon.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

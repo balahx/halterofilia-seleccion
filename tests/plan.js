@@ -64,7 +64,7 @@ function cristianGrid() {
   console.log('1. El entrenador entra');
   await page.goto(URL); await page.waitForSelector('#gForm');
   await page.click('[data-g="mode"][data-v="signup"]');
-  await page.fill('#gName', 'Cristian Mateluna'); await page.fill('#gEmail', 'cristian@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123');
+  await page.fill('#gName', 'Cristian Mateluna'); await page.fill('#gEmail', 'cristian@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.check('#gPriv');
   await page.click('#gForm button[type=submit]');
   await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || ''));
   const cuid = await page.evaluate(() => __fake.uid('cristian@correo.cl'));
@@ -145,7 +145,7 @@ function cristianGrid() {
   console.log('7. El atleta no ve «Plan anual»');
   await page.evaluate(() => document.querySelector('#gear').click()); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm');
   await page.click('[data-g="mode"][data-v="signup"]');
-  await page.fill('#gName', 'Ana Rojas'); await page.fill('#gEmail', 'ana@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123');
+  await page.fill('#gName', 'Ana Rojas'); await page.fill('#gEmail', 'ana@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.check('#gPriv');
   await page.click('#gForm button[type=submit]');
   await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || ''));
   const auid = await page.evaluate(() => __fake.uid('ana@correo.cl'));

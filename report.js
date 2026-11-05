@@ -60,18 +60,19 @@
   /* Informe de una sesión. rec = sesión registrada por el atleta (o null); planned = salida de plannedByEx (o null si fue libre). */
   function sessionReport(rec, planned, ctx) {
     const lang = ctx.lang || 'en', exNames = ctx.exNames || {}, items = [], seen = {};
+    const noteOf = id => (rec && rec.items || []).filter(i => i.exId === id && i.note && String(i.note).trim()).map(i => String(i.note).trim()).filter((n, k, a) => a.indexOf(n) === k).join(' · ');
     const recItem = id => (rec && rec.items || []).filter(i => i.exId === id).reduce((a, i) => ({ exId: id, sets: a.sets.concat(i.sets || []) }), { exId: id, sets: [] });
     (planned || []).forEach(p => {
       seen[p.exId] = 1;
       const ps = plannedSummary(p.sets), ds = doneSummary(recItem(p.exId).sets);
       const status = !rec ? 'pending' : ds.n === 0 ? 'omitted' : ds.n < ps.n ? 'partial' : 'ok';
-      items.push({ exId: p.exId, name: principal(p, lang), planned: ps, done: ds, status: status });
+      items.push({ exId: p.exId, name: principal(p, lang), planned: ps, done: ds, status: status, note: noteOf(p.exId) });
     });
     (rec && rec.items || []).forEach(i => {
       if (seen[i.exId]) return; seen[i.exId] = 1;
       const ds = doneSummary(recItem(i.exId).sets); if (!ds.n) return;
       const nm = exNames[i.exId] || { en: i.exId };
-      items.push({ exId: i.exId, name: principal(nm, lang), planned: null, done: ds, status: planned ? 'extra' : 'free' });
+      items.push({ exId: i.exId, name: principal(nm, lang), planned: null, done: ds, status: planned ? 'extra' : 'free', note: noteOf(i.exId) });
     });
     const t = { plannedSets: 0, doneSets: 0, reps: 0, ton: 0, rpeSum: 0, rpeN: 0 };
     items.forEach(it => {
@@ -110,6 +111,7 @@
       sum.plannedSets += rep.totals.plannedSets; sum.doneSets += rep.totals.doneSets; sum.reps += rep.totals.reps; sum.ton += rep.totals.ton;
       if (rep.totals.rpe != null) { sum.rpeSum += rep.totals.rpe; sum.rpeN++; }
       if (rep.notes) notes.push({ label: rep.label + (rep.date ? ' (' + dateEs(rep.date) + ')' : ''), text: rep.notes });
+      rep.items.forEach(it => { if (it.note) notes.push({ label: rep.label + ' · ' + itemName(it.name) + (rep.date ? ' (' + dateEs(rep.date) + ')' : ''), text: it.note }); });
     });
     return { kind: 'week', athlete: a.athlete, title: 'Semana ' + week.week + (a.stage ? ' · ' + a.stage : '') + (week.kind === 'transition' ? ' · transición' : ''), transition: week.kind === 'transition',
       sessions: sessions, notes: notes,
@@ -130,6 +132,7 @@
       sum.doneSets += rep.totals.doneSets; sum.plannedSets += rep.totals.plannedSets; sum.reps += rep.totals.reps; sum.ton += rep.totals.ton;
       if (rep.totals.rpe != null) { sum.rpeSum += rep.totals.rpe; sum.rpeN++; }
       if (rep.notes) notes.push({ label: rep.label, text: rep.notes });
+      rep.items.forEach(it => { if (it.note) notes.push({ label: rep.label + ' · ' + itemName(it.name), text: it.note }); });
     });
     return { kind: 'day', athlete: a.athlete, title: dateEs(a.date), sessions: out, notes: notes,
       totals: { plannedSessions: 0, doneSessions: out.length, plannedSets: sum.plannedSets, doneSets: sum.doneSets, reps: sum.reps, ton: Math.round(sum.ton), rpe: sum.rpeN ? r1(sum.rpeSum / sum.rpeN) : null } };
@@ -157,7 +160,7 @@
     r.sessions.forEach(s => {
       L.push('');
       L.push((s.label || 'Sesión') + (s.plan ? ' [' + s.plan + ']' : '') + ' — ' + (s.registered ? 'registrada' + (s.date ? ' el ' + dateEs(s.date) : '') + (s.durationMin ? ' (' + s.durationMin + ' min)' : '') : 'SIN REGISTRAR') + (s.completedAt ? ' · cumplida ' + completedText(s.completedAt) : ''));
-      s.items.forEach(it => L.push('  • ' + itemName(it.name) + (STATUS[it.status] ? ' [' + STATUS[it.status] + ']' : '') + ': ' + itemLine(it)));
+      s.items.forEach(it => { L.push('  • ' + itemName(it.name) + (STATUS[it.status] ? ' [' + STATUS[it.status] + ']' : '') + ': ' + itemLine(it)); if (it.note) L.push('      Obs.: ' + it.note); });
       if (s.notes) L.push('  Observaciones: ' + s.notes);
     });
     if (r.notes.length) { L.push(''); L.push('OBSERVACIONES DEL ATLETA'); r.notes.forEach(n => L.push('  - ' + n.label + ': ' + n.text)); }
@@ -230,7 +233,7 @@
         (r.kind === 'week' ? (s.registered ? '<span class="badge ok">Registrada</span>' : '<span class="badge bad">Sin registrar</span>') : '') + '</div><ul class="plain">';
       s.items.forEach(it => {
         const b = BADGE[it.status] || ['', ''];
-        h += `<li><b>${esc(it.name.p)}</b>${it.name.s ? `<small class="exsub">${esc(it.name.s)}</small>` : ''}<small>${esc(itemLine(it))}</small>${b[1] ? `<span class="badge ${b[0]}">${b[1]}</span>` : ''}</li>`;
+        h += `<li><b>${esc(it.name.p)}</b>${it.name.s ? `<small class="exsub">${esc(it.name.s)}</small>` : ''}<small>${esc(itemLine(it))}</small>${it.note ? `<small class="inote-h">“${esc(it.note)}”</small>` : ''}${b[1] ? `<span class="badge ${b[0]}">${b[1]}</span>` : ''}</li>`;
       });
       if (!s.items.length) h += '<li><small>Sin ejercicios registrados.</small></li>';
       h += '</ul>' + (s.notes ? `<p class="notes">“${esc(s.notes)}”</p>` : '') + '</div>';

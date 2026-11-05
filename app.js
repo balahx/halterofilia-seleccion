@@ -494,6 +494,7 @@ function exerciseCard(it, i) {
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
     '<div class="set sethead' + (rpe ? ' rpe' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
     it.sets.map((st, j) => setRowHTML(i, j, st, it)).join('') +
+    '<label class="inote-l"><span class="sr-only">Observación de este ejercicio</span><input class="txt inote" data-f="inote" maxlength="200" autocomplete="off" placeholder="Observación (técnica, dolor, sensaciones…)" value="' + esc(it.note || '') + '"></label>' +
     '<div class="exc-f"><button class="btn ghost sm" data-act="add-set" data-i="' + i + '">+ Serie</button>' +
     '<button class="btn ghost sm" data-act="rm-set" data-i="' + i + '">' + confirmLabel('rs' + i, '− Serie', '¿Quitar hecha?') + '</button>' +
     '<button class="btn ghost sm" data-act="plates" data-i="' + i + '">Discos</button>' +
@@ -628,7 +629,7 @@ function histRow(s) {
       const gaps = [];
       for (let k = 1; k < it.sets.length; k++) { const dgap = (it.sets[k].doneAt - it.sets[k - 1].doneAt) / 1000; if (dgap > 10 && dgap < 600) gaps.push(dgap); }
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
-      h += '<div class="hex"><b>' + esc(nm(ex(it.exId))) + '</b><span>' + groups.map(g => fmtNum(g.kg, 1) + ' kg · ' + g.n + '×' + esc(g.reps)).join('  /  ') + (avg ? ' · descanso real ~' + fmtTime(avg) : '') + '</span></div>';
+      h += '<div class="hex"><b>' + esc(nm(ex(it.exId))) + '</b><span>' + groups.map(g => fmtNum(g.kg, 1) + ' kg · ' + g.n + '×' + esc(g.reps)).join('  /  ') + (avg ? ' · descanso real ~' + fmtTime(avg) : '') + '</span>' + (it.note ? '<span class="inote-h">“' + esc(it.note) + '”</span>' : '') + '</div>';
     }
     if (s.notes) h += '<p class="notes">“' + esc(s.notes) + '”</p>';
     h += '<div class="row-end"><button class="lnk danger" data-act="del-sess" data-id="' + s.id + '">' + confirmLabel('ds' + s.id, 'Eliminar sesión', 'Confirmar eliminar') + '</button></div></div>';
@@ -1119,6 +1120,7 @@ function onField(t) {
     case 'kg': case 'reps': case 'pct': case 'rpe': setField(t); break;
     case 'rest': if (s) { s.items[+t.closest('.exc').dataset.i].rest = parseNum(t.value); save(); } break;
     case 'notes': if (s) { s.notes = t.value; save(); } break;
+    case 'inote': if (s) { const it = s.items[+t.closest('.exc').dataset.i]; if (it) { it.note = t.value.slice(0, 200); save(); } } break;
     case 'dname': S.plan.days[+t.closest('.day').dataset.d].name = t.value; save(); break;
     case 'don': { const d = S.plan.days[+t.closest('.day').dataset.d]; d.on = t.checked; save(); render(); break; }
     case 'psets': case 'preps': case 'ppct': case 'prest': {

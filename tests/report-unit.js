@@ -55,6 +55,15 @@ console.log('5. Si una sesión se repitió, cuenta la última');
 const again = sessions.concat([rec(0, '2026-11-03', [{ exId: 'snatch', sets: [st(60, '3')] }], 'segunda vez', { id: 'r0b', endedAt: 1000 + 7200000 })]);
 ok(R.findRecord(again, 'p1', 'e1_1', 0).notes === 'segunda vez', 'findRecord devuelve la más reciente');
 
+console.log('5b. Observaciones por ejercicio');
+const withNote = sessions.map(x => x.id === 'r0' ? Object.assign({}, x, { items: x.items.map(i => i.exId === 'snatch' ? Object.assign({}, i, { note: 'Me cuesta la salida del suelo' }) : i) }) : x);
+const wn = R.weekReport({ athlete: 'Ana', week, planId: 'p1', stage: '', names, exNames, sessions: withNote, adj: {}, lang: 'en', done: {} });
+ok(wn.sessions[0].items[0].note === 'Me cuesta la salida del suelo' && wn.sessions[0].items[1].note === '', 'la observación queda en su ejercicio');
+ok(wn.notes.some(n => /Snatch/.test(n.label) && /salida del suelo/.test(n.text)) && wn.notes.some(n => /hombro/.test(n.text)), 'aparece en las observaciones del atleta junto a la de la sesión');
+ok(/Obs\.: Me cuesta la salida del suelo/.test(R.toText(wn)), 'y en el texto del informe');
+const dn = R.dayReport({ athlete: 'Ana', date: '2026-11-02', sessions: withNote, names, exNames, weeks: [week], lang: 'en' });
+ok(dn.notes.some(n => /salida del suelo/.test(n.text)), 'también en el informe del día');
+
 console.log('6. Informe de un día');
 const dr = R.dayReport({ athlete: 'Ana', date: '2026-11-02', sessions, names, exNames, weeks: [week], lang: 'en', adjFor: () => ({ s0_i0_k1: 95 }) });
 ok(dr.sessions.length === 2 && dr.sessions[0].plan === 'Semana 1 · Lunes', 'dos sesiones ese día; la del plan indica su semana y día');

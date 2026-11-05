@@ -29,7 +29,7 @@ const WEEKS = {
   const txt = sel => page.locator(sel).first().innerText();
   const docs = () => page.evaluate(() => __fake.srv().docs);
   const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500); };
-  const signup = async (name, email) => { await page.click('[data-g="mode"][data-v="signup"]'); await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.click('#gForm button[type=submit]'); await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || '')); };
+  const signup = async (name, email) => { await page.click('[data-g="mode"][data-v="signup"]'); await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.check('#gPriv'); await page.click('#gForm button[type=submit]'); await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || '')); };
   const login = async email => { await page.fill('#gEmail', email); await page.fill('#gPass', 'clave123'); await page.click('#gForm button[type=submit]'); await page.waitForSelector('#appRoot:not([hidden])'); };
   const tab = async t => { await page.click('#nav button[data-tab="' + t + '"]'); await page.waitForTimeout(250); };
   const remoteTry = (fn) => page.evaluate(async src => { try { await (new Function('r', 'return (async()=>{' + src + '})()'))(window.HALTER_REMOTE_FACTORY()); return 'ok'; } catch (e) { return e.code || String(e.message); } }, fn);
@@ -181,6 +181,9 @@ const WEEKS = {
   ok(/Snatch \+ Overhead Squat/.test(await txt('#view')) && (await page.locator('#view .exc [data-act="edit-max"]').filter({ hasText: /máximo|1RM/ }).count()) === 0 && /sin máximo propio/.test(await txt('#view')), 'en la sesión, el complejo no ofrece «Definir máximo»: avisa que usa el de su primer movimiento');
   ok((await page.locator('#view .exc [data-act="edit-max"]').count()) === 0, 'tampoco el complejo «Arranque con pausa + tirón» (un solo ejercicio del glosario con «+»)');
   ok(/Arranque con pausa sobre rodilla|Snatch with Above-Knee Pause/.test(await txt('#view')) && await page.locator('#view .exc').nth(1).locator('input[data-f="kg"]').first().inputValue() === '50', 'y sus kilos salen del arranque: 50 % de 100 = 50 kg');
+  await page.locator('#view .exc').first().locator('.inote').fill('Se me cae el codo en la recepción');
+  await page.waitForTimeout(300);
+  ok(await page.evaluate(() => HalterApp.state().sessions.find(x => !x.endedAt).items[0].note) === 'Se me cae el codo en la recepción', 'la observación por ejercicio se guarda en la sesión');
   await page.screenshot({ path: (process.env.SHOTS || '/tmp') + '/semana-08-sesion-complejo.png' });
   await tab('max');
   const mx = await txt('#view');
@@ -216,7 +219,7 @@ const WEEKS = {
     const day = new Date().toISOString().slice(0, 10);
     const st = (kg, reps, done) => ({ kg, reps, pct: 70, rpe: 8, done, doneAt: 1 });
     const sess = { id: 'inf1', date: day, name: 'Lunes', startedAt: Date.now() - 3600000, endedAt: Date.now(), notes: 'Dolor leve en el hombro derecho', bw: 80,
-      items: [{ exId: 'snatch', sets: [st(70, '3', true), st(70, '3', true), st(95, '1', true)] }], plan: { planId: 'p1', weekId: 'e1_1', idx: 0 } };
+      items: [{ exId: 'snatch', note: 'Se me cae el codo en la recepción', sets: [st(70, '3', true), st(70, '3', true), st(95, '1', true)] }], plan: { planId: 'p1', weekId: 'e1_1', idx: 0 } };
     __fake.admin('users/' + u + '/records/s_inf1', { t: 'session', d: JSON.stringify(sess), u: Date.now(), at: Date.now() });
   }, auid);
   await logout(); await login('cristian@correo.cl'); await tab('equipo');
@@ -228,6 +231,7 @@ const WEEKS = {
   ok(/Snatch/.test(rp) && /3 de 3 hechas/.test(rp) && /Completo/.test(rp), 'arranque: 3 de 3 series, completo');
   ok(/Sin registrar/.test(rp), 'las sesiones sin registro aparecen como «Sin registrar»');
   ok(/Dolor leve en el hombro derecho/.test(rp), 'muestra la observación del atleta');
+  ok(/Se me cae el codo en la recepción/.test(rp), 'y la observación del ejercicio');
   await shot('03-informe-semana'); if (process.env.SHOTS) await page.locator('#rpCard').screenshot({ path: process.env.SHOTS + '/semana-03b-informe-tarjeta.png' });
   await page.click('[data-act="rp-mode"][data-m="day"]'); await page.waitForTimeout(300);
   await page.fill('#rpDate', await page.evaluate(() => new Date().toISOString().slice(0, 10))); await page.waitForTimeout(300);

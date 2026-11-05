@@ -21,6 +21,6 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await page.reload(); await page.waitForSelector('#gForm');
   ok(true, 'sin conexión la app abre desde la caché');
   const cached = await page.evaluate(async () => (await (await caches.open('halterofilia-v1')).keys()).map(r => new URL(r.url).pathname));
-  ok(['/index.html', '/app.js', '/cloud.js', '/styles.css', '/firebase-config.js', '/plan-import.js', '/plan-ui.js', '/assign.js', '/report.js'].every(p => cached.includes(p)), 'archivos en caché: ' + cached.length);
+  ok(['/index.html', '/app.js', '/cloud.js', '/styles.css', '/firebase-config.js', '/plan-import.js', '/plan-ui.js', '/assign.js', '/report.js', '/privacy.js'].every(p => cached.includes(p)), 'archivos en caché: ' + cached.length);
   await br.close(); srv.close(); console.log(fails ? fails + ' FALLAS' : 'TODO OK'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
