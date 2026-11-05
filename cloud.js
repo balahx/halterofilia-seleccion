@@ -80,6 +80,14 @@
       return b.commit();
     }
     removeMember(uid) { return this.m.fs.deleteDoc(this._doc('members/' + uid)); }
+    /* Datos propios (fase 2): users/{uid}/records. Solo se piden los registros que cambiaron desde `sinceMs` (hora del servidor). */
+    watchRecords(uid, sinceMs, cb, onErr) {
+      const fs = this.m.fs;
+      const q = fs.query(fs.collection(this.db, 'users', uid, 'records'), fs.where('at', '>=', fs.Timestamp.fromMillis(sinceMs || 0)));
+      return fs.onSnapshot(q, { includeMetadataChanges: true },
+        snap => cb(snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data()))), { fromCache: snap.metadata.fromCache }), onErr);
+    }
+    setRecord(uid, key, data) { return this.m.fs.setDoc(this._doc('users/' + uid + '/records/' + key), Object.assign({}, data, { at: this.m.fs.serverTimestamp() })); }
   }
 
   /* ---------- Estado ---------- */
@@ -92,8 +100,32 @@
     team: undefined, member: undefined, request: undefined,   // undefined = aún sin respuesta
     defin: { team: false, member: false, request: false },    // respuesta confirmada por el servidor
     members: [], requests: [], colReady: false,
-    unsub: [], appRunning: false, err: '', busy: false, confirm: null, offlineCache: false
+    unsub: [], appRunning: false, err: '', busy: false, confirm: null, offlineCache: false,
+    sync: null            // motor de sincronización de los datos propios (sync.js)
   };
+
+  /* ---------- Sincronización de datos propios ---------- */
+  function syncText(s) {
+    if (!s) return 'Sin iniciar';
+    const ago = s.last ? new Date(s.last).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
+    switch (s.state) {
+      case 'ok': return 'Al día' + (ago ? ' · ' + ago : '');
+      case 'syncing': return 'Sincronizando…';
+      case 'pending': return s.pending + (s.pending === 1 ? ' cambio por enviar' : ' cambios por enviar');
+      case 'offline': return 'Sin conexión' + (s.pending ? ' · ' + s.pending + ' por enviar' : '');
+      case 'denied': return 'Sin permiso: faltan las reglas de Firestore';
+      case 'error': return 'No se pudo sincronizar. Se reintentará solo.';
+      default: return 'Conectando…';
+    }
+  }
+  function paintSync(s) { const el = document.getElementById('syncStat'); if (el) el.textContent = syncText(s || (C.sync && C.sync.current)); }
+  function startSync(fresh) {
+    stopSync();
+    if (!C.remote || typeof C.remote.watchRecords !== 'function' || !window.HalterSync || !C.user) return;
+    C.sync = new window.HalterSync.Engine({ remote: C.remote, uid: C.user.uid, app: window.HalterApp, store: LS, onStatus: paintSync });
+    C.sync.start({ fresh: fresh });
+  }
+  function stopSync() { if (C.sync) { C.sync.stop(); C.sync = null; } }
 
   /* ---------- Pantallas de ingreso ---------- */
   const gate = () => $('#gate');
@@ -216,22 +248,24 @@
     if (!changed) { window.HalterApp.render(); return; }
     C.appRunning = true; LS.del(K_NAME);
     hideGate();
-    window.HalterApp.start({
+    const fresh = window.HalterApp.start({
       cloud: true, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
       tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }] : [],
-      accountHTML: accountHTML, onAct: onAct
+      accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); }
     });
+    startSync(fresh);
     if (role === 'coach' && !offline) watchCoachLists();
   }
   function deactivate() {
-    window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
+    stopSync(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
   }
 
   /* ---------- Contenido propio dentro de la app ---------- */
   function accountHTML() {
     return `<p class="eyebrow">Cuenta</p><div class="acct"><div class="kv"><span>Correo</span><b>${esc(C.user ? C.user.email : '')}</b></div><div class="kv"><span>Rol</span><b>${C.role === 'coach' ? 'Entrenador' : 'Atleta'}</b></div>` +
       (C.offlineCache ? '<div class="kv"><span>Estado</span><b><span class="badge warn">Sin confirmar con el servidor</span></b></div>' : '') +
-      '</div><div class="row-end"><button class="lnk" data-act="cl-logout">Cerrar sesión</button></div>';
+      `<div class="kv"><span>Datos en la nube</span><b id="syncStat">${esc(syncText(C.sync && C.sync.current))}</b></div>` +
+      '</div><div class="row-end"><button class="lnk" data-act="sync-now">Sincronizar ahora</button><button class="lnk" data-act="cl-logout">Cerrar sesión</button></div>';
   }
   const when = ms => ms ? new Date(ms).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }) : '';
   function personRow(p, acts) { return `<div class="person"><div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}${p.createdAt || p.approvedAt ? ' · ' + when(p.createdAt || p.approvedAt) : ''}</small></div><div class="acts">${acts}</div></div>`; }
@@ -262,6 +296,7 @@
     const twoStep = key => { if (prev === key + uid) return true; C.confirm = key + uid; window.HalterApp.render(); return false; };
     switch (act) {
       case 'cl-logout': doLogout(); break;
+      case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
       case 'eq-delreq': if (twoStep('eq-delreq')) guarded(() => C.remote.deleteRequest(uid), 'Solicitud borrada'); break;
@@ -271,7 +306,7 @@
 
   /* ---------- Acciones de las pantallas de ingreso ---------- */
   async function doLogout() {
-    try { if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
+    try { stopSync(); if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
       if (C.remote) await C.remote.signOut(); } catch (e) { /* sin conexión: igual se cierra la sesión local */ }
     C.user = null; C.phase = 'signedout'; showGate(true);
   }
@@ -345,7 +380,7 @@
     C.remote.onAuth(u => {
       if (u && C.user && u.uid === C.user.uid) return;
       unwatch();
-      if (!u) { C.busy = false; if (C.appRunning) { window.HalterApp.stop(); C.appRunning = false; } C.user = null; resetAccess(); C.phase = 'signedout'; showGate(true); return; }
+      if (!u) { C.busy = false; stopSync(); if (C.appRunning) { window.HalterApp.stop(); C.appRunning = false; } C.user = null; resetAccess(); C.phase = 'signedout'; showGate(true); return; }
       C.user = u; C.autoSent = false; C.err = ''; C.busy = false; C.phase = 'resolving';
       const last = readLast();
       if (!(last && last.uid === u.uid)) showGate(true);

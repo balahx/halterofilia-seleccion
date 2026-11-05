@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// Halterofilia · Selección — reglas de la fase 1 (cuentas y acceso).
+// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso) y 2 (datos propios de cada atleta).
 // Todo lo que no está permitido aquí queda prohibido.
-// Las reglas de las fases siguientes (registros, plan, asignaciones) se agregarán en este mismo archivo.
+// Las reglas de las fases siguientes (plan, asignaciones, cumplimiento) se agregarán en este mismo archivo.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -33,6 +33,26 @@ service cloud.firestore {
         && request.resource.data.email is string && request.resource.data.email.size() <= 200
         && request.resource.data.approvedAt == request.time;
       allow delete: if isCoach();
+    }
+
+    // Datos propios (fase 2): sesiones, ejercicios con su máximo, perfil y plan semanal de cada atleta.
+    // Un registro por documento: users/{uid}/records/{clave}. Solo escribe su dueño, y solo si está aprobado
+    // (o es el entrenador). El entrenador puede leer los de todos (informes de la fase 4b).
+    // Los registros no se borran de verdad: se marcan con del = true para avisar a los otros dispositivos.
+    function isMember(uid) { return exists(/databases/$(database)/documents/members/$(uid)); }
+    match /users/{uid}/records/{key} {
+      allow read: if signedIn() && ((request.auth.uid == uid && (isMember(uid) || isCoach())) || isCoach());
+      allow create, update: if signedIn() && request.auth.uid == uid && (isMember(uid) || isCoach())
+        && request.resource.data.keys().hasOnly(['t', 'd', 'u', 'del', 'at'])
+        && request.resource.data.keys().hasAll(['t', 'u', 'at'])
+        && request.resource.data.t in ['profile', 'plan', 'exercise', 'session']
+        && request.resource.data.u is number
+        && request.resource.data.u <= request.time.toMillis() + 600000
+        && request.resource.data.at == request.time
+        && (!('d' in request.resource.data) || (request.resource.data.d is string && request.resource.data.d.size() <= 300000))
+        && (!('del' in request.resource.data) || request.resource.data.del is bool)
+        && key.size() <= 120;
+      allow delete: if false;
     }
 
     // Solicitudes de acceso. Cada persona crea la suya (con su propio correo y la hora del servidor).

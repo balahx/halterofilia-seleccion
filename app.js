@@ -194,7 +194,7 @@ if (typeof module !== 'undefined') {
 
 /* ===== Estado, persistencia, datos de ejemplo, temporizador ===== */
 let KEY = 'halterofilia.v1.local';
-let APP = { tabs: [], accountHTML: null, onAct: null, cloud: false }; // lo define cloud.js al iniciar
+let APP = { tabs: [], accountHTML: null, onAct: null, onSave: null, cloud: false }; // lo define cloud.js al iniciar
 const CATS = [['comp', 'Competencia'], ['cmplx', 'Complejos'], ['tec', 'Técnica'], ['tiron', 'Tirones'], ['fuerza', 'Fuerza'], ['acc', 'Accesorios']];
 const REST_OPTS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const DEFAULT_PROFILE = { name: '', bw: 0, bar: 20, rounding: 1, rest: 120, timerEnabled: true, autoTimer: false, timerMode: 'down', sound: true, vibrate: true, keepAwake: true, showRpe: true, prefs: 2 };
@@ -276,7 +276,7 @@ function load() {
 }
 function save(now) {
   clearTimeout(saveT);
-  const go = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); storageOK = true; } catch (e) { storageOK = false; renderBanner(); } };
+  const go = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); storageOK = true; } catch (e) { storageOK = false; renderBanner(); } if (S && APP.onSave) { try { APP.onSave(); } catch (e) { /* la sincronización no debe frenar el guardado */ } } };
   if (now) go(); else saveT = setTimeout(go, 250);
 }
 function normalize(o) {
@@ -1006,12 +1006,12 @@ function settingsHTML() {
     '<label class="fl"><span>Descanso predeterminado</span>' + restSelect(p.rest, 'id="sRest" data-f="set" data-k="rest" data-num="1"').replace('class="sel"', 'class="sel tall"') + '</label></div>' +
     '<p class="eyebrow">Temporizador</p><div class="checks">' + chk('timerEnabled', 'Mostrar temporizador y cronómetro') + chk('autoTimer', 'Iniciar solo al marcar una serie como hecha') + chk('sound', 'Sonido al terminar el descanso') + chk('vibrate', 'Vibración al terminar') + '</div>' +
     '<p class="eyebrow">Sesión</p><div class="checks">' + chk('keepAwake', 'Mantener la pantalla encendida durante la sesión') + chk('showRpe', 'Anotar esfuerzo percibido (RPE) por serie') + '</div>' +
-    '<p class="eyebrow">Tus datos</p><p class="muted">Se guardan en este dispositivo' + (APP.cloud ? ' (la copia en la nube llega en la siguiente fase)' : '') + '. Descarga un respaldo de vez en cuando.</p><div class="stack">' +
+    '<p class="eyebrow">Tus datos</p><p class="muted">' + (APP.cloud ? 'Se guardan en este dispositivo y se copian solos en tu cuenta, así los ves en cualquier dispositivo donde entres. ' : 'Se guardan en este dispositivo. ') + 'Descarga un respaldo de vez en cuando.</p><div class="stack">' +
     '<button class="btn ghost" data-act="export-json">Exportar respaldo (JSON)</button><button class="btn ghost" data-act="export-csv">Exportar historial (CSV para Excel)</button></div>' +
     '<label class="lab" for="impFile">Importar respaldo</label><input type="file" id="impFile" data-f="impFile" accept=".json,application/json" class="file">' +
     '<textarea class="txt area" id="impText" rows="2" placeholder="…o pega aquí el contenido del respaldo"></textarea><div class="row-end"><button class="btn ghost sm" data-act="import-run">Importar texto</button></div>';
-  if (ui2.imp != null) h += '<div class="note warn"><b>Se reemplazarán tus datos actuales</b> por un respaldo con ' + ui2.imp + ' sesiones.<div class="actions"><button class="btn sm" data-act="import-confirm">Reemplazar</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>';
-  h += '<div class="row-end"><button class="lnk danger" data-act="wipe">' + confirmLabel('wipe', 'Borrar todos mis datos', 'Confirmar: borrar todo') + '</button></div></div>';
+  if (ui2.imp != null) h += '<div class="note warn"><b>Se reemplazarán tus datos actuales' + (APP.cloud ? ' (también en la nube)' : '') + '</b> por un respaldo con ' + ui2.imp + ' sesiones.<div class="actions"><button class="btn sm" data-act="import-confirm">Reemplazar</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>';
+  h += '<div class="row-end"><button class="lnk danger" data-act="wipe">' + confirmLabel('wipe', APP.cloud ? 'Borrar todos mis datos (también en la nube)' : 'Borrar todos mis datos', 'Confirmar: borrar todo') + '</button></div></div>';
   return h;
 }
 function maxSheetHTML(exId) {
@@ -1244,14 +1244,14 @@ document.addEventListener('change', e => { if (e.target.dataset && e.target.data
 
 /* ----- Inicio ----- */
 let started = false, tickId = null;
-/* opts: { storageKey, name, demo, tabs:[{id,label,icon,render}], accountHTML(), onAct(act, el) }
+/* opts: { storageKey, name, demo, tabs:[{id,label,icon,render}], accountHTML(), onAct(act, el), onSave() }
    Lo llama cloud.js cuando la persona ya inició sesión y tiene acceso. */
 function start(opts) {
   opts = opts || {};
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { tabs: opts.tabs || [], accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, cloud: !!opts.cloud };
+  APP = { tabs: opts.tabs || [], accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, cloud: !!opts.cloud };
   storageOK = true;
-  const saved = load();
+  const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);
   else if (opts.demo) { S = demoState(); save(true); }
   else { S = freshState(); if (opts.name) S.profile.name = opts.name; save(true); }
@@ -1268,11 +1268,24 @@ function start(opts) {
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(drawCharts, 150); });
     try { new ResizeObserver(() => document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px')).observe($('#bar')); } catch (e) { /* sin ResizeObserver */ }
   }
+  return fresh; // true si no había datos guardados en este dispositivo
 }
 function stop() {
   if (S) save(true);
   S = null; ui.sheet = null; ui.tab = 'hoy';
   try { const d = $('#dlg'); if (d.open) d.close(); } catch (e) { /* sin diálogo */ }
 }
-window.HalterApp = { start: start, stop: stop, render: () => { if (S) refresh(); }, toast: toast, esc: esc };
+/* Lo usa sync.js: leer el estado, el estado inicial y aplicar cambios que llegan de la nube */
+function commit(fn) {
+  if (!S) return;
+  fn(S); S = normalize(S);
+  S.sessions.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
+  save(true); softRefresh();
+}
+/* Si la persona está escribiendo en un campo, la pantalla se actualiza al terminar (así no se pierde lo escrito) */
+let refreshLater = false;
+function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
+function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
+document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
+window.HalterApp = { start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit };
 })();

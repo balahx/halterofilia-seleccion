@@ -2,7 +2,7 @@
 
 App web instalable (PWA) para registrar los entrenamientos de la selección de halterofilia. Funciona en iPhone, Android, Windows y Mac desde un solo código, sin pasar por las tiendas de aplicaciones.
 
-**Estado: fase 1.** Cuentas con correo y contraseña, solicitud de acceso, aprobación por el entrenador, app instalable que abre sin conexión. Los registros de entrenamiento todavía se guardan en cada dispositivo; la copia en la nube llega en la fase 2.
+**Estado: fase 2.** Cuentas con correo y contraseña, solicitud de acceso, aprobación por el entrenador, app instalable que abre sin conexión, y **copia automática de los datos de cada atleta en su cuenta** (sesiones, máximos, perfil y plan semanal), para verlos en cualquier dispositivo.
 
 ## Cómo funciona el acceso
 
@@ -23,6 +23,7 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 | `firebase-config.js` | Configuración pública del proyecto Firebase de esta app (no es una clave secreta) |
 | `firestore.rules` | Reglas de seguridad de la base de datos |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalación y funcionamiento sin conexión |
+| `sync.js` | Sincronización de los datos propios (fase 2) |
 | `tests/` | Pruebas automáticas |
 
 ## Puesta en marcha (una sola vez)
@@ -32,6 +33,16 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 3. **Crear la cuenta del entrenador:** Cristian abre la app, crea su cuenta y espera en «Solicitud enviada».
 4. **Nombrar al entrenador:** en Firebase → Authentication → Usuarios, copiar el **UID** de Cristian. En Firestore Database crear la colección `config`, documento `team`, con un campo de texto `coachUid` y ese UID. Al volver a abrir la app, Cristian entra como entrenador y ve «Equipo».
 5. **Aprobar atletas:** cada atleta crea su cuenta; Cristian los aprueba desde «Equipo».
+
+## Sincronización de los datos (fase 2)
+
+- Cada sesión, cada ejercicio (con su máximo), el perfil y el plan semanal se guardan como un registro en `users/{uid}/records/{clave}` (código en `sync.js`).
+- Funciona sin conexión: los cambios quedan en una cola guardada en el dispositivo y se envían al volver internet. En **Ajustes → Cuenta** se ve el estado («Al día», «2 cambios por enviar», «Sin conexión») y hay un botón **Sincronizar ahora**.
+- Si el mismo dato se cambió en dos dispositivos, **gana el cambio más reciente**.
+- Borrar una sesión o un ejercicio también lo borra en los demás dispositivos. «Borrar todos mis datos» y «Importar respaldo» actúan sobre la nube también.
+- Un dispositivo nuevo baja todo lo que hay en la cuenta y no pisa datos reales con valores de fábrica. Un perfil con solo el nombre puesto, el plan vacío y los ejercicios sin máximo cuentan como «de fábrica».
+- Solo el dueño (si está aprobado) y el entrenador pueden leer los registros; solo el dueño puede escribirlos. Las reglas están en `firestore.rules`.
+- **Después de actualizar la app hay que publicar de nuevo `firestore.rules`** (Firestore → Reglas): sin ellas la sincronización muestra «Sin permiso».
 
 ## Instalación en cada equipo
 
@@ -49,10 +60,11 @@ Necesitan Node y Playwright (`npm i playwright`). No usan Firebase real: `tests/
 node tests/e2e.js          # cuentas, solicitudes, aprobación, entrenador, sin conexión
 node tests/regression.js   # app de entrenamiento (sesiones, máximos, gráficos, exportar)
 node tests/pwa.js          # manifest, service worker, apertura sin conexión
+node tests/sync-unit.js    # motor de sincronización: varios dispositivos, conflictos, cola sin conexión
+node tests/sync-e2e.js     # sincronización dentro de la app real
 ```
 
 ## Lo que viene
 
-- Fase 2: copia en la nube de los registros de cada atleta (motor de sincronización como el de «app finanzas»).
 - Fase 3 y 4: plan anual desde el Excel de Cristian, asignación de etapa y semana por atleta, avance semanal con corte el viernes 23:59 (hora de Chile).
 - Informes para el entrenador (planificado vs realizado y observaciones de los atletas): pendientes hasta que exista la base de datos del plan.

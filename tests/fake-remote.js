@@ -18,6 +18,15 @@
     const u = curUser(), s = rd();
     if (!u) return false;
     const [col, id] = path.split('/'), coach = isCoach(s, u.uid);
+    if (col === 'users') { // users/{uid}/records/{clave}
+      const owner = u.uid === id, member = !!s.docs['members/' + u.uid];
+      if (op === 'get' || op === 'list') return coach || (owner && member);
+      if (op === 'delete') return false;
+      const d = data || {}, key = path.split('/')[3] || '';
+      return owner && (member || coach) && keysOnly(d, ['t', 'd', 'u', 'del', 'at']) && ['t', 'u', 'at'].every(k => k in d)
+        && ['profile', 'plan', 'exercise', 'session'].includes(d.t) && typeof d.u === 'number' && d.u <= Date.now() + 600000
+        && (!('d' in d) || (typeof d.d === 'string' && d.d.length <= 300000)) && (!('del' in d) || typeof d.del === 'boolean') && key.length <= 120;
+    }
     if (col === 'config') return op === 'get' || op === 'list';
     if (col === 'members') {
       if (op === 'get') return u.uid === id || coach;
@@ -37,8 +46,12 @@
   function emit() {
     const s = rd();
     watchers.slice().forEach(w => {
-      if (offline()) { w.col ? w.cb([], { fromCache: true }) : w.cb(null, { fromCache: true }); return; }
-      if (w.col) {
+      if (offline()) { (w.col || w.rec) ? w.cb([], { fromCache: true }) : w.cb(null, { fromCache: true }); return; }
+      if (w.rec) {
+        if (!allowed('list', 'users/' + w.uid + '/records/x', null)) { w.err && w.err(err('permission-denied')); return; }
+        const pre = 'users/' + w.uid + '/records/';
+        w.cb(Object.keys(s.docs).filter(k => k.startsWith(pre) && s.docs[k].at >= w.since).map(k => Object.assign({ id: k.slice(pre.length) }, s.docs[k])), { fromCache: false });
+      } else if (w.col) {
         if (!allowed('list', w.path + '/x', null)) { w.err && w.err(err('permission-denied')); return; }
         w.cb(Object.keys(s.docs).filter(k => k.startsWith(w.path + '/')).map(k => Object.assign({ id: k.split('/')[1] }, s.docs[k])), { fromCache: false });
       } else {
@@ -69,6 +82,12 @@
     async signOut() { setUser(null); }
     watchDoc(path, cb, onErr) { const w = { path, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
     watchCol(path, cb, onErr) { const w = { path, col: true, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
+    watchRecords(uid, since, cb, onErr) { const w = { rec: true, uid, since: since || 0, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
+    async setRecord(uid, key, data) {
+      window.__fake.writes.push(key);
+      const at = Math.max(Date.now(), (window.__fake.lastAt || 0) + 1); window.__fake.lastAt = at;
+      mutate('create', 'users/' + uid + '/records/' + key, Object.assign({}, data, { at }));
+    }
     async createRequest(uid, name, email) { mutate('create', 'requests/' + uid, { name, email, status: 'pending', createdAt: Date.now() }); }
     async deleteRequest(uid) { mutate('delete', 'requests/' + uid); }
     async rejectRequest(uid) { mutate('update', 'requests/' + uid, { status: 'rejected' }); }
@@ -77,8 +96,9 @@
   }
   window.HALTER_REMOTE_FACTORY = () => new FakeRemote();
   window.__fake = {
-    resets: [],
+    resets: [], writes: [],
     srv: rd,
+    load(srv) { wr(srv); later(emit); }, // reemplaza el estado del servidor (para simular otro dispositivo que ve lo mismo)
     uid: email => rd().users[email] && rd().users[email].uid,
     admin(path, data) { const s = rd(); if (data === null) delete s.docs[path]; else s.docs[path] = data; wr(s); later(emit); }, // salta las reglas (como la consola de Firebase)
     setOffline(v) { L.setItem('fake.offline', v ? '1' : '0'); later(emit); },
