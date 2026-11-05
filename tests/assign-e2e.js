@@ -187,6 +187,26 @@ const WEEKS = {
   ok(/con el máximo de tu complejo/.test(await txt('#view')), 'con el máximo del complejo guardado pasa a ser la referencia (prioridad 1)');
   ok(/80 %[^|]*→ 72 kg/.test(await txt('#view')), '80 % del complejo (90 kg) = 72 kg');
 
+  console.log('9. Fuerza con derivado: 120 % del arranque por defecto; el entrenador puede indicar otro factor');
+  await page.evaluate(W => {
+    const w = JSON.parse(JSON.stringify(W)); w.sessions.push({ day: 4, name: 'Jueves', items: [{ block: 'Fuerza', tag: '', raw: 'Fuerza OHS', presc: '', inline: null, sets: [{ pct: 70, reps: '3', sets: 2 }], alts: [{ p: [{ src: 'OHS', ex: 'overhead-squat', mult: 1, max: false }] }] }] });
+    __fake.admin('plans/p1/weeks/e1_1', w);
+  }, WEEKS.e1_1);
+  await page.waitForTimeout(400); await tab('semana'); await page.waitForTimeout(500);
+  ok(/Overhead Squat[\s\S]*70 %[^|]*→ 84 kg/.test(await txt('#view')), 'sentadilla sobre la cabeza 70 % sin máximo propio = 70 % de 120 kg (120 % del arranque de 100) = 84 kg');
+  await logout(); await login('cristian@correo.cl'); await tab('equipo');
+  await page.click('[data-act="as-open"]'); await page.waitForSelector('#asWeek'); await page.waitForTimeout(500);
+  const fin = page.locator('[data-key="f_overhead-squat"]');
+  ok((await fin.count()) === 1 && (await fin.getAttribute('placeholder')) === '120', 'el entrenador ve el factor del derivado, con 120 % por defecto');
+  await fin.fill('130'); await page.click('[data-act="as-adj-save"]'); await page.waitForTimeout(500);
+  d = await docs();
+  ok((d['adjustments/' + auid + '_p1_e1_1'] || {}).pcts['f_overhead-squat'] === 130 && (d['adjustments/' + auid + '_p1_e1_1'] || {}).pcts.s0_i0_k1 === 95, 'el factor (130 %) quedó guardado junto a los otros ajustes');
+  await logout(); await login('ana@correo.cl'); await tab('semana'); await page.waitForTimeout(600);
+  ok(/70 %[^|]*→ 91 kg/.test(await txt('#view')) && /indicado por tu entrenador/.test(await txt('#view')), 'con factor 130 %: 70 % de 130 kg = 91 kg, y lo dice');
+  await page.evaluate(() => { const S = HalterApp.state(); S.exercises.find(e => e.id === 'ohsq').max = 124; HalterApp.commit(() => {}); });
+  await tab('semana'); await page.waitForTimeout(400);
+  ok(/70 %[^|]*→ 87 kg/.test(await txt('#view')), 'con su propio máximo (124 kg) el factor no se usa: 70 % = 87 kg');
+
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   await br.close(); srv.close();
   console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

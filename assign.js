@@ -56,24 +56,29 @@
     'no-jump-clean': ['clean', 1], 'deficit-clean': ['clean', 1], 'three-position-clean': ['clean', 1], 'two-position-clean': ['clean', 1]
   };
   /* Máximo de referencia de un ejercicio del catálogo: el propio si lo tiene; si no, el derivado del principal */
-  function refMax(S, catId) {
+  /* El entrenador puede cambiar el factor de un derivado para un atleta y una semana (adj['f_' + ejercicio], en %) */
+  const factorKey = catId => 'f_' + catId;
+  function refMax(S, catId, adj) {
     const own = S.exercises.find(q => q.id === localIdFor(catId));
     if (own && own.max > 0) return { kg: own.max, how: 'own' };
     const d = DERIVED[catId];
-    if (d) { const b = S.exercises.find(q => q.id === localIdFor(d[0])); if (b && b.max > 0) return { kg: b.max * d[1], how: 'derived', base: d[0], f: d[1] }; }
+    if (d) {
+      const ov = adj && adj[factorKey(catId)], f = ov > 0 ? ov / 100 : d[1];
+      const b = S.exercises.find(q => q.id === localIdFor(d[0])); if (b && b.max > 0) return { kg: b.max * f, how: 'derived', base: d[0], f: f, set: ov > 0 };
+    }
     return { kg: 0, how: 'none' };
   }
   /* Referencia de un ejercicio de la planilla. En un complejo (a + b + c), por prioridad:
        1. el máximo del complejo mismo, si el atleta lo tiene (Máximos o «Proyectar máximo»);
        2. el del primer movimiento que tenga máximo de referencia (propio o derivado).
      Así un complejo al 120 % de un arranque de 100 kg pide 120 kg. */
-  function refFor(S, item) {
+  function refFor(S, item, adj) {
     const ps = mainParts(item);
     if (ps.length > 1) {
       const own = S.exercises.find(q => q.id === exerciseFor(item).id);
       if (own && own.max > 0) return { kg: own.max, how: 'own', cx: true };
     }
-    for (let i = 0; i < ps.length; i++) { const r = refMax(S, partId(ps[i])); if (r.kg > 0) return ps.length > 1 ? Object.assign({ via: partId(ps[i]) }, r) : r; }
+    for (let i = 0; i < ps.length; i++) { const r = refMax(S, partId(ps[i]), adj); if (r.kg > 0) return ps.length > 1 ? Object.assign({ via: partId(ps[i]) }, r) : r; }
     return { kg: 0, how: 'none' };
   }
   const slugOf = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'ejercicio';
@@ -122,7 +127,7 @@
       let e = S.exercises.find(q => q.id === x.id);
       if (!e) { e = { id: x.id, name: x.name, en: x.en, es: x.es, cat: x.cat, rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }; S.exercises.push(e); }
       // el % es del máximo propio del ejercicio o, si no lo tiene, del derivado del principal (ver DERIVED)
-      const ref = refFor(S, it);
+      const ref = refFor(S, it, adj);
       const sets = expandSets(it, adj, si, ii).map(s => {
         const pct = s.pct || 0;
         return { kg: ref.kg > 0 && pct > 0 ? roundTo(ref.kg * pct / 100, rounding) : 0, reps: s.max ? '1' : String(s.reps || ''), pct: pct, rpe: null, done: false, doneAt: null };
@@ -149,7 +154,7 @@
   const cutFmt = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const fmtCut = ms => cutFmt.format(new Date(ms)) + ' (hora de Chile)';
 
-  const pure = { refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
+  const pure = { factorKey, refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
   if (!root.document) { root.HalterAssignPure = pure; return; }
 
@@ -174,6 +179,7 @@
   const stageName = id => { const s = A.stages.find(x => x.id === id); return s ? s.name : ''; };
   const weekTitle = w => 'Semana ' + w.week + (w.kind === 'transition' ? ' · Transición' : '');
 
+  let weekKey = '';   // semana que se está escuchando como atleta
   function init(helpers) {
     H = helpers;
     document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } });
@@ -184,7 +190,7 @@
       const b = document.querySelector('[data-act="as-adj-save"]'); if (b) b.disabled = !adjDirty() || !!A.busy;   // el botón se habilita al escribir
     });
   }
-  function reset() { unwatch(unsub); unwatch(weekUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }; }
+  function reset() { weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }; }
 
   /* ---------- Escuchar datos ---------- */
   function startCoach(uid) {
@@ -211,16 +217,18 @@
     unsub.push(r.watchDoc('assignments/' + uid, (d, m) => {
       if (m && m.fromCache && d === null) return;
       const was = A.me.asg; A.me.asg = d;
-      if (!d) { unwatch(weekUnsub); A.me.week = null; A.me.adj = {}; A.me.done = {}; rerender(); return; }
-      if (!was || was.planId !== d.planId || was.weekId !== d.weekId) watchMyWeek(d);
+      if (!d) { unwatch(weekUnsub); weekKey = ''; A.me.week = null; A.me.adj = {}; A.me.done = {}; rerender(); return; }
+      // se escucha la semana una vez por sesión de la app, aunque la asignación sea igual a la guardada en el dispositivo
+      const key = d.planId + '|' + d.weekId;
+      if (key !== weekKey) { weekKey = key; watchMyWeek(d, !!was && was.planId === d.planId && was.weekId === d.weekId); }
       saveCache(); rerender(); flush();
     }, e => { A.err = H.err(e); rerender(); }));
     unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); saveCache(); ensureComplexes(); rerender(); }, () => { /* opcional */ }));
     flush();
   }
-  function watchMyWeek(a) {
+  function watchMyWeek(a, keepCache) {
     unwatch(weekUnsub); const r = H.remote(), pre = a.planId + '_' + a.weekId + '_';
-    A.me.week = null; A.me.adj = {}; A.me.done = {};
+    if (!keepCache) { A.me.week = null; A.me.adj = {}; A.me.done = {}; }
     weekUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
     weekUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); ensureComplexes(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
     weekUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
@@ -282,7 +290,7 @@
       (done ? '<span class="badge ok">Cumplida</span>' : '') + '</div><ul class="plain">';
     (ses.items || []).forEach((it, ii) => {
       if (it.block && it.block !== block) { block = it.block; h += `<li class="blk"><span class="eyebrow">${esc(block)}</span></li>`; }
-      const ps = mainParts(it), ref = refFor(S, it);
+      const ps = mainParts(it), ref = refFor(S, it, adj);
       const sets = expandSets(it, adj, si, ii);
       const rows = [], seen = {};
       sets.forEach(s => { const key = s.k; if (seen[key]) { seen[key].n++; return; } seen[key] = { s: s, n: 1 }; rows.push(seen[key]); });
@@ -294,7 +302,7 @@
       const nb = ps.map(p => both(p, A.names, lang)), prim = nb.map(q => q.p).join(' + '), sec = nb.map(q => q.s || q.p).join(' + ');
       const alt = (it.alts || []).slice(1).map(a => (a.p || []).map(p => both(p, A.names, lang).p).join(' + ')).join(' o ');
       const cxHow = ps.length > 1 ? (ref.cx ? ' · con el máximo de tu complejo' : ref.via ? ' · % de tu ' + both({ ex: ref.via, src: ref.via }, A.names, lang).p + ' (primer movimiento con máximo)' : '') : '';
-      const how = cxHow + (ref.how === 'derived' ? ' · calculado desde tu ' + both({ ex: ref.base, src: ref.base }, A.names, lang).p + (ref.f !== 1 ? ' × ' + ref.f : '') : '');
+      const how = cxHow + (ref.how === 'derived' ? ' · calculado desde tu ' + both({ ex: ref.base, src: ref.base }, A.names, lang).p + (ref.f !== 1 ? ' × ' + ref.f + (ref.set ? ' (indicado por tu entrenador)' : '') : (ref.set ? ' (indicado por tu entrenador)' : '')) : '');
       h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? (ps.length > 1 ? ' · sin máximo: anota el de un movimiento o el del complejo en «Máximos» (puedes estimarlo con «Proyectar máximo»)' : ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)') : ''}</small></li>`;
     });
     h += '</ul>';
@@ -373,9 +381,18 @@
           `<input class="txt" inputmode="decimal" data-f="asx" data-as="pct" data-key="${key}" value="${val}" placeholder="${p.pct}" aria-label="% para este atleta (plan ${p.pct})"></div>`;
       });
     }));
-    if (!rows) return '<p class="muted">Esta semana no tiene porcentajes de 90 % o más.</p>';
+    // derivados de la semana: factor sobre el máximo del ejercicio principal (solo si el atleta no tiene máximo propio)
+    const seen = {}; let frows = '';
+    (w.sessions || []).forEach(ses => (ses.items || []).forEach(it => mainParts(it).forEach(q => {
+      const id = partId(q), d = DERIVED[id]; if (!d || seen[id]) return; seen[id] = 1;
+      const key = factorKey(id), val = A.draft && typeof A.draft[key] === 'number' ? A.draft[key] : '';
+      frows += `<div class="adj"><div><b>${esc(nameOf(q, A.names, lang()))}</b><small>% del ${esc(nameOf({ ex: d[0], src: d[0] }, A.names, lang()))} si no tiene máximo propio · por defecto ${Math.round(d[1] * 100)} %</small></div>` +
+        `<input class="txt" inputmode="decimal" data-f="asx" data-as="pct" data-key="${key}" value="${val}" placeholder="${Math.round(d[1] * 100)}" aria-label="Factor para este atleta (por defecto ${Math.round(d[1] * 100)} %)"></div>`;
+    })));
+    if (!rows && !frows) return '<p class="muted">Esta semana no tiene porcentajes de 90 % o más ni ejercicios derivados.</p>';
     const dirty = adjDirty();
-    return '<p class="muted">Deja vacío para usar el % del plan. El atleta ve el valor ajustado y sus kilos.</p>' + rows +
+    return (rows ? '<p class="muted">Deja vacío para usar el % del plan. El atleta ve el valor ajustado y sus kilos.</p>' + rows : '') +
+      (frows ? '<h3>Derivados · factor sobre el ejercicio principal</h3><p class="muted">Un derivado usa su máximo propio; si el atleta no lo tiene, su máximo × este factor (p. ej. sentadilla sobre la cabeza = 120 % del arranque). Deja vacío para el valor por defecto.</p>' + frows : '') +
       `<div class="stack"><button class="btn" data-act="as-adj-save"${dirty && !A.busy ? '' : ' disabled'}>Guardar ajustes</button><button class="btn ghost" data-act="as-adj-clear"${Object.keys(A.selAdj || {}).length ? '' : ' disabled'}>Quitar todos</button></div>`;
   }
   function detailHTML() {
@@ -397,7 +414,7 @@
           return `<li><b>${esc(dayLabel(s.day))}${s.name && s.name !== dayLabel(s.day) ? ' · ' + esc(s.name) : ''}</b><small>${at ? 'Cumplida el ' + esc(new Date(at).toLocaleString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : 'Pendiente'}</small></li>`;
         }).join('') + '</ul></div>';
       }
-      h += `<div class="card sec"><span class="eyebrow">Ajuste de porcentajes (desde 90 %)</span>${adjustHTML(a)}</div>`;
+      h += `<div class="card sec"><span class="eyebrow">Ajustes para este atleta</span>${adjustHTML(a)}</div>`;
     }
     return h;
   }
@@ -416,7 +433,7 @@
       case 'as-advance': advance(); return true;
       case 'as-adj-save': {
         const a = A.asg[A.sel]; if (!a) return true;
-        const pcts = {}; Object.keys(A.draft || {}).forEach(k => { if (A.draft[k] > 0 && A.draft[k] <= 130) pcts[k] = A.draft[k]; });
+        const pcts = {}; Object.keys(A.draft || {}).forEach(k => { if (A.draft[k] > 0 && A.draft[k] <= (k.indexOf('f_') === 0 ? 200 : 130)) pcts[k] = A.draft[k]; });
         guard(async () => { await H.remote().setAdjust(A.sel + '_' + a.planId + '_' + a.weekId, pcts); A.selAdj = pcts; }, 'Ajustes guardados'); return true;
       }
       case 'as-adj-clear': {

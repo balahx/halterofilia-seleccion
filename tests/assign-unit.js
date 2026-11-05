@@ -97,6 +97,10 @@ const S7 = { profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', na
 ok(A.refFor(S7, cxItem(80)).kg === 110 && A.refFor(S7, cxItem(80)).via === 'overhead-squat', 'si el primer movimiento no tiene máximo, sigue con el siguiente');
 
 ok(A.exerciseFor({ alts: [{ p: [{ src: 'AA', ex: 'snatch' }, { src: 'OHS', ex: 'overhead-squat' }] }] }).id === 'cx-snoh', 'el complejo arranque + sentadilla sobre la cabeza comparte id con el de la app (mismo máximo)');
+const SF = { profile: { rounding: 1, rest: 120 }, exercises: [{ id: 'snatch', name: 'Arranque', max: 100 }] };
+ok(A.refMax(SF, 'overhead-squat').kg === 120 && !A.refMax(SF, 'overhead-squat').set, 'derivado por defecto: 120 % del arranque');
+ok(A.refMax(SF, 'overhead-squat', { 'f_overhead-squat': 130 }).kg === 130 && A.refMax(SF, 'overhead-squat', { 'f_overhead-squat': 130 }).set === true, 'el entrenador indica 130 %: 130 kg');
+ok(A.refMax({ profile: SF.profile, exercises: [{ id: 'snatch', max: 100 }, { id: 'ohsq', max: 124 }] }, 'overhead-squat', { 'f_overhead-squat': 130 }).kg === 124, 'con máximo propio el factor no se usa');
 const nm = { snatch: { en: 'Snatch', es: 'Arranque' } };
 ok(A.both({ ex: 'snatch', src: 'AA' }, nm, 'en').p === 'Snatch' && A.both({ ex: 'snatch', src: 'AA' }, nm, 'en').s === 'Arranque', 'inglés principal y español debajo');
 ok(A.both({ ex: 'snatch', src: 'AA' }, nm, 'es').p === 'Arranque' && A.both({ ex: 'snatch', src: 'AA' }, nm, 'es').s === 'Snatch', 'al cambiar el ajuste se invierte');
