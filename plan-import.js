@@ -335,7 +335,7 @@
     const created = {};
     plan.weeks.forEach(w => w.sessions.forEach(s => s.items.forEach(it => it.alts.forEach(a => a.forEach(p => {
       if (p.exId) return;
-      const n = (names && names[p.src]) || {}, en = (n.en || '').trim() || p.src, es = (n.es || '').trim();
+      const n = (names && names[p.src]) || {}, en = ((n.en || '').trim() || p.src).slice(0, 120), es = (n.es || '').trim().slice(0, 160);   // límites de las reglas de Firestore
       p.exId = slug(en); created[p.exId] = created[p.exId] || { en: en, es: es, flag: '', known: false, srcs: [] };
       if (created[p.exId].srcs.indexOf(p.src) < 0) created[p.exId].srcs.push(p.src);
     })))));
