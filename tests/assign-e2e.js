@@ -194,6 +194,14 @@ const WEEKS = {
   await tab('semana'); await page.waitForTimeout(400);
   ok(/80 %[^|]*→ 80 kg/.test(await txt('#view')), 'un máximo antiguo del complejo no cambia el cálculo');
 
+  console.log('8b. Lectura reducida: solo las sesiones cumplidas de la semana asignada');
+  await page.evaluate(u => {
+    for (let k = 0; k < 6; k++) __fake.admin('users/' + u + '/completions/p1_old' + k + '_0', { planId: 'p1', weekId: 'old' + k, sessionIdx: 0, completedAt: 1700000000000 + k });
+  }, auid);
+  await page.waitForTimeout(400); await tab('semana'); await page.waitForTimeout(400);
+  const got = await page.evaluate(u => __fake.delivered['users/' + u + '/completions'] || [], auid);
+  ok(got.length > 0 && got.every(id => id.indexOf('p1_e1_1_') === 0), 'el atleta recibe solo las sesiones cumplidas de su semana (' + got.length + ' documentos, no las 6 de semanas viejas)');
+
   console.log('9. Fuerza con derivado: 120 % del arranque por defecto; el entrenador puede indicar otro factor');
   await page.evaluate(W => {
     const w = JSON.parse(JSON.stringify(W)); w.sessions.push({ day: 4, name: 'Jueves', items: [{ block: 'Fuerza', tag: '', raw: 'Fuerza OHS', presc: '', inline: null, sets: [{ pct: 70, reps: '3', sets: 2 }], alts: [{ p: [{ src: 'OHS', ex: 'overhead-squat', mult: 1, max: false }] }] }] });
@@ -233,6 +241,10 @@ const WEEKS = {
   ok(/Dolor leve en el hombro derecho/.test(rp), 'muestra la observación del atleta');
   ok(/Se me cae el codo en la recepción/.test(rp), 'y la observación del ejercicio');
   await shot('03-informe-semana'); if (process.env.SHOTS) await page.locator('#rpCard').screenshot({ path: process.env.SHOTS + '/semana-03b-informe-tarjeta.png' });
+  await page.evaluate(u => __fake.admin('users/' + u + '/completions/p1_e1_2_0', { planId: 'p1', weekId: 'e1_2', sessionIdx: 0, completedAt: Date.now() }), auid);
+  await page.selectOption('#rpWeek', 'e1_2'); await page.waitForTimeout(800);
+  ok(/Semana 2/.test(await txt('#rpCard')) && /cumplida/.test(await txt('#rpCard')), 'el informe de otra semana pide aparte sus sesiones cumplidas y las muestra');
+  await page.selectOption('#rpWeek', 'e1_1'); await page.waitForTimeout(300);
   await page.click('[data-act="rp-mode"][data-m="day"]'); await page.waitForTimeout(300);
   await page.fill('#rpDate', await page.evaluate(() => new Date().toISOString().slice(0, 10))); await page.waitForTimeout(300);
   await page.dispatchEvent('#rpDate', 'change'); await page.waitForTimeout(500);
@@ -247,6 +259,25 @@ const WEEKS = {
   await page.evaluate(() => document.body.classList.remove('rp-print'));
   await page.click('#rpCard [data-act="rp-toggle"]:last-child'); await page.waitForTimeout(300);
   ok(/Ver informe/.test(await txt('#rpCard')), 'se puede cerrar el informe');
+
+  console.log('11. Respaldo del equipo: el entrenador descarga un solo archivo con todo');
+  await tab('equipo');
+  if (await page.locator('[data-act="as-back"]').count()) { await page.click('[data-act="as-back"]'); await page.waitForTimeout(300); }
+  ok(/respaldo del equipo/i.test(await txt('#view')) && /datos personales/i.test(await txt('#view')), 'aparece la tarjeta con el aviso de que contiene datos personales');
+  const dl = page.waitForEvent('download', { timeout: 8000 });
+  await page.click('[data-act="bk-run"]');
+  const bkDl = await dl; const bkPath = path.join(SHOTS, 'respaldo-prueba.json'); await bkDl.saveAs(bkPath);
+  const bk = JSON.parse(fs.readFileSync(bkPath, 'utf8'));
+  ok(/^respaldo-equipo-\d{4}-\d{2}-\d{2}\.json$/.test(bkDl.suggestedFilename()), 'el archivo se llama respaldo-equipo-AAAA-MM-DD.json');
+  ok(bk.format === 'halterofilia-respaldo-equipo' && bk.by === 'cristian@correo.cl', 'cabecera con formato y quién lo pidió');
+  ok(bk.members.length >= 1 && bk.plans.length >= 1 && bk.plans[0].weeks.length === 2, 'incluye miembros y el plan con sus semanas');
+  const bat = bk.athletes.find(a => a.uid === auid);
+  ok(bat && bat.records.some(r => r.id === 's_inf1') && bat.completions.length >= 1, 'incluye los registros y sesiones cumplidas de la atleta');
+  ok(bk.assignments.some(a => a.id === auid) && bk.adjustments.length >= 1, 'incluye la semana asignada y los ajustes');
+  await page.waitForTimeout(300);
+  ok(/Último respaldo/.test(await txt('#view')), 'queda a la vista cuándo se hizo el último respaldo');
+  fs.unlinkSync(bkPath);
+
 
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   await br.close(); srv.close();

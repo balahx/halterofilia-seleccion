@@ -176,9 +176,9 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ymdChile = ms => { const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)); return p; };
   let H = null, unsub = null;
-  const R = { uid: null, open: false, mode: 'week', weekId: '', date: '', recs: null, err: '', adj: {}, adjAsked: {}, copied: '' };
+  const R = { uid: null, open: false, mode: 'week', weekId: '', date: '', recs: null, err: '', adj: {}, adjAsked: {}, doneMap: {}, doneAsked: {}, copied: '' };
 
-  function reset() { if (unsub) { try { unsub(); } catch (e) { /* ya cerrado */ } } unsub = null; R.uid = null; R.open = false; R.recs = null; R.err = ''; R.adj = {}; R.adjAsked = {}; R.weekId = ''; R.copied = ''; }
+  function reset() { if (unsub) { try { unsub(); } catch (e) { /* ya cerrado */ } } unsub = null; R.uid = null; R.open = false; R.recs = null; R.err = ''; R.adj = {}; R.adjAsked = {}; R.doneMap = {}; R.doneAsked = {}; R.weekId = ''; R.copied = ''; }
   function init(helpers) {
     H = helpers;
     document.addEventListener('change', e => {
@@ -208,14 +208,20 @@
     H.remote().getDoc('adjustments/' + k).then(d => { R.adj[k] = (d && d.pcts) || {}; H.render(); }).catch(() => { R.adj[k] = {}; });
   }
 
+  /* Sesiones cumplidas de la semana que se está viendo (una consulta con filtro, una sola vez por semana) */
+  function needDone(uid, planId, weekId) {
+    const k = uid + '_' + planId + '_' + weekId; if (R.doneAsked[k]) return;
+    R.doneAsked[k] = 1;
+    H.remote().getCol('users/' + uid + '/completions', { planId: planId, weekId: weekId }).then(list => { list.forEach(x => { R.doneMap[x.id] = x.completedAt; }); H.render(); }).catch(() => { /* sin permiso o sin conexión */ });
+  }
   function build(ctx) {
-    const athlete = ctx.name, common = { athlete: athlete, names: ctx.names, exNames: R.recs.exercises, sessions: R.recs.sessions, lang: ctx.lang, done: ctx.done, planId: ctx.planId };
+    const athlete = ctx.name, common = { athlete: athlete, names: ctx.names, exNames: R.recs.exercises, sessions: R.recs.sessions, lang: ctx.lang, done: Object.assign({}, R.doneMap, ctx.done), planId: ctx.planId };
     if (R.mode === 'day') {
       (R.recs.sessions || []).filter(s => s.date === R.date && s.plan).forEach(s => needAdj(ctx.uid, s.plan.planId, s.plan.weekId));
       return dayReport(Object.assign({}, common, { date: R.date, weeks: ctx.weeks, adjFor: (p, w) => R.adj[ctx.uid + '_' + p + '_' + w] }));
     }
     const w = ctx.weeks.find(x => x.id === R.weekId); if (!w) return null;
-    needAdj(ctx.uid, ctx.planId, w.id);
+    needAdj(ctx.uid, ctx.planId, w.id); needDone(ctx.uid, ctx.planId, w.id);
     const st = ctx.stages.find(x => x.id === w.stageId);
     return weekReport(Object.assign({}, common, { week: w, adj: R.adj[ctx.uid + '_' + ctx.planId + '_' + w.id] || {}, stage: st ? st.name : '' }));
   }

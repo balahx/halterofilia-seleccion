@@ -161,7 +161,7 @@
   };
   const A = {
     uid: null, role: null, active: null, names: {}, plans: [],
-    weeks: [], stages: [], asg: {}, sel: null, selDone: {}, selAdj: null, selAdjKey: '', draft: null, pick: '', ready: false, busy: '', err: '',
+    weeks: [], stages: [], asg: {}, sel: null, selDone: {}, selAdj: null, selAdjKey: '', selDoneKey: '', draft: null, pick: '', ready: false, busy: '', err: '',
     me: { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }
   };
   let H = null, unsub = [], weekUnsub = [], selUnsub = [], adjUnsub = [];
@@ -190,7 +190,7 @@
   /* ---------- Escuchar datos ---------- */
   function startCoach(uid) {
     reset(); A.uid = uid; A.role = 'coach'; const r = H.remote();
-    unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); A.ready = true; if (A.sel) watchAdj(); rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
+    unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
     unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); rerender(); }, () => { /* opcional */ }));
     unsub.push(r.watchDoc('config/plan', d => { watchPlan(d ? d.activePlanId : null); }, () => { /* sin plan activo */ }));
   }
@@ -227,10 +227,11 @@
     weekUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
     weekUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
     weekUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
+    // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
     weekUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {
       const done = {}; list.forEach(x => { if (x.id.indexOf(pre) === 0 && typeof x.sessionIdx === 'number') done[x.sessionIdx] = true; });
       A.me.done = done; saveCache(); rerender();
-    }, () => { /* sin conexión */ }));
+    }, () => { /* sin conexión */ }, { planId: a.planId, weekId: a.weekId }));
   }
   function saveCache() {
     if (A.role !== 'athlete' || !A.me.asg) return;
@@ -329,11 +330,16 @@
   const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; return 'Semana ' + a.week + (stageName(a.stageId) ? ' · ' + stageName(a.stageId) : ''); };
   function select(uid) {
     if (root.HalterReport) root.HalterReport.reset();
-    unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
+    unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.selDone = {}; A.selDoneKey = ''; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
     if (!uid) { rerender(); return; }
-    const r = H.remote();
-    selUnsub.push(r.watchCol('users/' + uid + '/completions', list => { A.selDone = {}; list.forEach(x => { A.selDone[x.id] = x.completedAt; }); rerender(); }, () => { /* sin permiso */ }));
-    watchAdj(); rerender();
+    watchAdj(); watchDone(); rerender();
+  }
+  /* Sesiones cumplidas de la semana asignada al atleta elegido (las de otras semanas las pide el informe cuando hacen falta) */
+  function watchDone() {
+    const a = A.asg[A.sel]; if (!a) return;
+    const k = A.sel + '_' + a.planId + '_' + a.weekId; if (k === A.selDoneKey) return;
+    unwatch(selUnsub); A.selDoneKey = k; A.selDone = {};
+    selUnsub.push(H.remote().watchCol('users/' + A.sel + '/completions', list => { A.selDone = {}; list.forEach(x => { A.selDone[x.id] = x.completedAt; }); rerender(); }, () => { /* sin permiso */ }, { planId: a.planId, weekId: a.weekId }));
   }
   function watchAdj() {
     const a = A.asg[A.sel]; if (!a) return;

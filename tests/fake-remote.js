@@ -103,13 +103,16 @@
         w.cb(Object.keys(s.docs).filter(k => k.startsWith(pre) && s.docs[k].at >= w.since).map(k => Object.assign({ id: k.slice(pre.length) }, s.docs[k])), { fromCache: false });
       } else if (w.col) {
         if (!allowed('list', w.path + '/x', null)) { w.err && w.err(err('permission-denied')); return; }
-        w.cb(Object.keys(s.docs).filter(k => k.startsWith(w.path + '/') && k.split('/').length === w.path.split('/').length + 1).map(k => Object.assign({ id: k.split('/').pop() }, s.docs[k])), { fromCache: false });
+        const got = Object.keys(s.docs).filter(k => k.startsWith(w.path + '/') && k.split('/').length === w.path.split('/').length + 1 && matches(s.docs[k], w.filters)).map(k => Object.assign({ id: k.split('/').pop() }, s.docs[k]));
+        window.__fake.delivered[w.path] = got.map(x => x.id);   // qué documentos llegaron a esa lectura (para comprobar cuántas lecturas se piden)
+        w.cb(got, { fromCache: false });
       } else {
         if (!allowed('get', w.path)) { w.err && w.err(err('permission-denied')); return; }
         w.cb(s.docs[w.path] ? Object.assign({}, s.docs[w.path]) : null, { fromCache: false });
       }
     });
   }
+  const matches = (d, f) => !f || Object.keys(f).every(k => d[k] === f[k]);
   const later = f => setTimeout(f, 5);
   function mutate(op, path, data) {
     if (offline()) throw err('unavailable');
@@ -131,7 +134,12 @@
     async resetPassword(email) { window.__fake.resets.push(email); }
     async signOut() { setUser(null); }
     watchDoc(path, cb, onErr) { const w = { path, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
-    watchCol(path, cb, onErr) { const w = { path, col: true, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
+    async getCol(path, filters) {
+      if (offline()) throw err('unavailable'); if (!allowed('list', path + '/x', null)) throw err('permission-denied');
+      const s = rd(); window.__fake.reads = (window.__fake.reads || 0);
+      return Object.keys(s.docs).filter(k => k.startsWith(path + '/') && k.split('/').length === path.split('/').length + 1 && matches(s.docs[k], filters)).map(k => Object.assign({ id: k.split('/').pop() }, s.docs[k]));
+    }
+    watchCol(path, cb, onErr, filters) { const w = { path, col: true, cb, err: onErr, filters }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
     watchRecords(uid, since, cb, onErr) { const w = { rec: true, uid, since: since || 0, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
     async setRecord(uid, key, data) {
       window.__fake.writes.push(key);
@@ -165,7 +173,7 @@
   }
   window.HALTER_REMOTE_FACTORY = () => new FakeRemote();
   window.__fake = {
-    resets: [], writes: [], completions: [],
+    resets: [], writes: [], completions: [], delivered: {},
     srv: rd,
     load(srv) { wr(srv); later(emit); }, // reemplaza el estado del servidor (para simular otro dispositivo que ve lo mismo)
     uid: email => rd().users[email] && rd().users[email].uid,

@@ -28,6 +28,8 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 | `sync.js` | Sincronización de los datos propios (fase 2) |
 | `assign.js` | Semana asignada (fase 4): asignación y ajustes del entrenador, pestaña **Semana** del atleta, cumplimiento y avance semanal |
 | `privacy.js` | Aviso de privacidad (texto y versión). Se muestra al crear la cuenta (hay que marcarlo), en el ingreso y en Ajustes → Cuenta |
+| `backup.js` | Respaldo del equipo (solo entrenador): descarga un JSON con miembros, planes, semanas asignadas, ajustes, registros y sesiones cumplidas de todos |
+| `guard.js` | Si la app se muestra dentro de otra página, se oculta (antifraude de marcos) |
 | `report.js` | Informes del entrenador (fase 4b): planificado vs realizado y observaciones, por semana o por día |
 | `tests/` | Pruebas automáticas |
 
@@ -113,6 +115,13 @@ En **Equipo → Semana** de cada atleta, la tarjeta **Informe del atleta** → �
 - **Aviso de privacidad** (`privacy.js`): texto breve sobre qué se guarda (incluidas notas que pueden hablar de molestias: datos de salud), para qué, quién lo ve (el atleta y el entrenador), dónde (Firebase, base de datos en Santiago) y los derechos. Al **crear la cuenta** hay que marcar que se leyó. Quien ya usaba la app recibe un aviso una vez; queda siempre en Ajustes → Cuenta. Si cambia lo que la app guarda, hay que editar el texto y subir `VERSION`. **No es asesoría legal**: conviene que lo revise quien corresponda (Ley 19.628, reformada por la Ley 21.719, vigente desde el 1-dic-2026), y confirmar con Cristian que acepta ser el contacto para consultas.
 - **Borrar todos mis datos** deja en la nube solo el nombre y correo (cuenta) y el registro de las sesiones cumplidas (fecha y semana): las reglas impiden borrarlos desde la app. Para eliminar también eso hay que hacerlo desde la consola de Firebase.
 - **Observación por ejercicio:** cada ejercicio de la sesión tiene un campo «Observación» (200 caracteres). Se ve en el historial y llega al informe del entrenador, junto a las notas de la sesión.
+
+## Seguridad y uso de la cuota gratuita (fase 5)
+
+- **Política de seguridad del contenido (CSP)**, en `index.html`: la página solo puede ejecutar scripts propios, el SDK de Firebase (`www.gstatic.com/firebasejs/`) y el lector de Excel (`cdnjs…/ajax/libs/xlsx/`); solo puede conectarse a los servicios de Google (`*.googleapis.com`). Un script inyectado o una conexión a otro sitio queda bloqueado. El lector de Excel además lleva huella de integridad (SRI, `sha384-…`): si el archivo del CDN cambiara, el navegador no lo ejecuta. **Si algún día se cambia la versión de SheetJS, hay que calcular la huella nueva** y actualizar `XLSX_URL` y `XLSX_SRI` en `plan-ui.js`. Si se agrega otro servicio externo, hay que permitirlo en la CSP.
+- **Clave de API de Firebase**: es pública por diseño (va en `firebase-config.js`); lo que protege los datos son las reglas. Conviene restringirla en Google Cloud → APIs y servicios → Credenciales → «Browser key» → Restricciones de aplicación → Sitios web → `https://balahx.github.io/*`.
+- **Lectura reducida**: la atleta y el entrenador solo piden las sesiones cumplidas de **la semana asignada** (no todo el historial); el informe de otra semana las pide una vez. Con ~17 atletas se espera usar una fracción de las 50 000 lecturas diarias del plan gratuito.
+- **Respaldo del equipo** (Equipo → «Descargar respaldo»): un clic baja `respaldo-equipo-AAAA-MM-DD.json`. Contiene datos personales y de salud: guardarlo en un lugar privado. Cada descarga cuesta una lectura por documento (cientos o pocos miles), así que se recomienda una vez por semana.
 
 ## Lo que viene
 

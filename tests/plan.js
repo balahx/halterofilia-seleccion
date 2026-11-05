@@ -53,10 +53,12 @@ function cristianGrid() {
   const br = await chromium.launch();
   const ctx = await br.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
   await ctx.addInitScript({ path: path.join(__dirname, 'fake-remote.js') });
+  // El archivo de Excel de mentira no tiene la huella real: se anota la que la app exige y se deja pasar el de prueba
+  await ctx.addInitScript(() => { Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, set(v) { window.__sri = v; }, get() { return window.__sri || ''; } }); });
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/fonts\.g|net::ERR/.test(m.text())) errors.push(m.text()); });
   await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-  await page.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/xlsx/, r => r.fulfill({ contentType: 'text/javascript', body: XLSX_STUB }));
+  await page.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/xlsx/, r => r.fulfill({ contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: XLSX_STUB }));
   const shot = n => page.screenshot({ path: path.join(SHOTS, 'plan-' + n + '.png') });
   const txt = sel => page.locator(sel).first().innerText();
   const docs = () => page.evaluate(() => __fake.srv().docs);
@@ -79,6 +81,7 @@ function cristianGrid() {
   console.log('2. Cargar el Excel y revisar');
   await page.setInputFiles('#plFile', { name: 'plan.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(JSON.stringify(cristianGrid())) });
   await page.waitForSelector('[data-act="pl-publish"]');
+  ok((await page.evaluate(() => window.__sri)) === 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw', 'el lector de Excel se carga con su huella de integridad (SRI)');
   let v = await txt('#view');
   ok(/planilla de Cristian/.test(v) && /3 semanas/.test(v) && /transición[^.]*: 3\./i.test(v), 'detecta el formato, 3 semanas y la de transición');
   ok(/Preparatorio General 2026/.test(v), 'muestra la etapa');

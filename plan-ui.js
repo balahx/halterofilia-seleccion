@@ -11,6 +11,8 @@
 (function () {
   'use strict';
   const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  /* Huella de integridad (SRI): si el archivo en el CDN cambiara un solo byte, el navegador se niega a ejecutarlo. Coincide con la que publica cdnjs. */
+  const XLSX_SRI = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const P = { plans: [], active: null, exercises: [], preview: null, file: '', names: {}, planName: '', busy: '', err: '', confirm: null, plansReady: false };
   let H = null; // { remote(), toast, render }
@@ -20,7 +22,7 @@
   function loadLib() {
     if (window.XLSX) return Promise.resolve(window.XLSX);
     if (!libPromise) libPromise = new Promise((ok, fail) => {
-      const s = document.createElement('script'); s.src = XLSX_URL; s.async = true;
+      const s = document.createElement('script'); s.src = XLSX_URL; s.integrity = XLSX_SRI; s.crossOrigin = 'anonymous'; s.async = true;
       s.onload = () => (window.XLSX ? ok(window.XLSX) : fail(new Error('no cargó')));
       s.onerror = () => { libPromise = null; fail(new Error('Sin conexión: no se pudo cargar el lector de Excel')); };
       document.head.appendChild(s);

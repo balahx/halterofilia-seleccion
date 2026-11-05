@@ -68,8 +68,18 @@
       return this.m.fs.onSnapshot(this._doc(path), { includeMetadataChanges: true },
         snap => cb(snap.exists() ? this._plain(snap.data()) : null, { fromCache: snap.metadata.fromCache }), onErr);
     }
-    watchCol(path, cb, onErr) {
-      return this.m.fs.onSnapshot(this.m.fs.collection(this.db, ...path.split('/')), { includeMetadataChanges: true },
+    /* Colección completa o, con `filters` ({ campo: valor }), solo los documentos que cumplen todas las igualdades
+       (así se leen pocos documentos: p. ej. las sesiones cumplidas de una semana y no las de todo el año) */
+    _col(path, filters) {
+      const fs = this.m.fs, c = fs.collection(this.db, ...path.split('/'));
+      return filters && Object.keys(filters).length ? fs.query(c, ...Object.keys(filters).map(k => fs.where(k, '==', filters[k]))) : c;
+    }
+    async getCol(path, filters) {
+      const snap = await this.m.fs.getDocs(this._col(path, filters));
+      return snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data())));
+    }
+    watchCol(path, cb, onErr, filters) {
+      return this.m.fs.onSnapshot(this._col(path, filters), { includeMetadataChanges: true },
         snap => cb(snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data()))), { fromCache: snap.metadata.fromCache }), onErr);
     }
     createRequest(uid, name, email) { return this.m.fs.setDoc(this._doc('requests/' + uid), { name, email, status: 'pending', createdAt: this.m.fs.serverTimestamp() }); }
@@ -299,7 +309,7 @@
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
     if (!changed) { if (!offline) startLive(); window.HalterApp.render(); return; }
     noticePrivacy();
-    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI();
+    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI(); initBackupUI();
     hideGate();
     const fresh = window.HalterApp.start({
       cloud: true, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
@@ -331,8 +341,13 @@
     if (assignInit || !window.HalterAssign) return; assignInit = true;
     window.HalterAssign.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, members: () => C.members });
   }
+  let backupInit = false;
+  function initBackupUI() {
+    if (backupInit || !window.HalterBackup) return; backupInit = true;
+    window.HalterBackup.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, who: () => (C.user && C.user.email) || '' });
+  }
   function deactivate() {
-    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
+    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); if (window.HalterBackup) window.HalterBackup.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
   }
 
   /* ---------- Contenido propio dentro de la app ---------- */
@@ -363,6 +378,7 @@
     h += '</div>';
     if (rej.length) h += `<div class="card sec"><span class="eyebrow">Rechazadas (${rej.length})</span>` + rej.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-delreq', p.id, 'Borrar'))).join('') + '</div>';
     h += '<p class="muted">Quitar el acceso a un atleta no borra sus datos: solo le impide volver a entrar.</p>';
+    if (window.HalterBackup) h += window.HalterBackup.card();
     return h;
   }
   async function guarded(fn, okMsg) {
@@ -378,6 +394,7 @@
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
       case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
+      case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
       case 'eq-delreq': if (twoStep('eq-delreq')) guarded(() => C.remote.deleteRequest(uid), 'Solicitud borrada'); break;
