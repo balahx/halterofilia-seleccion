@@ -371,6 +371,7 @@ const IC = {
   max: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  semana: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14.5l2.2 2.2 4.3-4.4"/>',
   team: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.3a3 3 0 010 5.4M18.5 14c1.6.7 2.8 2.3 2.8 4.5"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   play: '<path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/>',
@@ -889,6 +890,18 @@ function startSession(dayIdx) {
   tReset(s.items[0] && s.items[0].rest ? s.items[0].rest : S.profile.rest);
   save(true); ui.tab = 'hoy'; render(); window.scrollTo(0, 0);
 }
+/* Sesión armada desde fuera (la semana asignada). build(S) devuelve la sesión, y puede agregar ejercicios a S. */
+function startPlanned(build) {
+  if (!S) return false;
+  if (S.demo) { openSheet('demo'); return false; }
+  if (activeSession()) { toast('Ya tienes una sesión en curso. Termínala o descártala antes de iniciar otra.'); ui.tab = 'hoy'; render(); return false; }
+  const s = build(S); if (!s) return false;
+  S.sessions.push(s);
+  T.mode = S.profile.timerMode; T.label = '';
+  tReset(s.items[0] && s.items[0].rest ? s.items[0].rest : S.profile.rest);
+  save(true); ui.tab = 'hoy'; render(); window.scrollTo(0, 0);
+  return true;
+}
 function toggleDone(i, j) {
   const s = activeSession(), it = s.items[i], st = it.sets[j], e = ex(it.exId);
   if (!st.done) {
@@ -938,6 +951,7 @@ function finalize(mode) {
   s.endedAt = Date.now();
   const stt = sessionStats(s);
   tPause(); tReset(); save(true); syncWake();
+  if (APP.onFinish) { try { APP.onFinish(s); } catch (e) { /* no debe frenar el cierre de la sesión */ } }
   openSheet('summary', { sum: { name: s.name, dur: (s.endedAt - s.startedAt) / 1000, sets: stt.sets, ton: stt.ton, records: records } });
   render();
 }
@@ -1245,11 +1259,12 @@ document.addEventListener('change', e => { if (e.target.dataset && e.target.data
 /* ----- Inicio ----- */
 let started = false, tickId = null;
 /* opts: { storageKey, name, demo, tabs:[{id,label,icon,render}], accountHTML(), onAct(act, el), onSave() }
+   onFinish(sesión): se llama al terminar una sesión (la fase 4 registra las sesiones del plan).
    Lo llama cloud.js cuando la persona ya inició sesión y tiene acceso. */
 function start(opts) {
   opts = opts || {};
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { tabs: opts.tabs || [], accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, cloud: !!opts.cloud };
+  APP = { tabs: opts.tabs || [], accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);
@@ -1287,5 +1302,5 @@ let refreshLater = false;
 function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
 function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
 document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
-window.HalterApp = { start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit };
+window.HalterApp = { start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned };
 })();

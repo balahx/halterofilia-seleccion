@@ -333,3 +333,11 @@ dialog::backdrop { background: rgba(8, 11, 15, .55); }
 .unk b { overflow-wrap: anywhere; }
 .unk small { color: var(--muted); }
 details > summary { cursor: pointer; }
+
+/* Semana asignada (fase 4) */
+.plain li.blk { padding: 12px 0 2px; border-bottom: 0; }
+.adj { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.adj:last-of-type { border-bottom: 0; }
+.adj b { display: block; overflow-wrap: anywhere; }
+.adj small { color: var(--muted); }
+.adj .txt { text-align: center; }

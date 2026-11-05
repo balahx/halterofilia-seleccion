@@ -25,7 +25,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   const shot = n => page.screenshot({ path: path.join(SHOTS, n + '.png') });
   const txt = sel => page.locator(sel).first().innerText();
   const vis = sel => page.locator(sel).first().isVisible();
-  const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); };
+  const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500); };
   const signup = async (name, email, pass, pass2) => {
     await page.click('[data-g="mode"][data-v="signup"]');
     await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.fill('#gPass2', pass2 == null ? pass : pass2);

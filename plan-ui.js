@@ -5,7 +5,7 @@
      exercises/{exId}                 { en, es, aliases[] }       catálogo de ejercicios; crece con cada importación
      plans/{planId}                   { name, year, format, stages, weeks, createdAt }
      plans/{planId}/stages/{stageId}  { name, order }
-     plans/{planId}/weeks/{weekId}    { stageId, week, label, notes[], sessions[] }
+     plans/{planId}/weeks/{weekId}    { stageId, week, label, kind, notes[], sessions[], next }   next = id de la semana siguiente ('' en la última)
      config/plan                      { activePlanId, at }        plan que ven los atletas (lo cambia solo el entrenador)
    Firestore no admite listas dentro de listas: «alts» se guarda como [{ p: [partes] }]. */
 (function () {
@@ -74,8 +74,8 @@
 
   /* ---------- Publicar ---------- */
   const clean = o => JSON.parse(JSON.stringify(o));
-  function weekDoc(w) {
-    return clean({ stageId: w.stageId, week: w.week, label: w.label || '', kind: w.kind || '', notes: (w.notes || []).slice(0, 12).map(n => String(n).slice(0, 300)),
+  function weekDoc(w, next) {
+    return clean({ stageId: w.stageId, week: w.week, next: next || '', label: w.label || '', kind: w.kind || '', notes: (w.notes || []).slice(0, 12).map(n => String(n).slice(0, 300)),
       sessions: w.sessions.map(s => ({ day: s.day, name: s.name, items: s.items.map(it => ({ block: it.block || '', tag: it.tag || '', raw: String(it.raw).slice(0, 200), presc: it.presc || '',
         sets: it.sets, inline: it.inline || null, alts: it.alts.map(a => ({ p: a.map(p => ({ src: p.src, ex: p.exId, mult: p.mult, max: !!p.max, hold: p.hold, dropPct: p.dropPct })) })) })) })) });
   }
@@ -93,7 +93,7 @@
       }).filter(d => !have[d.id] || JSON.stringify(have[d.id].aliases || []) !== JSON.stringify(d.data.aliases) || !have[d.id].es && d.data.es);
       const planId = 'p' + (new Date()).getFullYear() + '-' + Date.now().toString(36);
       await H.remote().publishPlan({ planId: planId, meta: { name: name, year: (new Date()).getFullYear(), format: pv.format, stages: pv.stages.length, weeks: pv.weeks.length },
-        stages: pv.stages.map(s => ({ id: s.id, data: { name: String(s.name).slice(0, 160), order: s.order } })), weeks: pv.weeks.map(w => ({ id: w.id, data: weekDoc(w) })), exercises: exDocs });
+        stages: pv.stages.map(s => ({ id: s.id, data: { name: String(s.name).slice(0, 160), order: s.order } })), weeks: pv.weeks.map((w, i) => ({ id: w.id, data: weekDoc(w, i + 1 < pv.weeks.length ? pv.weeks[i + 1].id : '') })), exercises: exDocs });
       const first = !P.active;
       P.preview = null; P.file = ''; P.names = {};
       if (first) await H.remote().setActivePlan(planId);

@@ -107,6 +107,13 @@
       await this._commit([{ ref: this._doc(base), data: Object.assign({}, p.meta, { createdAt: this.m.fs.serverTimestamp() }) }]);
     }
     setActivePlan(id) { return this.m.fs.setDoc(this._doc('config/plan'), { activePlanId: id, at: this.m.fs.serverTimestamp() }); }
+    /* Semana asignada (fase 4) */
+    async getDoc(path) { const snap = await this.m.fs.getDoc(this._doc(path)); return snap.exists() ? this._plain(snap.data()) : null; }
+    setAssignment(uid, d) { return this.m.fs.setDoc(this._doc('assignments/' + uid), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
+    advanceAssignment(uid, d) { return this.m.fs.updateDoc(this._doc('assignments/' + uid), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
+    setCompletion(uid, id, d) { return this.m.fs.setDoc(this._doc('users/' + uid + '/completions/' + id), Object.assign({}, d, { completedAt: this.m.fs.serverTimestamp() })); }
+    setAdjust(id, pcts) { return this.m.fs.setDoc(this._doc('adjustments/' + id), { pcts: pcts, at: this.m.fs.serverTimestamp() }); }
+    deleteAdjust(id) { return this.m.fs.deleteDoc(this._doc('adjustments/' + id)); }
     async deletePlan(id, wasActive) {
       const { getDocs, collection } = this.m.fs, ops = [];
       for (const sub of ['weeks', 'stages']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
@@ -278,23 +285,31 @@
     C.role = role; C.name = name || C.name; C.phase = 'active'; C.offlineCache = !!offline;
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
     if (!changed) { window.HalterApp.render(); return; }
-    C.appRunning = true; LS.del(K_NAME); initPlanUI();
+    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI();
     hideGate();
     const fresh = window.HalterApp.start({
       cloud: true, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
-      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []) : [],
-      accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); }
+      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : [])
+        : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []),
+      accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
+      onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
     });
     startSync(fresh);
     if (role === 'coach' && !offline) watchCoachLists();
+    if (window.HalterAssign) { if (role === 'coach') { if (!offline) window.HalterAssign.startCoach(C.user.uid); } else window.HalterAssign.startAthlete(C.user.uid, !!offline); }
   }
   let planInit = false;
   function initPlanUI() {
     if (planInit || !window.HalterPlan) return; planInit = true;
     window.HalterPlan.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr });
   }
+  let assignInit = false;
+  function initAssignUI() {
+    if (assignInit || !window.HalterAssign) return; assignInit = true;
+    window.HalterAssign.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, members: () => C.members });
+  }
   function deactivate() {
-    stopSync(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
+    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
   }
 
   /* ---------- Contenido propio dentro de la app ---------- */
@@ -311,13 +326,16 @@
     const rej = C.requests.filter(x => x.status === 'rejected');
     const mem = C.members.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
     const cf = (key, id, txt, ok) => `<button class="btn ${ok ? '' : 'ghost'} sm" data-act="${key}" data-uid="${esc(id)}">${C.confirm === key + id ? 'Confirmar' : txt}</button>`;
+    if (window.HalterAssign && window.HalterAssign.selected()) return window.HalterAssign.detail();
     let h = '<h1>Equipo</h1>';
     if (C.err) h += `<div class="note warn">${esc(C.err)}</div>`;
     h += `<div class="card sec"><span class="eyebrow">Solicitudes pendientes (${pend.length})</span>`;
     h += pend.length ? pend.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-reject', p.id, 'Rechazar'))).join('') : '<p class="muted">No hay solicitudes pendientes.</p>';
     h += '</div>';
     h += `<div class="card sec"><span class="eyebrow">Atletas aprobados (${mem.length})</span>`;
-    h += mem.length ? mem.map(p => personRow(p, cf('eq-remove', p.id, 'Quitar acceso'))).join('') : '<p class="muted">Aún no has aprobado atletas.</p>';
+    const HA = window.HalterAssign;
+    h += mem.length ? mem.map(p => `<div class="person"><div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}</small>${HA ? `<small>${esc(HA.summary(p.id))}</small>` : ''}</div><div class="acts">` +
+      (HA ? `<button class="btn sm" data-act="as-open" data-uid="${esc(p.id)}">Semana</button>` : '') + cf('eq-remove', p.id, 'Quitar acceso') + '</div></div>').join('') : '<p class="muted">Aún no has aprobado atletas.</p>';
     h += '</div>';
     if (rej.length) h += `<div class="card sec"><span class="eyebrow">Rechazadas (${rej.length})</span>` + rej.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-delreq', p.id, 'Borrar'))).join('') + '</div>';
     h += '<p class="muted">Quitar el acceso a un atleta no borra sus datos: solo le impide volver a entrar.</p>';
@@ -335,6 +353,7 @@
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
+      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
       case 'eq-delreq': if (twoStep('eq-delreq')) guarded(() => C.remote.deleteRequest(uid), 'Solicitud borrada'); break;

@@ -2,7 +2,7 @@
 
 App web instalable (PWA) para registrar los entrenamientos de la selección de halterofilia. Funciona en iPhone, Android, Windows y Mac desde un solo código, sin pasar por las tiendas de aplicaciones.
 
-**Estado: fase 3.** Cuentas con correo y contraseña, solicitud de acceso, aprobación por el entrenador, app instalable que abre sin conexión, y **copia automática de los datos de cada atleta en su cuenta** (sesiones, máximos, perfil y plan semanal), para verlos en cualquier dispositivo, y **carga del plan anual desde Excel** por el entrenador (pestaña Planes).
+**Estado: fase 4.** Cuentas con correo y contraseña, solicitud de acceso, aprobación por el entrenador, app instalable que abre sin conexión, y **copia automática de los datos de cada atleta en su cuenta** (sesiones, máximos, perfil y plan semanal), para verlos en cualquier dispositivo, y **carga del plan anual desde Excel** por el entrenador (pestaña Planes), y la **semana asignada a cada atleta** (el entrenador la asigna y ajusta los % desde 90 %; el atleta ve su semana con sus kilos, inicia la sesión ya armada y pasa de semana tras el corte).
 
 ## Cómo funciona el acceso
 
@@ -26,6 +26,7 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 | `firestore.rules` | Reglas de seguridad de la base de datos |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalación y funcionamiento sin conexión |
 | `sync.js` | Sincronización de los datos propios (fase 2) |
+| `assign.js` | Semana asignada (fase 4): asignación y ajustes del entrenador, pestaña **Semana** del atleta, cumplimiento y avance semanal |
 | `tests/` | Pruebas automáticas |
 
 ## Puesta en marcha (una sola vez)
@@ -66,6 +67,8 @@ node tests/sync-unit.js    # motor de sincronización: varios dispositivos, conf
 node tests/sync-e2e.js     # sincronización dentro de la app real
 node tests/plan-import.js  # lectura del plan (sin navegador)
 node tests/plan.js         # el entrenador carga, publica y activa un plan
+node tests/assign-unit.js  # hora de corte en Chile, sesión armada desde el plan, avance de semana
+node tests/assign-e2e.js   # asignar semana, ajustar %, cumplir sesiones y pasar de semana (con las reglas)
 ```
 
 ## Plan anual (fase 3): cargar el Excel cada año
@@ -80,7 +83,16 @@ La app muestra una revisión antes de publicar: una muestra de la primera semana
 
 **No subir el Excel ni el plan convertido a este repositorio:** es público. El plan vive solo en Firestore.
 
+## Semana asignada (fase 4)
+
+- **Entrenador:** en **Equipo**, el botón **Semana** de cada atleta abre su ficha: asigna o mueve la semana del plan activo, ve qué sesiones cumplió (con fecha y hora) y ajusta los porcentajes de 90 % o más solo para ese atleta (los deja vacíos para usar el del plan).
+- **Atleta:** la pestaña **Semana** muestra «Semana N · Etapa», cada sesión con sus series y los kilos (su máximo × %). **Iniciar esta sesión** la deja armada en «Hoy». Si falta su máximo de un ejercicio, lo avisa y deja los kilos en blanco. Un complejo (`a + b`) se arma como un solo ejercicio con el % del primer movimiento que tenga máximo. Al terminar la sesión queda registrada como cumplida con la hora del servidor.
+- **Cambio de semana:** el botón **Pasar a la semana siguiente** se habilita desde el viernes a las 23:59 (hora de Chile) de la semana asignada y con la **última sesión de la semana cumplida**; una semana de transición no exige sesiones. Solo avanza de a una semana. Todo lo demás (mover de semana o de etapa) lo hace el entrenador.
+- **Qué impiden las reglas** (`firestore.rules`): que el atleta se asigne una semana, falsee la fecha de una sesión, registre una de otra semana, reescriba una cumplida, cambie sus ajustes o avance antes del corte o sin la última sesión. No pueden impedir que marque como hecha una sesión que no entrenó; para eso están los informes del entrenador.
+- **Sin conexión:** la última semana vista queda guardada en el dispositivo; las sesiones cumplidas se envían al volver la conexión.
+- **Datos:** `assignments/{uid}` (semana asignada y hora de corte), `users/{uid}/completions/{plan_semana_n}` (sesiones cumplidas, solo se crean) y `adjustments/{uid}_{plan}_{semana}` (ajustes de %). Cada semana del plan guarda `next` (la semana siguiente), por eso un plan publicado antes de la fase 4 debe volver a cargarse.
+
 ## Lo que viene
 
-- Fase 4: asignación de etapa y semana por atleta, pantalla del atleta con su semana, ajuste de los % desde 90 % por atleta, avance semanal con corte el viernes 23:59 (hora de Chile).
-- Informes para el entrenador (planificado vs realizado y observaciones de los atletas): pendientes hasta que exista la base de datos del plan.
+- Informes para el entrenador (planificado vs realizado y observaciones de los atletas): ahora que existe la base de datos del plan y las sesiones cumplidas, son la fase 4b.
+- Ajuste «Idioma de los ejercicios» (inglés o español como principal); hoy la semana muestra el nombre en español y, si falta, en inglés.

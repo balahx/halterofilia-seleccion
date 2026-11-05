@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso), 2 (datos propios de cada atleta) y 3 (plan anual).
+// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso), 2 (datos propios de cada atleta), 3 (plan anual) y 4 (semana asignada).
 // Todo lo que no está permitido aquí queda prohibido.
-// Fase 3: plan anual (más abajo). Las reglas de las fases siguientes (asignaciones, cumplimiento) se agregarán en este mismo archivo.
+// Fase 3: plan anual. Fase 4: semana asignada a cada atleta, sesiones cumplidas y ajuste de porcentajes (al final del archivo).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -120,10 +120,81 @@ service cloud.firestore {
       match /weeks/{weekId} {
         allow read: if canReadPlan();
         allow create, update: if isCoach()
-          && request.resource.data.keys().hasOnly(['stageId', 'week', 'label', 'kind', 'notes', 'sessions'])
-          && request.resource.data.week is int && request.resource.data.sessions is list && request.resource.data.sessions.size() <= 7;
+          && request.resource.data.keys().hasOnly(['stageId', 'week', 'label', 'kind', 'notes', 'sessions', 'next'])
+          && request.resource.data.week is int && request.resource.data.sessions is list && request.resource.data.sessions.size() <= 7
+          && request.resource.data.next is string && request.resource.data.next.size() <= 40;
         allow delete: if isCoach();
       }
+    }
+
+    // ---- Fase 4: semana asignada, sesiones cumplidas y ajuste de porcentajes ----
+
+    function weekOf(planId, weekId) { return get(/databases/$(database)/documents/plans/$(planId)/weeks/$(weekId)).data; }
+
+    // La última sesión planificada de la semana debe estar cumplida (una semana de transición no la exige)
+    function lastDone(uid, a) {
+      let w = weekOf(a.planId, a.weekId);
+      return w.kind == 'transition' || w.sessions.size() == 0
+        || exists(/databases/$(database)/documents/users/$(uid)/completions/$(a.planId + '_' + a.weekId + '_' + string(w.sessions.size() - 1)));
+    }
+
+    // Semana que el entrenador le asigna a cada atleta. El atleta solo puede pasar a la semana siguiente:
+    // después del corte (viernes 23:59 hora de Chile, calculado por la app) y con la última sesión cumplida.
+    match /assignments/{uid} {
+      allow get: if signedIn() && ((request.auth.uid == uid && isMemberOf(uid)) || isCoach());
+      allow list: if isCoach();
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['planId', 'weekId', 'week', 'stageId', 'weekEndsAt', 'setBy', 'at'])
+        && request.resource.data.keys().hasAll(['planId', 'weekId', 'week', 'stageId', 'weekEndsAt', 'setBy', 'at'])
+        && request.resource.data.planId is string && request.resource.data.planId.size() > 0 && request.resource.data.planId.size() <= 60
+        && request.resource.data.weekId is string && request.resource.data.weekId.size() > 0 && request.resource.data.weekId.size() <= 40
+        && request.resource.data.week is int && request.resource.data.stageId is string
+        && request.resource.data.weekEndsAt is number
+        && request.resource.data.setBy == request.auth.uid
+        && request.resource.data.at == request.time
+        && isMemberOf(uid)
+        && weekOf(request.resource.data.planId, request.resource.data.weekId).stageId == request.resource.data.stageId
+        && weekOf(request.resource.data.planId, request.resource.data.weekId).week == request.resource.data.week;
+      allow update: if signedIn() && request.auth.uid == uid && isMemberOf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['weekId', 'week', 'stageId', 'weekEndsAt', 'at'])
+        && request.resource.data.at == request.time
+        && request.time.toMillis() >= resource.data.weekEndsAt
+        && weekOf(resource.data.planId, resource.data.weekId).next != ''
+        && request.resource.data.weekId == weekOf(resource.data.planId, resource.data.weekId).next
+        && request.resource.data.week == weekOf(resource.data.planId, request.resource.data.weekId).week
+        && request.resource.data.stageId == weekOf(resource.data.planId, request.resource.data.weekId).stageId
+        && request.resource.data.weekEndsAt >= resource.data.weekEndsAt + 597600000
+        && request.resource.data.weekEndsAt <= resource.data.weekEndsAt + 612000000
+        && lastDone(uid, resource.data);
+      allow delete: if isCoach();
+    }
+
+    // Sesión cumplida: la crea el atleta al terminar una sesión del plan, con la hora del servidor, solo para
+    // la semana que tiene asignada. No se puede editar ni borrar.
+    match /users/{uid}/completions/{id} {
+      allow read: if signedIn() && ((request.auth.uid == uid && isMemberOf(uid)) || isCoach());
+      allow create: if signedIn() && request.auth.uid == uid && isMemberOf(uid)
+        && request.resource.data.keys().hasOnly(['planId', 'weekId', 'sessionIdx', 'completedAt'])
+        && request.resource.data.keys().hasAll(['planId', 'weekId', 'sessionIdx', 'completedAt'])
+        && request.resource.data.completedAt == request.time
+        && request.resource.data.sessionIdx is int && request.resource.data.sessionIdx >= 0
+        && exists(/databases/$(database)/documents/assignments/$(uid))
+        && get(/databases/$(database)/documents/assignments/$(uid)).data.planId == request.resource.data.planId
+        && get(/databases/$(database)/documents/assignments/$(uid)).data.weekId == request.resource.data.weekId
+        && request.resource.data.sessionIdx < weekOf(request.resource.data.planId, request.resource.data.weekId).sessions.size()
+        && id == request.resource.data.planId + '_' + request.resource.data.weekId + '_' + string(request.resource.data.sessionIdx);
+      allow update, delete: if false;
+    }
+
+    // Ajuste de porcentajes (desde 90 %) de un atleta en una semana. Id: {uid}_{planId}_{weekId}.
+    // Lo escribe el entrenador; el atleta solo lee el suyo.
+    match /adjustments/{id} {
+      allow read: if signedIn() && (isCoach() || (id.matches(request.auth.uid + '_.*') && isMemberOf(request.auth.uid)));
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['pcts', 'at'])
+        && request.resource.data.pcts is map && request.resource.data.pcts.size() <= 400
+        && request.resource.data.at == request.time;
+      allow delete: if isCoach();
     }
   }
 }
