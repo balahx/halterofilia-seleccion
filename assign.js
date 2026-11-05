@@ -181,7 +181,7 @@
 
   let weekKey = '';   // semana que se está escuchando como atleta
   function init(helpers) {
-    H = helpers;
+    H = helpers; if (root.HalterReport) root.HalterReport.init(helpers);
     document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } });
     document.addEventListener('input', e => {
       const t = e.target; if (!t || !t.dataset || t.dataset.as !== 'pct') return;
@@ -190,7 +190,7 @@
       const b = document.querySelector('[data-act="as-adj-save"]'); if (b) b.disabled = !adjDirty() || !!A.busy;   // el botón se habilita al escribir
     });
   }
-  function reset() { weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }; }
+  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }; }
 
   /* ---------- Escuchar datos ---------- */
   function startCoach(uid) {
@@ -347,6 +347,7 @@
   /* ---------- Entrenador ---------- */
   const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; return 'Semana ' + a.week + (stageName(a.stageId) ? ' · ' + stageName(a.stageId) : ''); };
   function select(uid) {
+    if (root.HalterReport) root.HalterReport.reset();
     unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
     if (!uid) { rerender(); return; }
     const r = H.remote();
@@ -416,8 +417,10 @@
       }
       h += `<div class="card sec"><span class="eyebrow">Ajustes para este atleta</span>${adjustHTML(a)}</div>`;
     }
+    if (root.HalterReport && A.active && A.weeks.length) h += root.HalterReport.html(reportCtx());
     return h;
   }
+  const reportCtx = () => ({ uid: A.sel, name: memberName(A.sel), weeks: A.weeks, stages: A.stages, names: A.names, asg: A.asg[A.sel] || null, planId: A.active, done: A.selDone, lang: lang() });
   async function guard(fn, ok) { A.err = ''; A.busy = 'Guardando…'; rerender(); try { await fn(); if (ok) H.toast(ok); } catch (e) { A.err = H.err(e); } A.busy = ''; rerender(); }
   function assign() {
     const wid = A.pick || (A.asg[A.sel] && A.asg[A.sel].weekId) || (A.weeks[0] && A.weeks[0].id), w = A.weeks.find(x => x.id === wid);
@@ -431,6 +434,7 @@
       case 'as-assign': assign(); return true;
       case 'as-start': startSession(+el.dataset.i); return true;
       case 'as-advance': advance(); return true;
+      case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': return !!root.HalterReport && root.HalterReport.onAct(act, el, reportCtx());
       case 'as-adj-save': {
         const a = A.asg[A.sel]; if (!a) return true;
         const pcts = {}; Object.keys(A.draft || {}).forEach(k => { if (A.draft[k] > 0 && A.draft[k] <= (k.indexOf('f_') === 0 ? 200 : 130)) pcts[k] = A.draft[k]; });

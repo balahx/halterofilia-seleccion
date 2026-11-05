@@ -207,6 +207,39 @@ const WEEKS = {
   await tab('semana'); await page.waitForTimeout(400);
   ok(/70 %[^|]*→ 87 kg/.test(await txt('#view')), 'con su propio máximo (124 kg) el factor no se usa: 70 % = 87 kg');
 
+  console.log('10. Informe del entrenador: planificado vs realizado y observaciones');
+  await page.evaluate(u => {
+    const day = new Date().toISOString().slice(0, 10);
+    const st = (kg, reps, done) => ({ kg, reps, pct: 70, rpe: 8, done, doneAt: 1 });
+    const sess = { id: 'inf1', date: day, name: 'Lunes', startedAt: Date.now() - 3600000, endedAt: Date.now(), notes: 'Dolor leve en el hombro derecho', bw: 80,
+      items: [{ exId: 'snatch', sets: [st(70, '3', true), st(70, '3', true), st(95, '1', true)] }], plan: { planId: 'p1', weekId: 'e1_1', idx: 0 } };
+    __fake.admin('users/' + u + '/records/s_inf1', { t: 'session', d: JSON.stringify(sess), u: Date.now(), at: Date.now() });
+  }, auid);
+  await logout(); await login('cristian@correo.cl'); await tab('equipo');
+  await page.click('[data-act="as-open"]'); await page.waitForSelector('#asWeek'); await page.waitForTimeout(400);
+  ok(/Ver informe/.test(await txt('#rpCard')), 'la ficha del atleta ofrece «Ver informe»');
+  await page.click('[data-act="rp-toggle"]'); await page.waitForTimeout(900);
+  const rp = await txt('#rpCard');
+  ok(/Semana 1/.test(rp) && /2 \/ 3/.test(rp), 'informe de la semana asignada: 2 de las 3 sesiones registradas (lunes y miércoles; el jueves falta)');
+  ok(/Snatch/.test(rp) && /3 de 3 hechas/.test(rp) && /Completo/.test(rp), 'arranque: 3 de 3 series, completo');
+  ok(/Sin registrar/.test(rp), 'las sesiones sin registro aparecen como «Sin registrar»');
+  ok(/Dolor leve en el hombro derecho/.test(rp), 'muestra la observación del atleta');
+  await shot('03-informe-semana'); if (process.env.SHOTS) await page.locator('#rpCard').screenshot({ path: process.env.SHOTS + '/semana-03b-informe-tarjeta.png' });
+  await page.click('[data-act="rp-mode"][data-m="day"]'); await page.waitForTimeout(300);
+  await page.fill('#rpDate', await page.evaluate(() => new Date().toISOString().slice(0, 10))); await page.waitForTimeout(300);
+  await page.dispatchEvent('#rpDate', 'change'); await page.waitForTimeout(500);
+  ok(/Semana 1 · Lunes/.test(await txt('#rpCard')) && /Dolor leve/.test(await txt('#rpCard')), 'informe de un día: la sesión del plan con su observación');
+  await page.evaluate(() => { window.print = () => { window.__printed = document.body.classList.contains('rp-print'); }; });
+  await page.click('[data-act="rp-print"]'); await page.waitForTimeout(200);
+  ok(await page.evaluate(() => window.__printed), 'imprimir marca la vista para que solo salga el informe');
+  await page.emulateMedia({ media: 'print' });
+  const vis = await page.evaluate(() => ({ nav: getComputedStyle(document.querySelector('#nav')).display, card: getComputedStyle(document.querySelector('#rpCard')).display, others: [...document.querySelectorAll('#view > :not(#rpCard)')].every(e => getComputedStyle(e).display === 'none') }));
+  ok(vis.nav === 'none' && vis.card !== 'none' && vis.others, 'en la impresión se ocultan el menú y lo demás; queda el informe');
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => document.body.classList.remove('rp-print'));
+  await page.click('#rpCard [data-act="rp-toggle"]:last-child'); await page.waitForTimeout(300);
+  ok(/Ver informe/.test(await txt('#rpCard')), 'se puede cerrar el informe');
+
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   await br.close(); srv.close();
   console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

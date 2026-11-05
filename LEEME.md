@@ -27,6 +27,7 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalación y funcionamiento sin conexión |
 | `sync.js` | Sincronización de los datos propios (fase 2) |
 | `assign.js` | Semana asignada (fase 4): asignación y ajustes del entrenador, pestaña **Semana** del atleta, cumplimiento y avance semanal |
+| `report.js` | Informes del entrenador (fase 4b): planificado vs realizado y observaciones, por semana o por día |
 | `tests/` | Pruebas automáticas |
 
 ## Puesta en marcha (una sola vez)
@@ -68,6 +69,7 @@ node tests/sync-e2e.js     # sincronización dentro de la app real
 node tests/plan-import.js  # lectura del plan (sin navegador)
 node tests/plan.js         # el entrenador carga, publica y activa un plan
 node tests/assign-unit.js  # hora de corte en Chile, sesión armada desde el plan, avance de semana
+node tests/report-unit.js  # armado de los informes: planificado vs realizado, estados, observaciones, texto
 node tests/assign-e2e.js   # asignar semana, ajustar %, cumplir sesiones y pasar de semana (con las reglas)
 ```
 
@@ -96,6 +98,15 @@ La app muestra una revisión antes de publicar: una muestra de la primera semana
 
 El inglés es el idioma principal y el español va debajo, en pequeño: en la semana, la sesión, los máximos, el historial y las listas. Cada atleta puede invertirlo en **Ajustes → Nombres de los ejercicios** (se sincroniza con su cuenta). Los ejercicios que el atleta crea por su cuenta tienen un solo nombre.
 
+## Informes del entrenador (fase 4b)
+
+En **Equipo → Semana** de cada atleta, la tarjeta **Informe del atleta** → «Ver informe». No necesita reglas nuevas: el entrenador ya puede leer los registros de sus atletas (`users/{uid}/records`) y las sesiones cumplidas.
+- **Semana:** elige una semana del plan. Muestra cuántas sesiones se registraron de las planificadas, series hechas de las planificadas, repeticiones, tonelaje y RPE medio; y por sesión y ejercicio lo planificado (series y %, con los ajustes del entrenador) frente a lo hecho (series, kilos y repeticiones). Estados: **Completo**, **Parcial**, **Omitido**, **Sin registrar** (sesión no registrada) y **Extra** (ejercicio fuera del plan).
+- **Día:** todas las sesiones registradas en una fecha, del plan (comparadas con lo planificado) o libres.
+- **Observaciones:** las «Notas de la sesión» que escribe el atleta (técnica, sensaciones, molestias) se reúnen al final y también van en el texto.
+- **Salida:** «Copiar texto», «Compartir» (donde el equipo lo permita) e «Imprimir o guardar PDF». Con el plan gratuito no hay envío automático (sin correos ni avisos programados): el informe se arma al abrirlo y refleja lo que el atleta ya sincronizó.
+- Si una sesión del plan se registró más de una vez, cuenta la última. Lo que el atleta no ha sincronizado todavía (sin conexión) aparece como «Sin registrar».
+
 ## Lo que viene
 
-- Informes para el entrenador (planificado vs realizado y observaciones de los atletas): ahora que existe la base de datos del plan y las sesiones cumplidas, son la fase 4b.
+- Informe automático diario y semanal con aviso al entrenador (pide un servicio de envío fuera del plan gratuito; por ahora se abre a mano).

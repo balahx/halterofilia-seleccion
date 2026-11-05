@@ -362,7 +362,7 @@
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
-      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
+      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
       case 'eq-delreq': if (twoStep('eq-delreq')) guarded(() => C.remote.deleteRequest(uid), 'Solicitud borrada'); break;
