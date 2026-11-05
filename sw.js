@@ -1,7 +1,7 @@
 /* Service worker: permite abrir la app sin conexión.
    Estrategia: red primero (así se ven las actualizaciones), con respaldo en caché. */
 const CACHE = 'halterofilia-v1';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './firebase-config.js', './manifest.webmanifest',
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './plan-import.js', './plan-ui.js', './firebase-config.js', './manifest.webmanifest',
   './icons/icon.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,6 +14,7 @@ self.addEventListener('fetch', e => {
   const req = e.request, u = new URL(req.url);
   const ok = u.origin === self.location.origin
     || (u.hostname === 'www.gstatic.com' && u.pathname.startsWith('/firebasejs/')) // SDK de Firebase
+    || (u.hostname === 'cdnjs.cloudflare.com' && u.pathname.startsWith('/ajax/libs/xlsx/')) // lector de Excel
     || u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com';  // tipografías
   if (req.method !== 'GET' || !ok) return;
   e.respondWith(

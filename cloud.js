@@ -80,6 +80,32 @@
       return b.commit();
     }
     removeMember(uid) { return this.m.fs.deleteDoc(this._doc('members/' + uid)); }
+    /* Plan anual (fase 3). Los documentos del plan se escriben primero y la ficha del plan al final,
+       así un plan solo aparece en la lista cuando está completo. */
+    async _commit(ops) {
+      const { writeBatch } = this.m.fs;
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = writeBatch(this.db);
+        ops.slice(i, i + 400).forEach(o => { if (o.del) b.delete(o.ref); else if (o.merge) b.set(o.ref, o.data, { merge: true }); else b.set(o.ref, o.data); });
+        await b.commit();
+      }
+    }
+    async publishPlan(p) {
+      const ops = [], base = 'plans/' + p.planId;
+      p.stages.forEach(x => ops.push({ ref: this._doc(base + '/stages/' + x.id), data: x.data }));
+      p.weeks.forEach(x => ops.push({ ref: this._doc(base + '/weeks/' + x.id), data: x.data }));
+      p.exercises.forEach(x => ops.push({ ref: this._doc('exercises/' + x.id), data: x.data, merge: true }));
+      await this._commit(ops);
+      await this._commit([{ ref: this._doc(base), data: Object.assign({}, p.meta, { createdAt: this.m.fs.serverTimestamp() }) }]);
+    }
+    setActivePlan(id) { return this.m.fs.setDoc(this._doc('config/plan'), { activePlanId: id, at: this.m.fs.serverTimestamp() }); }
+    async deletePlan(id, wasActive) {
+      const { getDocs, collection } = this.m.fs, ops = [];
+      for (const sub of ['weeks', 'stages']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
+      if (wasActive) ops.push({ ref: this._doc('config/plan'), del: true });
+      ops.push({ ref: this._doc('plans/' + id), del: true });
+      await this._commit(ops);
+    }
   }
 
   /* ---------- Estado ---------- */
@@ -172,6 +198,12 @@
       if (grew) toast('Nueva solicitud de acceso en «Equipo»');
     }, e => { C.err = dataErr(e); }));
     C.unsub.push(r.watchCol('members', list => { C.members = list; window.HalterApp.render(); }, e => { C.err = dataErr(e); }));
+    if (window.HalterPlan) {
+      const HP = window.HalterPlan;
+      C.unsub.push(r.watchCol('plans', list => { HP.setPlans(list); window.HalterApp.render(); }, e => { HP.state.err = dataErr(e); HP.setPlans([]); window.HalterApp.render(); }));
+      C.unsub.push(r.watchCol('exercises', list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
+      C.unsub.push(r.watchDoc('config/plan', d => { HP.setActive(d); window.HalterApp.render(); }, () => { /* sin plan activo */ }));
+    }
   }
   function decide() { // devuelve { role, definitive } o { phase }
     const uid = C.user.uid;
@@ -214,14 +246,19 @@
     C.role = role; C.name = name || C.name; C.phase = 'active'; C.offlineCache = !!offline;
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
     if (!changed) { window.HalterApp.render(); return; }
-    C.appRunning = true; LS.del(K_NAME);
+    C.appRunning = true; LS.del(K_NAME); initPlanUI();
     hideGate();
     window.HalterApp.start({
       cloud: true, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
-      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }] : [],
+      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []) : [],
       accountHTML: accountHTML, onAct: onAct
     });
     if (role === 'coach' && !offline) watchCoachLists();
+  }
+  let planInit = false;
+  function initPlanUI() {
+    if (planInit || !window.HalterPlan) return; planInit = true;
+    window.HalterPlan.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr });
   }
   function deactivate() {
     window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
@@ -262,6 +299,7 @@
     const twoStep = key => { if (prev === key + uid) return true; C.confirm = key + uid; window.HalterApp.render(); return false; };
     switch (act) {
       case 'cl-logout': doLogout(); break;
+      case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
       case 'eq-delreq': if (twoStep('eq-delreq')) guarded(() => C.remote.deleteRequest(uid), 'Solicitud borrada'); break;
@@ -271,7 +309,7 @@
 
   /* ---------- Acciones de las pantallas de ingreso ---------- */
   async function doLogout() {
-    try { if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
+    try { if (window.HalterPlan) window.HalterPlan.reset(); if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
       if (C.remote) await C.remote.signOut(); } catch (e) { /* sin conexión: igual se cierra la sesión local */ }
     C.user = null; C.phase = 'signedout'; showGate(true);
   }
