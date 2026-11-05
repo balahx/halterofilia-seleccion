@@ -217,7 +217,7 @@
   function hideGate() { gate().hidden = true; lastKey = ''; document.getElementById('appRoot').hidden = false; }
 
   /* ---------- Acceso ---------- */
-  function unwatch() { C.unsub.forEach(u => { try { u(); } catch (e) { /* ya cerrado */ } }); C.unsub = []; }
+  function unwatch() { C.unsub.forEach(u => { try { u(); } catch (e) { /* ya cerrado */ } }); C.unsub = []; C.live = null; }
   function resetAccess() { C.team = C.member = C.request = undefined; C.defin = { team: false, member: false, request: false }; C.members = []; C.requests = []; C.colReady = false; C.role = null; }
   function watchAccess(user) {
     unwatch(); resetAccess();
@@ -284,7 +284,7 @@
     const changed = !C.appRunning || C.role !== role;
     C.role = role; C.name = name || C.name; C.phase = 'active'; C.offlineCache = !!offline;
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
-    if (!changed) { window.HalterApp.render(); return; }
+    if (!changed) { if (!offline) startLive(); window.HalterApp.render(); return; }
     C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI();
     hideGate();
     const fresh = window.HalterApp.start({
@@ -295,8 +295,17 @@
       onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
     });
     startSync(fresh);
-    if (role === 'coach' && !offline) watchCoachLists();
-    if (window.HalterAssign) { if (role === 'coach') { if (!offline) window.HalterAssign.startCoach(C.user.uid); } else window.HalterAssign.startAthlete(C.user.uid, !!offline); }
+    if (offline) { if (window.HalterAssign && role !== 'coach') window.HalterAssign.startAthlete(C.user.uid, true); }   // solo la copia guardada de la semana
+    else startLive();
+  }
+  /* Listas y datos en vivo (atletas, planes, semana asignada). La app instalada abre con el último acceso guardado
+     (offline = true) y el servidor responde después: en ese momento hay que empezar a escucharlos. */
+  function startLive() {
+    const key = C.user.uid + '|' + C.role;
+    if (C.live === key) return;
+    C.live = key;
+    if (C.role === 'coach') watchCoachLists();
+    if (window.HalterAssign) { if (C.role === 'coach') window.HalterAssign.startCoach(C.user.uid); else window.HalterAssign.startAthlete(C.user.uid, false); }
   }
   let planInit = false;
   function initPlanUI() {

@@ -155,6 +155,16 @@ const WEEKS = {
   ok(/Cumplida el/.test(await txt('#view')), 'al ver la semana 1 aparecen las sesiones cumplidas con su fecha');
   await shot('06-coach-cumplidas');
 
+  console.log('7. App instalada: abre con el último acceso guardado y, al llegar la conexión, carga la lista de atletas');
+  await page.evaluate(() => __fake.setOffline(true)); await page.reload(); await page.waitForSelector('#appRoot:not([hidden])');
+  await tab('equipo');
+  ok(/Aún no has aprobado atletas/.test(await txt('#view')), 'sin conexión, la lista está vacía (no hay de dónde leerla)');
+  await page.evaluate(() => __fake.setOffline(false)); await page.waitForTimeout(1500);
+  await page.waitForFunction(() => /Ana Rojas/.test(document.querySelector('#view').innerText), null, { timeout: 4000 }).catch(() => {});
+  ok(/Ana Rojas/.test(await txt('#view')), 'al volver la conexión aparece Ana Rojas en «Atletas aprobados»');
+  await tab('planual'); await page.waitForTimeout(300);
+  ok(/Plan 2026/.test(await txt('#view')), 'y la pestaña Planes muestra el plan publicado');
+
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   await br.close(); srv.close();
   console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);
