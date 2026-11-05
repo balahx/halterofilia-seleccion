@@ -43,7 +43,8 @@ function cristianGrid() {
   set(11, D, 'remo barra 60k 12r'); set(11, E, 'jerk / desliz jerk');
   set(13, B, 'caracteris meso '); set(14, B, 'semana 2 descarga'); set(14, D, 'lunes');
   set(15, D, '60% 5X3'); set(16, C, 'TEC AA 1'); set(16, D, '2hang snatch');
-  return { grid: g, merges: [{ r1: 1, c1: 1, r2: 2, c2: 7 }] };
+  set(18, B, 'semana 3 transicion libre, descanso de halterofilia'); 
+  return { grid: g, merges: [{ r1: 1, c1: 1, r2: 2, c2: 7 }, { r1: 18, c1: 1, r2: 18, c2: 7 }] };
 }
 
 (async () => {
@@ -79,7 +80,7 @@ function cristianGrid() {
   await page.setInputFiles('#plFile', { name: 'plan.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(JSON.stringify(cristianGrid())) });
   await page.waitForSelector('[data-act="pl-publish"]');
   let v = await txt('#view');
-  ok(/planilla de Cristian/.test(v) && /2 semanas/.test(v), 'detecta el formato y 2 semanas');
+  ok(/planilla de Cristian/.test(v) && /3 semanas/.test(v) && /transición[^.]*: 3\./i.test(v), 'detecta el formato, 3 semanas y la de transición');
   ok(/Preparatorio General 2026/.test(v), 'muestra la etapa');
   ok(/Muestra · semana 1, Lunes/i.test(v) && /40% 6-8 × 3/.test(v), 'muestra una muestra con las prescripciones');
   ok(/zzz ejercicio nuevo 30k/.test(v), 'lista el ejercicio no reconocido');
@@ -94,8 +95,9 @@ function cristianGrid() {
   await page.waitForFunction(() => /Plan 2026 prueba/.test(document.querySelector('#view').innerText) && /Activo/.test(document.querySelector('#view').innerText));
   const d = await docs(), keys = Object.keys(d);
   const planId = keys.find(k => /^plans\/[^/]+$/.test(k)).split('/')[1];
-  ok(d['plans/' + planId].weeks === 2 && d['plans/' + planId].stages === 1, 'ficha del plan: 1 etapa, 2 semanas');
-  ok(keys.filter(k => k.startsWith('plans/' + planId + '/weeks/')).length === 2, 'se guardaron las 2 semanas');
+  ok(d['plans/' + planId].weeks === 3 && d['plans/' + planId].stages === 1, 'ficha del plan: 1 etapa, 2 semanas');
+  ok(keys.filter(k => k.startsWith('plans/' + planId + '/weeks/')).length === 3, 'se guardaron las 3 semanas');
+  ok(d['plans/' + planId + '/weeks/e1_3'].kind === 'transition', 'la semana 3 se guarda como transición');
   ok(d['config/plan'] && d['config/plan'].activePlanId === planId, 'el primer plan queda activo');
   const w1 = d['plans/' + planId + '/weeks/e1_1'];
   ok(w1.label === 'intro' && w1.sessions.length === 2, 'semana 1 «intro» con 2 sesiones (lunes y martes)');
@@ -103,7 +105,7 @@ function cristianGrid() {
   ok(lunes.name === 'Lunes' && lunes.items[0].sets[0].pct === 40 && lunes.items[0].sets[0].reps === '6-8' && lunes.items[0].sets[0].sets === 3 && lunes.items[1].sets[0].pct === 50, 'la prescripción de arriba se asocia al ejercicio de abajo (40% 6-8×3, luego 50%)');
   ok(lunes.items[0].alts[0].p.length === 2 && lunes.items[0].alts[0].p[0].ex === 'tall-snatch', 'el complejo «tall snatch + Drop AA» queda con 2 partes');
   const alt = lunes.items.find(i => i.raw.startsWith('biceps'));
-  ok(alt && alt.alts[0].p[0].ex === 'barbell-biceps-curl', '«biceps 30» → Barbell Biceps Curl (los 30 kg no se guardan)');
+  ok(alt && alt.alts[0].p[0].ex === 'barbell-biceps-curl' && alt.alts[0].p[0].hold === 30, '«biceps 30» → Barbell Biceps Curl con 30 s de espera isométrica');
   const mart = w1.sessions[1].items.find(i => /jerk \//.test(i.raw));
   ok(mart && mart.alts.length === 2, '«jerk / desliz jerk» → 2 alternativas');
   const legs = w1.sessions[1].items.find(i => /Leg ext/.test(i.raw));

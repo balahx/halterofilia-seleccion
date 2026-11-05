@@ -33,7 +33,7 @@
       if (depth === 2) return keysOnly(data, ['name', 'year', 'format', 'stages', 'weeks', 'createdAt']) && typeof data.name === 'string' && data.name.length > 0;
       const hasNested = o => Array.isArray(o) ? o.some(x => Array.isArray(x) || hasNested(x)) : (o && typeof o === 'object' ? Object.keys(o).some(k => hasNested(o[k])) : false);
       if (hasNested(data)) return false;   // Firestore no admite listas dentro de listas
-      return path.split('/')[2] === 'stages' ? keysOnly(data, ['name', 'order']) : keysOnly(data, ['stageId', 'week', 'label', 'notes', 'sessions']);
+      return path.split('/')[2] === 'stages' ? keysOnly(data, ['name', 'order']) : keysOnly(data, ['stageId', 'week', 'label', 'kind', 'notes', 'sessions']);
     }
     if (col === 'members') {
       if (op === 'get') return u.uid === id || coach;

@@ -55,6 +55,7 @@
     ['hanghighpullbajorod', 'Below-Knee Hang High Pull', 'Tirón alto desde suspensión bajo rodilla'],
     ['hang pull clean', 'Hang Clean Pull', 'Tirón de cargada suspendido'],
     ['clean speed pull', 'Clean Speed Pull', 'Tirón de cargada veloz'],
+    ['iso carga', 'Overload Isometric Hold', 'Isométrico con sobrecarga (sobre 100%)'],
     ['jalon envion / jalon de envion', 'Clean Pull', 'Tirón de cargada'],
     ['jerk', 'Split Jerk (if split reception)', 'Segundo tiempo en tijera'],
     ['push press', 'Push Press', 'Press de impulso'],
@@ -132,12 +133,20 @@
     const glued = t.trim().match(/^(.*?[A-Za-z"])(\d+[\d.,]*\s*(?:reps?|r|k|kg|x).*)$/i); if (glued && glued[1].length > 2) add(glued[1]); // «extension12reps…»
     return out;
   }
+  /* Segundos de espera isométrica: «iso carga (15")» y, en los curl de bíceps, un número suelto («biceps 30» = 30 s) */
+  const HOLD_BARE = { 'barbell-biceps-curl': 1, 'ez-bar-biceps-curl': 1 };
+  function holdOf(entry, t, cand) {
+    const tail = t.indexOf(cand) === 0 ? t.slice(cand.length) : '';
+    const q = tail.match(/(\d+)\s*(?:"|”|″|'')/); if (q) return +q[1];
+    if (HOLD_BARE[entry.exId]) { const b = tail.match(/^\s*(\d+)(?=\s|$)/); if (b) return +b[1]; }
+    return undefined;
+  }
   function resolvePart(src, D, simple) {
     let t = src.trim(), max = false, mult = 1;
     if (/\s+MAX$/i.test(t)) { max = true; t = t.replace(/\s+MAX$/i, ''); }
     for (let k = 0; k < 2; k++) {
       const cs = candidates(t, simple);
-      for (let i = 0; i < cs.length; i++) { const e = D[norm(cs[i])]; if (e) return { src: src.trim(), entry: e, mult: mult, max: max }; }
+      for (let i = 0; i < cs.length; i++) { const e = D[norm(cs[i])]; if (e) return { src: src.trim(), entry: e, mult: mult, max: max, hold: holdOf(e, t, cs[i]) }; }
       const m = t.match(/^(\d)\s*(.+)$/); if (!m) break;                                              // «2hang clean» = 2 × hang clean
       mult = +m[1]; t = m[2];
     }
@@ -164,10 +173,16 @@
   function parsePresc(t) {
     const out = []; let m; SEG.lastIndex = 0;
     while ((m = SEG.exec(t))) out.push({ pct: parseFloat(m[1].replace(',', '.')), reps: m[2].replace(/\s/g, ''), sets: +m[3] });
+    if (!out.length) {                                   // «90% 95% 100 o más»: solo porcentajes, sin repeticiones ni series
+      const re = /(\d+(?:[.,]\d+)?)\s*%/g; while ((m = re.exec(t))) out.push({ pct: parseFloat(m[1].replace(',', '.')), reps: '', sets: null });
+      if (out.length && /[|1l]00\s*o\s*m[aá]s/i.test(t)) out.push({ pct: 100, reps: '', sets: null, orMore: true });
+    }
+    out.forEach(o => { if (o.pct >= 90) o.adjustable = true; });   // desde 90% el entrenador lo ajusta según el avance de cada atleta
     return out;
   }
 
   /* ---------- Planilla de Cristian ---------- */
+  const TRANSITION_NOTE = 'Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.';
   const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
   const BLOCKS = [[/^tecaa/, 'Técnica arranque'], [/^tecclean/, 'Técnica cargada'], [/^tecjer/, 'Técnica segundo tiempo'], [/^fuerzasq/, 'Fuerza sentadilla-press'],
     [/^fuerzapull/, 'Fuerza tracción'], [/^fortalec/, 'Fortalecimiento']];
@@ -198,7 +213,11 @@
       const notes = [];
       for (let r = r0 + 1; r <= end; r++) { const b = B(r); if (b && !/^(equipo|caracteris|max (rend|deriv))/i.test(b)) notes.push(b.replace(/\s+/g, ' ')); }
       const wk = { id: w.stage.id + '_' + num, stageId: w.stage.id, week: num, label: label, notes: notes, sessions: [] };
-      if (w.text) { wk.notes.unshift(w.label.replace(/\s+/g, ' ')); wk.label = ''; weeks.push(wk); return; }
+      if (w.text) {
+        wk.notes.unshift(w.label.replace(/\s+/g, ' ')); wk.label = '';
+        if (/transici/i.test(w.label)) { wk.kind = 'transition'; wk.label = 'Transición'; wk.notes.unshift(TRANSITION_NOTE); }
+        weeks.push(wk); return;
+      }
       if (used[wk.id]) { warnings.push('La semana ' + num + ' aparece dos veces en «' + w.stage.name + '». Se conserva la primera.'); return; }
       used[wk.id] = 1;
       for (let c = 3; c <= 7; c++) {
@@ -208,7 +227,7 @@
           if (isPresc(t)) { cur = { raw: t, sets: parsePresc(t) }; if (!cur.sets.length) warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): no se pudo interpretar «' + t + '»'); continue; }
           block = blockOf(Cc(r)) || blockOf(Cc(r - 1)) || block;
           const rc = resolveCell(t, D);
-          const it = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
+          const it = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
           if (rc.inline) it.inline = rc.inline;
           if (!cur) { nNoPresc++; warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» no tiene series ni % arriba'); }
           rc.alts.forEach(a => a.forEach(p => collect(p, num, c, r)));
@@ -245,6 +264,12 @@
       const g = c => (c < 0 ? '' : text((grid[r] || [])[c]));
       const ex = g(col['Ejercicio']); if (!ex) continue;
       const stName = g(col['Etapa']) || 'Plan', num = parseInt(g(col['Semana']), 10), day = DAYMAP[norm(g(col['Día']))];
+      if (num && norm(ex) === 'transicion') {   // fila «Transición»: semana de descanso de halterofilia, sin ejercicios
+        let st0 = stagesByName[stName]; if (!st0) { st0 = stagesByName[stName] = { id: 'e' + (stages.length + 1), name: stName, order: stages.length + 1 }; stages.push(st0); }
+        const wid0 = st0.id + '_' + num;
+        if (!weeksById[wid0]) { weeksById[wid0] = { id: wid0, stageId: st0.id, week: num, label: 'Transición', kind: 'transition', notes: [TRANSITION_NOTE, g(col['Nota'])].filter(Boolean), sessions: [] }; weeks.push(weeksById[wid0]); }
+        continue;
+      }
       if (!num || !day) { warnings.push('Fila ' + (r + 1) + ': falta la semana o el día («' + ex + '»)'); continue; }
       let st = stagesByName[stName]; if (!st) { st = stagesByName[stName] = { id: 'e' + (stages.length + 1), name: stName, order: stages.length + 1 }; stages.push(st); }
       const wid = st.id + '_' + num; let wk = weeksById[wid];
@@ -252,10 +277,11 @@
       let ses = wk.sessions.filter(s => s.day === day)[0]; if (!ses) { ses = { day: day, name: DAY_NAMES[day - 1] || 'Día ' + day, items: [] }; wk.sessions.push(ses); }
       const order = g(col['Orden']), pct = parseFloat(g(col['%']).replace(',', '.')), sets = parseInt(g(col['Series']), 10), reps = g(col['Repeticiones']).replace(/\s/g, '');
       const scheme = (isNaN(pct) && !reps && isNaN(sets)) ? null : { pct: isNaN(pct) ? null : pct, reps: reps, sets: isNaN(sets) ? 1 : sets };
+      if (scheme && scheme.pct >= 90) scheme.adjustable = true;
       let it = order ? ses.items.filter(i => i.order === order)[0] : null;
       if (it) { if (scheme) it.sets.push(scheme); continue; }
       const rc = resolveCell(ex, D);
-      it = { block: g(col['Bloque']) || null, tag: rc.tag, raw: ex, order: order || null, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max }))), sets: scheme ? [scheme] : [], presc: '' };
+      it = { block: g(col['Bloque']) || null, tag: rc.tag, raw: ex, order: order || null, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold }))), sets: scheme ? [scheme] : [], presc: '' };
       if (rc.inline) it.inline = rc.inline;
       if (!scheme) warnings.push('Fila ' + (r + 1) + ': «' + ex + '» sin %, repeticiones ni series');
       rc.alts.forEach(a => a.forEach(p => {
@@ -275,7 +301,7 @@
     const res = h ? parseTemplate(grid, D, h) : parseCristian(grid, merges, D);
     if (!res.weeks.length) throw new Error('El archivo no tiene semanas con ejercicios');
     res.stats.semanas = res.weeks.length; res.stats.sesiones = res.weeks.reduce((n, w) => n + w.sessions.length, 0);
-    res.stats.etapas = res.stages.length; res.stats.ejercicios = Object.keys(res.exercises).length;
+    res.stats.transicion = res.weeks.filter(w => w.kind === 'transition').length; res.stats.etapas = res.stages.length; res.stats.ejercicios = Object.keys(res.exercises).length;
     return res;
   }
 

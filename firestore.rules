@@ -100,7 +100,7 @@ service cloud.firestore {
       match /weeks/{weekId} {
         allow read: if canReadPlan();
         allow create, update: if isCoach()
-          && request.resource.data.keys().hasOnly(['stageId', 'week', 'label', 'notes', 'sessions'])
+          && request.resource.data.keys().hasOnly(['stageId', 'week', 'label', 'kind', 'notes', 'sessions'])
           && request.resource.data.week is int && request.resource.data.sessions is list && request.resource.data.sessions.size() <= 7;
         allow delete: if isCoach();
       }

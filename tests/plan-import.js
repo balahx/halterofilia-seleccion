@@ -56,4 +56,19 @@ ok(created['strange-lift'] && created['strange-lift'].es === 'Levantamiento raro
 const again = P.parsePlan([head, ['E', 1, 'Lunes', 1, '', 'cosa rara', 70, '3', 3, '']], [], [{ id: 'strange-lift', en: 'Strange Lift', es: 'Levantamiento raro', aliases: ['cosa rara'] }]);
 ok(again.unknown.length === 0, 'con el catálogo guardado ya no queda nada por nombrar');
 let threw = false; try { P.parsePlan([['x']], []); } catch (e) { threw = true; } ok(threw, 'un archivo sin semanas da error claro');
+
+console.log('5. Aclaraciones del entrenador (5-nov)');
+const g5 = [head, ['E', 1, 'Lunes', 1, '', 'biceps 30', '', '', '', ''], ['E', 1, 'Lunes', 2, '', 'Biceps barra 24 20k', '', '', '', ''], ['E', 1, 'Lunes', 3, '', 'hangmuscclean+hiperCln63k/drive stif + iso carga 80 90 100 (15")', 90, '1', 3, ''],
+  ['E', 1, 'Lunes', 4, '', 'AA balance', 70, '3', 3, ''], ['E', 1, 'Lunes', 5, '', 'plancha 30" 65kk', 70, '', 3, ''], ['E', 2, '', '', '', 'Transición', '', '', '', 'descanso']];
+const r5 = P.parsePlan(g5, []), its = r5.weeks[0].sessions[0].items;
+ok(its[0].alts[0][0].exId === 'barbell-biceps-curl' && its[0].alts[0][0].hold === 30, '«biceps 30» = curl de bíceps con 30 s de espera isométrica');
+ok(its[1].alts[0][0].hold === 24, '«Biceps barra 24 20k»: 24 s (los 20 kg no se guardan)');
+const iso = its[2].alts[1][1]; ok(iso.exId === 'overload-isometric-hold' && iso.hold === 15 && its[2].alts[0].length === 2, '«iso carga … (15")» = isométrico con sobrecarga, 15 s; «/» separa variantes');
+ok(its[3].alts.length === 1 && its[3].alts[0].length === 1 && its[3].alts[0][0].exId === 'snatch-balance', '«AA balance» es un solo ejercicio');
+ok(its[4].alts[0][0].exId === '30-second-plank', 'plancha 30\" = 30 s');
+ok(its[2].sets[0].adjustable === true && its[3].sets[0].adjustable !== true, 'desde 90% queda marcado como ajustable por el entrenador');
+const pr = P.parsePresc('90% 95% |00 o más ');
+ok(pr.length === 3 && pr[2].pct === 100 && pr[2].orMore && pr.every(x => x.adjustable), '«90% 95% |00 o más» → 90, 95 y 100 o más, todos ajustables');
+const tw = r5.weeks.find(w => w.week === 2);
+ok(tw && tw.kind === 'transition' && tw.sessions.length === 0 && /descarga física y mental/.test(tw.notes[0]) && r5.stats.transicion === 1, 'fila «Transición» = semana de transición, sin sesiones');
 console.log(fails ? '\n' + fails + ' fallo(s)' : '\nTodo bien'); process.exit(fails ? 1 : 0);

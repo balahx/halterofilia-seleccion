@@ -75,9 +75,9 @@
   /* ---------- Publicar ---------- */
   const clean = o => JSON.parse(JSON.stringify(o));
   function weekDoc(w) {
-    return clean({ stageId: w.stageId, week: w.week, label: w.label || '', notes: (w.notes || []).slice(0, 12).map(n => String(n).slice(0, 300)),
+    return clean({ stageId: w.stageId, week: w.week, label: w.label || '', kind: w.kind || '', notes: (w.notes || []).slice(0, 12).map(n => String(n).slice(0, 300)),
       sessions: w.sessions.map(s => ({ day: s.day, name: s.name, items: s.items.map(it => ({ block: it.block || '', tag: it.tag || '', raw: String(it.raw).slice(0, 200), presc: it.presc || '',
-        sets: it.sets, inline: it.inline || null, alts: it.alts.map(a => ({ p: a.map(p => ({ src: p.src, ex: p.exId, mult: p.mult, max: !!p.max })) })) })) })) });
+        sets: it.sets, inline: it.inline || null, alts: it.alts.map(a => ({ p: a.map(p => ({ src: p.src, ex: p.exId, mult: p.mult, max: !!p.max, hold: p.hold })) })) })) })) });
   }
   async function publish() {
     const I = window.PlanImport, pv = P.preview; if (!pv || P.busy) return;
@@ -109,18 +109,18 @@
   /* Muestra de la primera semana para comprobar que cada prescripción quedó con su ejercicio */
   function sampleHTML(pv) {
     const w = pv.weeks.filter(x => x.sessions.length)[0]; if (!w) return '';
-    const s = w.sessions[0], nm = p => (p.exId && pv.exercises[p.exId] ? pv.exercises[p.exId].en : p.src) + (p.mult > 1 ? ' ×' + p.mult : '');
+    const s = w.sessions[0], nm = p => (p.exId && pv.exercises[p.exId] ? pv.exercises[p.exId].en : p.src) + (p.mult > 1 ? ' ×' + p.mult : '') + (p.hold ? ' (' + p.hold + ' s isométrico)' : '');
     const rows = s.items.slice(0, 8).map(it => {
       const sets = it.sets.length ? it.sets.map(x => (x.pct != null ? x.pct + '% ' : '') + x.reps + ' × ' + x.sets).join(' · ') : '<i>sin prescripción</i>';
       return `<li><b>${esc(it.alts.map(a => a.map(nm).join(' + ')).join(' / '))}</b><small>${sets}</small></li>`;
     }).join('');
     return `<div class="card sec"><span class="eyebrow">Muestra · semana ${w.week}, ${esc(s.name)}</span><ul class="plain">${rows}</ul>
-      <p class="muted">Comprueba que cada ejercicio tenga su % y series. Los % son del máximo del mismo ejercicio (arranque o envión).</p></div>`;
+      <p class="muted">Comprueba que cada ejercicio tenga su % y series. Los % son del máximo del mismo ejercicio (arranque o envión). Desde 90% son una referencia: el entrenador los ajusta a cada atleta.</p></div>`;
   }
   function previewHTML() {
     const pv = P.preview, st = pv.stats;
     let h = `<div class="card sec"><span class="eyebrow">Revisión · ${esc(P.file)}</span>
-      <p class="muted">Formato leído: <b>${pv.format === 'plantilla' ? 'plantilla simple' : 'planilla de Cristian'}</b>. ${st.etapas} etapa${st.etapas === 1 ? '' : 's'}, ${st.semanas} semanas, ${st.sesiones} sesiones, ${st.items} ejercicios, ${st.ejercicios} distintos reconocidos.</p>
+      <p class="muted">Formato leído: <b>${pv.format === 'plantilla' ? 'plantilla simple' : 'planilla de Cristian'}</b>. ${st.etapas} etapa${st.etapas === 1 ? '' : 's'}, ${st.semanas} semanas, ${st.sesiones} sesiones, ${st.items} ejercicios, ${st.ejercicios} distintos reconocidos.${st.transicion ? ' Semanas de transición (descanso de halterofilia): ' + pv.weeks.filter(w => w.kind === 'transition').map(w => w.week).join(', ') + '.' : ''}</p>
       <ul class="plain">${stageSummary(pv)}</ul></div>`;
     h += sampleHTML(pv);
     if (pv.unknown.length) {
