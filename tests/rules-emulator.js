@@ -93,6 +93,26 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
   await denied(coach.doc('config/backup').set({ at: TS(), by: 'ana' }), 'queda a nombre de quien la guarda');
   await denied(coach.doc('config/backup').set({ at: TS(), by: 'coach', extra: 1 }), 'sin campos de más');
 
+  console.log('6. Competencias (4.10)');
+  const cp = d => Object.assign({ name: 'Nacional', date: '2026-11-28', place: 'Santiago', athletes: ['ana'], results: { ana: { sn: 90, cj: 110, total: 200 } }, by: 'coach', at: TS() }, d || {});
+  await succeeds(coach.doc('competitions/c1').set(cp()), 'el entrenador crea una competencia');
+  await denied(ana.doc('competitions/c2').set(cp({ by: 'ana' })), 'una atleta no crea competencias');
+  await denied(coach.doc('competitions/c3').set(cp({ name: '' })), 'con nombre');
+  await denied(coach.doc('competitions/c3').set(cp({ date: '28-11-2026-x' })), 'con fecha de 10 caracteres');
+  await denied(coach.doc('competitions/c3').set(cp({ extra: 1 })), 'sin campos de más');
+  await denied(coach.doc('competitions/c3').set(cp({ by: 'ana' })), 'queda a nombre del entrenador');
+  await denied(coach.doc('competitions/c3').set(cp({ at: NOW - 86400000 })), 'la hora la pone el servidor');
+  await denied(coach.doc('competitions/c3').set(cp({ athletes: 'ana' })), 'los inscritos son una lista');
+  await succeeds(coach.doc('competitions/c1').update({ results: { ana: { sn: 95, cj: 115, total: 210 } }, at: TS() }), 'el entrenador actualiza las marcas');
+  await succeeds(ana.doc('competitions/c1').get(), 'una atleta aprobada lee las competencias');
+  await succeeds(ana.collection('competitions').get(), 'y la lista completa');
+  await succeeds(gus.doc('competitions/c1').get(), 'otro atleta aprobado también');
+  await denied(carla.doc('competitions/c1').get(), 'una cuenta sin aprobar no las lee');
+  await denied(anon.doc('competitions/c1').get(), 'sin iniciar sesión no se lee nada');
+  await denied(ana.doc('competitions/c1').update({ results: {}, at: TS() }), 'una atleta no cambia marcas');
+  await denied(ana.doc('competitions/c1').delete(), 'ni elimina');
+  await succeeds(coach.doc('competitions/c1').delete(), 'el entrenador elimina');
+
   await env.cleanup();
   console.log(fails ? 'FALLAS: ' + fails : 'Todo bien'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

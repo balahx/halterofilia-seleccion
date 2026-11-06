@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso), 2 (datos propios de cada atleta), 3 (plan anual) y 4 (semana asignada).
+// Halterofilia · Selección — reglas de las fases 1 (cuentas y acceso), 2 (datos propios de cada atleta), 3 (plan anual), 4 (semana asignada) y 4.10 (competencias).
 // Todo lo que no está permitido aquí queda prohibido.
 // Fase 3: plan anual. Fase 4: semana asignada a cada atleta, sesiones cumplidas y ajuste de porcentajes (al final del archivo).
 
@@ -239,6 +239,24 @@ service cloud.firestore {
         && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 400))
         && request.resource.data.sessions is list && request.resource.data.sessions.size() >= 1 && request.resource.data.sessions.size() <= 14
         && request.resource.data.setBy == request.auth.uid
+        && request.resource.data.at == request.time;
+      allow delete: if isCoach();
+    }
+
+    // Competencias (4.10): calendario del equipo y marcas oficiales. Las lee todo el equipo (atletas aprobados y entrenador);
+    // las escribe solo el entrenador. athletes = uids de los inscritos; results = { uid: { sn, cj, total, cat?, place? } }.
+    match /competitions/{cid} {
+      allow read: if signedIn() && (isCoach() || isMember());
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['name', 'date', 'place', 'note', 'athletes', 'results', 'by', 'at'])
+        && request.resource.data.keys().hasAll(['name', 'date', 'athletes', 'by', 'at'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+        && request.resource.data.date is string && request.resource.data.date.size() == 10
+        && (!('place' in request.resource.data) || (request.resource.data.place is string && request.resource.data.place.size() <= 80))
+        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 400))
+        && request.resource.data.athletes is list && request.resource.data.athletes.size() <= 100
+        && (!('results' in request.resource.data) || (request.resource.data.results is map && request.resource.data.results.size() <= 100))
+        && request.resource.data.by == request.auth.uid
         && request.resource.data.at == request.time;
       allow delete: if isCoach();
     }

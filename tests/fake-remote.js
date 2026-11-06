@@ -64,6 +64,15 @@
         && typeof d.uid === 'string' && !!s.docs['members/' + d.uid] && typeof d.name === 'string' && d.name.length > 0 && d.name.length <= 80
         && (!('note' in d) || (typeof d.note === 'string' && d.note.length <= 400)) && (!('mode' in d) || d.mode === 'extra' || d.mode === 'replace') && Array.isArray(d.sessions) && d.sessions.length >= 1 && d.sessions.length <= 14 && d.setBy === u.uid;
     }
+    if (col === 'competitions') {   // calendario del equipo: lo lee el equipo, lo escribe el entrenador
+      if (op === 'get' || op === 'list') return coach || member;
+      if (op === 'delete') return coach;
+      const d = data || {};
+      return coach && keysOnly(d, ['name', 'date', 'place', 'note', 'athletes', 'results', 'by', 'at']) && ['name', 'date', 'athletes', 'by', 'at'].every(k => k in d)
+        && typeof d.name === 'string' && d.name.length > 0 && d.name.length <= 80 && typeof d.date === 'string' && d.date.length === 10
+        && (!('place' in d) || (typeof d.place === 'string' && d.place.length <= 80)) && (!('note' in d) || (typeof d.note === 'string' && d.note.length <= 400))
+        && Array.isArray(d.athletes) && d.athletes.length <= 100 && (!('results' in d) || (d.results && typeof d.results === 'object' && !Array.isArray(d.results) && Object.keys(d.results).length <= 100)) && d.by === u.uid;
+    }
     if (col === 'users') { // users/{uid}/records/{clave}
       const owner = u.uid === id;
       if (op === 'get' || op === 'list') return coach || (owner && member);
@@ -192,6 +201,8 @@
     async setAdjust(id, pcts) { mutate('create', 'adjustments/' + id, { pcts, at: Date.now() }); }
     async setRoutine(id, d) { mutate('create', 'routines/' + id, Object.assign({}, d, { at: Date.now() })); inv('routines'); }
     async deleteRoutine(id) { mutate('delete', 'routines/' + id); inv('routines'); }
+    async setCompetition(id, d) { mutate('create', 'competitions/' + id, Object.assign({}, d, { at: Date.now() })); inv('competitions'); }
+    async deleteCompetition(id) { mutate('delete', 'competitions/' + id); inv('competitions'); }
     async deleteAdjust(id) { mutate('delete', 'adjustments/' + id); }
     async deletePlan(id, wasActive) {
       Object.keys(rd().docs).filter(k => k.startsWith('plans/' + id + '/')).forEach(k => mutate('delete', k));

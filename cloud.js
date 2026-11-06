@@ -164,6 +164,9 @@
     /* Rutinas especiales del entrenador para un atleta */
     setRoutine(id, d) { return this.m.fs.setDoc(this._doc('routines/' + id), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })).then(r => { inv('routines'); return r; }); }
     deleteRoutine(id) { return this.m.fs.deleteDoc(this._doc('routines/' + id)).then(r => { inv('routines'); return r; }); }
+    /* Competencias (4.10): las escribe solo el entrenador; la lista se renueva en reads.js */
+    setCompetition(id, d) { return this.m.fs.setDoc(this._doc('competitions/' + id), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })).then(r => { inv('competitions'); return r; }); }
+    deleteCompetition(id) { return this.m.fs.deleteDoc(this._doc('competitions/' + id)).then(r => { inv('competitions'); return r; }); }
     async deletePlan(id, wasActive) {
       const { getDocs, collection } = this.m.fs, ops = [];
       for (const sub of ['weeks', 'stages']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
@@ -390,14 +393,14 @@
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
     if (!changed) { if (!offline) startLive(); window.HalterApp.render(); return; }
     noticePrivacy();
-    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI(); initBackupUI(); initCompareUI();
+    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI(); initBackupUI(); initCompareUI(); initCompUI();
     hideGate();
     const fresh = window.HalterApp.start({
       cloud: true, requireSex: role !== 'coach', sex: role !== 'coach' ? pendingSex() : null, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
-      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView, badge: () => C.requests.filter(x => x.status !== 'rejected').length }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []).concat(window.HalterAssign ? [{ id: 'semana', label: 'Mi semana', icon: 'semana', render: window.HalterAssign.athleteView }] : [])
-        : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []),
+      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView, badge: () => C.requests.filter(x => x.status !== 'rejected').length }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []).concat(window.HalterAssign ? [{ id: 'semana', label: 'Mi semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []).concat(compTab())
+        : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []).concat(compTab()),
       nav: role === 'coach' ? [['equipo'], ['planual'], ['semana', 'Mi semana'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
-      more: moreInfo, hoyHTML: () => window.HalterAssign ? window.HalterAssign.todayHTML() : '',
+      more: moreInfo, hoyHTML: () => (window.HalterComp ? window.HalterComp.nextCardHTML() : '') + (window.HalterAssign ? window.HalterAssign.todayHTML() : ''),
       accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
       onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
     });
@@ -414,6 +417,7 @@
     C.live = key;
     if (C.role === 'coach') watchCoachLists();
     if (window.HalterAssign) { if (C.role === 'coach') window.HalterAssign.startCoach(C.user.uid); else window.HalterAssign.startAthlete(C.user.uid, false); }
+    if (window.HalterComp) C.unsub.push(window.HalterComp.start());
   }
   let planInit = false;
   function initPlanUI() {
@@ -430,27 +434,35 @@
     if (compareInit || !window.HalterCompare) return; compareInit = true;
     window.HalterCompare.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, members: () => C.members });
   }
+  let compInit = false;
+  function initCompUI() {
+    if (compInit || !window.HalterComp) return; compInit = true;
+    window.HalterComp.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, members: () => C.members, role: () => C.role, uid: () => (C.user ? C.user.uid : '') });
+  }
+  const compTab = () => window.HalterComp ? [{ id: 'competencias', label: 'Competencias', icon: 'trophy', render: window.HalterComp.view }] : [];
   let backupInit = false;
   function initBackupUI() {
     if (backupInit || !window.HalterBackup) return; backupInit = true;
     window.HalterBackup.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, who: () => (C.user && C.user.email) || '' });
   }
   function deactivate() {
-    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); if (window.HalterBackup) window.HalterBackup.reset(); if (window.HalterCompare) window.HalterCompare.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
+    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); if (window.HalterBackup) window.HalterBackup.reset(); if (window.HalterCompare) window.HalterCompare.reset(); if (window.HalterComp) window.HalterComp.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
   }
 
   /* Datos de la pantalla «Más» (el resto lo arma app.js) */
   function moreInfo() {
     const coach = C.role === 'coach';
     const o = { coach: coach, logout: true, sync: () => syncText(C.sync && C.sync.current) };
+    const cp = window.HalterComp ? { ico: 'trophy', t: 'Competencias', s: window.HalterComp.moreText(), tab: 'competencias' } : null;
+    if (!coach && cp) o.team = [cp];
     if (coach) {
       const pend = C.requests.filter(x => x.status !== 'rejected').length;
       o.name = C.name || (C.user && C.user.email) || 'Entrenador';
       o.sub = 'Entrenador · ' + C.members.length + (C.members.length === 1 ? ' atleta aprobado' : ' atletas aprobados');
       o.chip = 'Entrenador';
       o.team = [{ ico: 'cloud', t: 'Descargar respaldo del equipo', s: 'Archivo con todos los datos · guárdalo en un lugar privado', act: 'bk-run' },
-        { ico: 'prog', t: 'Marcas del equipo', s: 'Comparar atletas por categoría de peso', tab: 'marcas' },
-        { ico: 'team', t: 'Solicitudes de acceso', s: pend ? pend + (pend === 1 ? ' nueva' : ' nuevas') : 'Sin solicitudes nuevas', tab: 'equipo', chip: pend ? String(pend) : '' }];
+        { ico: 'prog', t: 'Marcas del equipo', s: 'Comparar atletas por categoría de peso', tab: 'marcas' }].concat(cp ? [cp] : []).concat([
+        { ico: 'team', t: 'Solicitudes de acceso', s: pend ? pend + (pend === 1 ? ' nueva' : ' nuevas') : 'Sin solicitudes nuevas', tab: 'equipo', chip: pend ? String(pend) : '' }]);
     }
     return o;
   }
@@ -504,6 +516,7 @@
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
       case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rt-new': case 'rt-edit': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': case 'rp-toggle': case 'rp-refresh': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
+      case 'cp-new': case 'cp-edit': case 'cp-cancel': case 'cp-save': case 'cp-del': if (window.HalterComp) window.HalterComp.onAct(act, el); window.HalterApp.render(); break;
       case 'cmp-sex': case 'cmp-cat': case 'cmp-refresh': case 'cmp-open': if (window.HalterCompare) window.HalterCompare.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
@@ -514,7 +527,7 @@
 
   /* ---------- Acciones de las pantallas de ingreso ---------- */
   async function doLogout() {
-    try { stopSync(); if (window.HalterCompare) window.HalterCompare.reset(); if (window.HalterPlan) window.HalterPlan.reset(); if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
+    try { stopSync(); if (window.HalterCompare) window.HalterCompare.reset(); if (window.HalterComp) window.HalterComp.reset(); if (window.HalterPlan) window.HalterPlan.reset(); if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
       if (C.remote) await C.remote.signOut(); } catch (e) { /* sin conexión: igual se cierra la sesión local */ }
     C.user = null; C.phase = 'signedout'; showGate(true);
   }

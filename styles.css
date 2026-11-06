@@ -630,3 +630,22 @@ input.file { padding: 10px 0; }
   #view[data-tab="max"] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 28px; align-items: start; }
   #view[data-tab="max"] > :first-child, #view[data-tab="max"] > :nth-last-child(-n+3) { grid-column: 1 / -1; }
 }
+
+/* Competencias (4.10) */
+.cp-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.cp-count { flex: none; min-width: 74px; text-align: center; }
+.cp-count b { display: block; font: 700 44px/1 var(--font-display); color: var(--ink); }
+.cp-count.sm b { font-size: 34px; }
+.cp-count small { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.cp-info { display: grid; gap: 2px; min-width: 0; }
+.cp-info b { overflow-wrap: anywhere; }
+.cp-next { border-top: 3px solid var(--gold, #A07E34); }
+.cp-card .stack { margin-top: 8px; }
+.cp-res li { display: grid; gap: 2px; }
+.cp-mine { margin: 8px 0 0; }
+.cp-fs { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 12px; padding: 4px 12px 10px; min-width: 0; }
+.cp-fs legend { padding: 0 6px; font-weight: 600; }
+
+.cp-h { margin: 24px 0 10px; }
+.cp-top { margin: 14px 0 0; }
+.cp-card .lnk.danger { align-self: center; }
