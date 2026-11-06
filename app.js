@@ -550,7 +550,7 @@ function weekStrip() {
 function planItemsList(day) {
   return '<ul class="plan-list">' + day.items.map(p => {
     const e = ex(p.exId);
-    return '<li>' + plateDot(zoneOf(p.pct)) + '<span class="pl-n">' + esc(nm(e)) + '</span><span class="pl-d">' + esc(planPreview(p, e)) + (p.pct > 0 ? ' · ' + fmtNum(p.pct, 1) + '%' : '') + '</span></li>';
+    return '<li>' + plateDot(zoneOf(p.pct)) + '<span class="pl-n">' + esc(nm(e)) + '</span><span class="pl-d">' + esc(planPreview(p, e)) + (p.pct > 0 ? '<small>' + fmtNum(p.pct, 1) + '%</small>' : '') + '</span></li>';
   }).join('') + '</ul>';
 }
 function viewHoy() {
@@ -566,8 +566,8 @@ function viewHoy() {
   let h = '<section class="sec"><p class="eyebrow">' + esc(cap(fmtDay.format(now))) + '</p><h1>' + esc(title) + '</h1><p class="muted">' + esc(sub) + '</p>' + weekStrip() + '</section>';
   if (day.on) {
     h += '<section class="card sec">' + (day.items.length ? planItemsList(day) : '<p class="muted">Arma la sesión en la pestaña Plan.</p>') +
-      '<div class="actions"><button class="btn" data-act="start" data-d="' + di + '">Iniciar entrenamiento</button>' +
-      (day.items.length ? '' : '<button class="btn ghost" data-act="tab" data-tab="plan">Ir al plan</button>') + '</div></section>';
+      '<div class="actions go"><button class="btn block" data-act="start" data-d="' + di + '">' + svg('play') + '<span>Iniciar entrenamiento</span></button>' +
+      (day.items.length ? '' : '<button class="btn ghost block" data-act="tab" data-tab="plan">Ir al plan</button>') + '</div></section>';
   }
   const lastBw = Array.isArray(S.profile.bwLog) && S.profile.bwLog.length ? S.profile.bwLog[S.profile.bwLog.length - 1] : null;
   const bwStale = !lastBw || daysBetween(parseYmd(lastBw.d), now) >= 7;
@@ -619,8 +619,8 @@ function exerciseCard(it, i) {
     '<button class="lnk danger" data-act="rm-ex" data-i="' + i + '">' + confirmLabel('rm' + i, 'Quitar ejercicio', 'Confirmar quitar') + '</button></div></article>';
 }
 function viewLogger(s) {
-  let h = '<section class="sec"><div class="logger-head"><div><p class="eyebrow">En curso · <span id="sessClock">' + fmtClock((Date.now() - s.startedAt) / 1000) + '</span></p><h1>' + esc(s.name) + '</h1></div>' +
-    '<button class="btn sm" data-act="finish">Terminar</button></div>' + legendHTML() + '</section>';
+  let h = '<section class="sec"><div class="logger-head"><div><p class="eyebrow"><span class="live">En curso</span> · <span id="sessClock">' + fmtClock((Date.now() - s.startedAt) / 1000) + '</span></p><h1>' + esc(s.name) + '</h1></div>' +
+    '<button class="btn sm gold" data-act="finish">' + svg('check') + '<span>Terminar</span></button></div>' + legendHTML() + '</section>';
   h += s.items.map((it, i) => exerciseCard(it, i)).join('');
   h += '<button class="btn ghost block" data-act="add-ex">+ Añadir ejercicio</button>';
   h += '<p class="muted hint">Complex: escribe <b>1+2</b> en reps (1 cargada + 2 jerk). ¿No está tu ejercicio o complex? <button class="lnk" data-act="ex-new-sess">Créalo aquí</button></p>';

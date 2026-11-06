@@ -268,8 +268,9 @@
   /* ---------- Atleta ---------- */
   function sessionCard(w, si, ses) {
     const S = window.HalterApp.state(), done = !!A.me.done[si], adj = A.me.adj, rounding = (S.profile && S.profile.rounding) || 1, lang = (S.profile && S.profile.exLang) || 'en';
-    let block = null, h = `<div class="card sec"><div class="person"><div><b>${esc(dayLabel(ses.day))}${ses.name && ses.name !== dayLabel(ses.day) ? ' · ' + esc(ses.name) : ''}</b><small>${(ses.items || []).length} ${(ses.items || []).length === 1 ? 'ejercicio' : 'ejercicios'}</small></div>` +
-      (done ? '<span class="badge ok">Cumplida</span>' : '') + '</div><ul class="plain">';
+    const todayNo = ((new Date().getDay() + 6) % 7) + 1;
+    let block = null, h = `<div class="card sec${ses.day === todayNo && !done ? ' today' : ''}"><div class="person"><div><b>${esc(dayLabel(ses.day))}${ses.name && ses.name !== dayLabel(ses.day) ? ' · ' + esc(ses.name) : ''}</b><small>${(ses.items || []).length} ${(ses.items || []).length === 1 ? 'ejercicio' : 'ejercicios'}</small></div>` +
+      (done ? '<span class="badge ok">Cumplida</span>' : ses.day === todayNo ? '<span class="badge gd">Hoy</span>' : '') + '</div><ul class="plain">';
     (ses.items || []).forEach((it, ii) => {
       if (it.block && it.block !== block) { block = it.block; h += `<li class="blk"><span class="eyebrow">${esc(block)}</span></li>`; }
       const ps = mainParts(it), ref = refFor(S, it, adj);
@@ -288,7 +289,7 @@
       h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? (ps.length > 1 ? ' · sin máximo: anota el de uno de sus movimientos en «Máximos»' : ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)') : ''}</small></li>`;
     });
     h += '</ul>';
-    if (w.kind !== 'transition') h += `<div class="actions"><button class="btn${done ? ' ghost' : ''}" data-act="as-start" data-i="${si}">${done ? 'Registrar de nuevo' : 'Iniciar esta sesión'}</button></div>`;
+    if (w.kind !== 'transition') h += `<div class="actions"><button class="btn block${done ? ' ghost' : ''}" data-act="as-start" data-i="${si}">${done ? 'Registrar de nuevo' : '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/></svg><span>Iniciar esta sesión</span>'}</button></div>`;
     return h + '</div>';
   }
   function athleteView() {
@@ -299,14 +300,14 @@
     if (!a) return h + '<div class="card sec"><p class="muted">Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».</p></div>';
     const w = m.week;
     if (!w) return h + '<div class="card sec"><p class="muted">Cargando la semana…</p></div>';
-    h += `<div class="card sec"><span class="eyebrow">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
+    h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
       (w.kind === 'transition' ? '<p class="muted">Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.</p>' : '') +
       (w.notes && w.notes.length && w.kind !== 'transition' ? '<ul class="plain">' + w.notes.map(n => `<li><small>${esc(n)}</small></li>`).join('') + '</ul>' : '') +
       `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small></div>`;
     h += (w.sessions || []).map((s, i) => sessionCard(w, i, s)).join('');
     const st = advanceState(a, w, m.done, Date.now());
     h += `<div class="card sec"><span class="eyebrow">Cambiar de semana</span><p class="muted">${st.ok ? 'Cumpliste la última sesión y ya pasó el corte: puedes pasar a la semana siguiente.' : esc(st.why)}</p>` +
-      `<div class="actions"><button class="btn" data-act="as-advance"${st.ok && !A.busy ? '' : ' disabled'}>${A.busy || 'Pasar a la semana siguiente'}</button></div></div>`;
+      `<div class="actions"><button class="btn ghost block" data-act="as-advance"${st.ok && !A.busy ? '' : ' disabled'}>${A.busy || 'Pasar a la semana siguiente'}</button></div></div>`;
     return h;
   }
   function startSession(i) {

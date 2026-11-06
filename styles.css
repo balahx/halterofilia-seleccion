@@ -127,12 +127,20 @@ button, input, select, textarea { font-family: inherit; }
 .plan-list li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .plan-list li:last-child { border-bottom: 0; }
 .pl-n { font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.pl-d { color: var(--muted); font-size: 13.5px; text-align: right; }
+.pl-d { color: var(--ink); font-family: var(--font-display); font-weight: 700; font-size: 16px; text-align: right; white-space: nowrap; display: grid; justify-items: end; line-height: 1.15; }
+.pl-d small { font-family: var(--font-body); font-weight: 500; font-size: 12px; color: var(--muted); }
+.actions.go { margin-top: 16px; }
+.actions.go .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.actions.go .btn svg { width: 18px; height: 18px; }
 .last { display: grid; gap: 2px; margin-bottom: 6px; }
 
 /* registro */
 .logger-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.logger-head h1 { font-size: 32px; }
 .logger-head .btn { margin-top: 18px; }
+.btn.gold { background: transparent; color: var(--ink); border-color: var(--gold); }
+.btn.gold svg { width: 16px; height: 16px; color: var(--gold); }
+.eyebrow .live::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 7px; vertical-align: 1px; }
 .exc-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
 .rest { display: flex; flex-direction: column; gap: 3px; font: 600 11px var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .set { display: grid; grid-template-columns: 22px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 48px; gap: 6px; align-items: center; margin-bottom: 6px; }
@@ -445,3 +453,11 @@ details > summary { cursor: pointer; }
 .sync-card { display: flex; align-items: center; gap: 12px; }
 .sync-card .ic { color: var(--ok); width: 26px; height: 26px; flex: none; }
 .sync-card small { display: block; color: var(--muted); font-size: 12.5px; }
+
+/* Semana (atleta) */
+.wk-card .lead { font: 700 26px/1.1 var(--font-display); color: var(--ink); margin: 0 0 8px; }
+.eyebrow.gd { color: var(--gold-ink); }
+.card.today { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.badge.gd { background: var(--gold-bg); color: var(--gold-ink); }
+.card .actions .btn.block { margin-bottom: 0; }
+.btn .ic { width: 18px; height: 18px; }
