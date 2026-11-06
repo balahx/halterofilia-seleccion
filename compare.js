@@ -109,7 +109,7 @@
     const d = K.detail[uid];
     if (!d || d.loading) return '<div class="cmp-det"><p class="muted">Leyendo marcas…</p></div>';
     if (d.err) return '<div class="cmp-det"><p class="warn-t">' + esc(d.err) + '</p></div>';
-    if (!d.list.length) return '<div class="cmp-det"><p class="muted">Este atleta aún no tiene máximos guardados.</p></div>';
+    if (!d.list.length) return '<div class="cmp-det">' + window.HalterApp.empty('max', 'Sin máximos guardados', 'Este atleta aún no registra máximos.') + '</div>';
     return '<div class="cmp-det"><div class="ratios">' + d.list.map(e => '<div class="ratio"><span>' + esc(e.name) + (e.date ? ' <small class="dim">' + esc(dateText(e.date)) + '</small>' : '') + '</span><b>' + fmt(e.max, 1) + ' kg' +
       (e.goal > 0 ? ' <small class="dim">meta ' + fmt(e.goal, 1) + (e.goalDate ? ' al ' + esc(dateText(e.goalDate)) : '') + '</small>' : '') + '</b></div>').join('') + '</div></div>';
   }
@@ -137,7 +137,7 @@
     if (K.err) h += '<div class="note warn">' + esc(K.err) + '</div>';
     if (K.rows === null || (K.loading && !K.rows)) return h + '<p class="muted">Leyendo marcas del equipo…</p>';
     const rows = K.rows || [];
-    if (!rows.length) return h + '<div class="card sec"><p class="muted">' + (members.length ? 'No hay datos para mostrar todavía.' : 'Aún no hay atletas aprobados.') + '</p></div>';
+    if (!rows.length) return h + window.HalterApp.empty(members.length ? 'prog' : 'team', members.length ? 'Sin datos todavía' : 'Aún no hay atletas aprobados', members.length ? 'Los datos aparecen cuando los atletas registran máximos.' : 'Aprueba solicitudes en «Equipo».');
     const cats = catsPresent(rows, K.sex, P);
     if (K.cat !== 'all' && cats.indexOf(K.cat) < 0) K.cat = 'all';
     const pill = (act, v, label, on) => '<button class="pill" data-act="' + act + '" data-v="' + esc(v) + '" aria-pressed="' + on + '">' + esc(label) + '</button>';

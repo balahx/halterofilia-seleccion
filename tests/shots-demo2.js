@@ -26,6 +26,10 @@ const srv = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split
     await page.evaluate(() => { const d = document.getElementById('dlg'); d.open && d.close(); });
     await page.evaluate(() => { const t = document.querySelector('[data-act="tick"]'); t && t.click(); });
     await page.evaluate(() => document.querySelector('[data-act="finish"]').click()); await shot('finish');
+    await page.evaluate(() => document.querySelector('[data-act="fin-mark"]').click()); await shot('summary');
+    await page.evaluate(() => { const d = document.getElementById('dlg'); d.open && d.close(); });
+    await page.evaluate(() => { const S = HalterApp.state(); S.sessions = []; HalterApp.render(); }); await tab('prog'); await shot('empty-prog');
+    await tab('hoy'); await shot('hoy-bw');
     await ctx.close();
   }
   await br.close(); srv.close();

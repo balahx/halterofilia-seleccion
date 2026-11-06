@@ -497,10 +497,18 @@ const IC = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   play: '<path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/>',
   pause: '<path d="M8 5.5v13M16 5.5v13" stroke-width="3"/>',
-  reset: '<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5V9h4.5"/>'
+  reset: '<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5V9h4.5"/>',
+  hist: '<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5V9h4.5"/><path d="M12 8v4.5l3 1.8"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 6H5v1.5A3 3 0 008 10.5M16 6h3v1.5a3 3 0 01-3 3M12 13v4M8.5 20h7M10 17h4"/>',
+  warn: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5M12 17.2v.1"/>',
+  scale: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 9.5a4.5 4.5 0 017 0M12 14l2-3"/>'
 };
 function svg(n, c) {
   return '<svg class="ic ' + (c || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[n] + '</svg>';
+}
+/* Estado vacío común: icono, título, texto y (opcional) un botón. `text` y `action` son HTML ya escapado. */
+function emptyHTML(ico, title, text, action) {
+  return '<div class="empty"><span class="empty-ic">' + svg(ico) + '</span><b>' + esc(title) + '</b>' + (text ? '<p>' + text + '</p>' : '') + (action || '') + '</div>';
 }
 function plateDot(z) { return '<i class="pl pl-' + (z || 'none') + '" aria-hidden="true"></i>'; }
 function setDot(el, z) { if (el) el.className = 'pl pl-' + (z || 'none'); }
@@ -565,16 +573,15 @@ function viewHoy() {
   else { title = 'Día de descanso'; sub = 'No tienes sesión planificada hoy.'; }
   let h = '<section class="sec"><p class="eyebrow">' + esc(cap(fmtDay.format(now))) + '</p><h1>' + esc(title) + '</h1><p class="muted">' + esc(sub) + '</p>' + weekStrip() + '</section>';
   if (day.on) {
-    h += '<section class="card sec">' + (day.items.length ? planItemsList(day) : '<p class="muted">Arma la sesión en la pestaña Plan.</p>') +
+    h += '<section class="card sec">' + (day.items.length ? planItemsList(day) : emptyHTML('plan', 'Este día no tiene ejercicios', 'Arma la sesión en tu plan semanal.')) +
       '<div class="actions go"><button class="btn block" data-act="start" data-d="' + di + '">' + svg('play') + '<span>Iniciar entrenamiento</span></button>' +
       (day.items.length ? '' : '<button class="btn ghost block" data-act="tab" data-tab="plan">Ir al plan</button>') + '</div></section>';
   }
   const lastBw = Array.isArray(S.profile.bwLog) && S.profile.bwLog.length ? S.profile.bwLog[S.profile.bwLog.length - 1] : null;
   const bwStale = !lastBw || daysBetween(parseYmd(lastBw.d), now) >= 7;
   if (bwStale) {
-    h += '<section class="card sec"><p class="eyebrow">Peso corporal' + (lastBw ? ' · último ' + fmtNum(lastBw.kg, 1) + ' kg el ' + esc(shortDate(parseYmd(lastBw.d))) : '') + '</p>' +
-      '<p class="muted">' + 'Anótalo una vez por semana: define tu categoría de peso.</p>' +
-      ('<div class="row2"><input class="num" id="bwq" data-f="bwq" inputmode="decimal" autocomplete="off" placeholder="kg" aria-label="Peso corporal en kg"><button class="btn" data-act="bw-save">Guardar</button></div>') + '</section>';
+    h += '<section class="card sec bw-card"><div class="bw-head"><span class="empty-ic">' + svg('scale') + '</span><div><p class="eyebrow">Peso corporal semanal</p><p class="muted">' + (lastBw ? 'Último registro: ' + fmtNum(lastBw.kg, 1) + ' kg el ' + esc(shortDate(parseYmd(lastBw.d))) + '. ' : '') + 'Anótalo una vez por semana: define tu categoría de peso.</p></div></div>' +
+      '<div class="row2"><input class="num" id="bwq" data-f="bwq" inputmode="decimal" autocomplete="off" placeholder="kg" aria-label="Peso corporal en kg"><button class="btn" data-act="bw-save">Guardar</button></div></section>';
   }
   const others = [];
   S.plan.days.forEach((d, i) => { if (d.on && i !== di && d.items.length) others.push('<button class="btn ghost sm" data-act="start" data-d="' + i + '">' + DAYS_SHORT[i] + ' · ' + esc(d.name || 'Entrenamiento') + '</button>'); });
@@ -793,7 +800,7 @@ function viewProg() {
   const now = new Date(), cutYmd = ymd(addDays(now, -ui.range * 7));
   const all = endedSessions(), ss = all.filter(s => s.date >= cutYmd);
   let h = '<section class="sec"><h1>Progreso</h1><div class="rangebar" role="group" aria-label="Período">' + [4, 8, 12].map(n => '<button class="pill" data-act="range" data-v="' + n + '" aria-pressed="' + (ui.range === n) + '">' + n + ' semanas</button>').join('') + '</div></section>';
-  if (!all.length) return h + '<section class="card sec"><p class="muted">Cuando termines tu primera sesión aquí verás tu tonelaje, tus intensidades y la proyección de tus máximos.</p></section>';
+  if (!all.length) return h + emptyHTML('prog', 'Aún no hay sesiones', 'Cuando termines tu primera sesión aquí verás tu tonelaje, tus intensidades y la proyección de tus máximos.', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
   const tot = { ton: 0, sets: 0, reps: 0 };
   ss.forEach(s => { const t = sessionStats(s); tot.ton += t.ton; tot.sets += t.sets; tot.reps += t.reps; });
   h += '<section class="stats" aria-label="Resumen del período"><div><b>' + ss.length + '</b><span>sesiones</span></div><div><b>' + fmtNum(tot.sets, 0) + '</b><span>series</span></div><div><b>' + fmtNum(tot.ton, 0) + '</b><span>kg de tonelaje</span></div></section>';
@@ -876,7 +883,7 @@ function viewProg() {
 
   /* Historial */
   const list = ss.slice().sort((a, b) => b.endedAt - a.endedAt);
-  h += '<section class="sec"><h2>Historial</h2>' + (list.length ? '<div class="hlist">' + list.slice(0, ui.histN).map(histRow).join('') + '</div>' : '<p class="muted">No hay sesiones en este período.</p>') +
+  h += '<section class="sec"><h2>Historial</h2>' + (list.length ? '<div class="hlist">' + list.slice(0, ui.histN).map(histRow).join('') + '</div>' : emptyHTML('hist', 'Sin sesiones en este período', 'Prueba con un rango más amplio o registra una sesión nueva.')) +
     (list.length > ui.histN ? '<div class="row-end"><button class="btn ghost sm" data-act="hist-more">Ver más</button></div>' : '') + '</section>';
   return h;
 }
@@ -1283,7 +1290,7 @@ function pickList(q) {
     if (!list.length) continue;
     h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(nm(e)) + nmSub(e) + '</span><small' + (e.max > 0 ? '' : ' class="nomax"') + '>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
   }
-  return h || '<p class="muted">No hay coincidencias.</p>';
+  return h || emptyHTML('close', 'Sin coincidencias', 'Revisa la búsqueda o crea el ejercicio desde «Más».');
 }
 function settingsHTML() {
   const p = S.profile, ui2 = ui.sheet;
@@ -1326,14 +1333,14 @@ function exSheetHTML(id) {
     (id && used && !e.builtin ? '<p class="muted">No se puede eliminar porque ya tiene registros o está en tu plan.</p>' : '') + '</div>';
 }
 function summaryHTML(d) {
-  let h = '<div class="stats"><div><b>' + fmtDur(d.dur) + '</b><span>duración</span></div><div><b>' + d.sets + '</b><span>series</span></div><div><b>' + fmtNum(d.ton, 0) + '</b><span>kg de tonelaje</span></div></div>';
+  let h = '<div class="done-hero"><span class="done-ic">' + svg('check') + '</span><p>¡Buen trabajo! Tu sesión quedó guardada.</p></div><div class="stats"><div><b>' + fmtDur(d.dur) + '</b><span>duración</span></div><div><b>' + d.sets + '</b><span>series</span></div><div><b>' + fmtNum(d.ton, 0) + '</b><span>kg de tonelaje</span></div></div>';
   const extra = [];
   if (d.load > 0) extra.push('Carga de sesión: <b>' + fmtNum(d.load, 0) + ' UA</b> (' + d.min + ' min × RPE ' + fmtNum(d.rpe, 1) + ')');
   else if (d.min > 0) extra.push('Para calcular la carga de la sesión falta el RPE: anótalo por serie o en «Carga de la sesión».');
   if (d.intAvg > 0) extra.push('Intensidad media: <b>' + fmtNum(d.intAvg, 0) + ' %</b> del máximo');
   if (d.eff != null) extra.push('Efectividad: <b>' + fmtNum(d.eff, 0) + ' %</b>' + (d.missed ? ' (' + d.missed + (d.missed === 1 ? ' serie fallada' : ' series falladas') + ')' : ''));
   if (extra.length) h += '<ul class="recs">' + extra.map(x => '<li>' + x + '</li>').join('') + '</ul>';
-  h += d.records.length ? '<p class="eyebrow">Marcas de hoy</p><ul class="recs">' + d.records.map(r => '<li>' + plateDot('red') + esc(r) + '</li>').join('') + '</ul>' : '<p class="muted">Sin marcas nuevas hoy. La constancia también suma.</p>';
+  h += d.records.length ? '<p class="eyebrow">Marcas de hoy</p><ul class="recs prs">' + d.records.map(r => '<li>' + svg('trophy') + '<span>' + esc(r) + '</span></li>').join('') + '</ul>' : '<p class="muted">Sin marcas nuevas hoy. La constancia también suma.</p>';
   return h + '<div class="actions"><button class="btn" data-act="sheet-close">Listo</button><button class="lnk" data-act="to-prog">Ver progreso</button></div>';
 }
 function renderSheet() {
@@ -1614,7 +1621,7 @@ let refreshLater = false;
 function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
 function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
 document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
-window.HalterApp = { start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
+window.HalterApp = { empty: emptyHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
   /* cálculos compartidos con la vista del entrenador (compare.js) */
   pure: { categoryOf: categoryOf, catText: catText, catOptions: catOptions, catSortKey: catSortKey, fmtNum: fmtNum, SEX_LABEL: SEX_LABEL, shortDate: shortDate, parseYmd: parseYmd, ymd: ymd } };
 })();

@@ -472,3 +472,23 @@ dialog .actions > .lnk { margin: 0 auto; }
 .stats b { letter-spacing: .01em; }
 .pick small { font: 700 17px var(--font-display); color: var(--ink); }
 .pick small.nomax { font: 500 13.5px var(--font-body); color: var(--muted); }
+
+/* Estados vacíos y resumen de sesión terminada */
+.empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 26px 18px; margin: 0 0 14px; border: 1.5px dashed var(--line-strong); border-radius: 16px; background: transparent; }
+.card > .empty, .card .empty { border: 0; padding: 14px 4px; margin: 0; }
+.empty-ic { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--gold-bg); color: var(--gold-ink); }
+.empty-ic svg { width: 26px; height: 26px; }
+.empty b { font: 700 22px/1.1 var(--font-display); color: var(--ink); }
+.empty p { margin: 0; color: var(--muted); max-width: 34ch; }
+.empty .btn { margin-top: 8px; }
+.done-hero { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.done-hero p { margin: 0; font: 700 22px/1.15 var(--font-display); }
+.done-ic { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--ok); color: var(--on-ok); }
+.done-ic svg { width: 24px; height: 24px; }
+.recs.prs li { padding: 10px 12px; border-radius: 12px; background: var(--gold-bg); color: var(--ink); }
+.recs.prs svg { flex: none; width: 20px; height: 20px; color: var(--gold-ink); }
+
+.bw-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+.bw-head .eyebrow { margin-bottom: 2px; }
+.bw-head p.muted { margin: 0; }
+.bw-head .empty-ic { flex: none; width: 44px; height: 44px; }

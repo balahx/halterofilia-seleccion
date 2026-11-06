@@ -398,12 +398,12 @@
     let h = '<h1>Equipo</h1>';
     if (C.err) h += `<div class="note warn">${esc(C.err)}</div>`;
     h += `<div class="card sec"><span class="eyebrow">Solicitudes pendientes (${pend.length})</span>`;
-    h += pend.length ? pend.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-reject', p.id, 'Rechazar'))).join('') : '<p class="muted">No hay solicitudes pendientes.</p>';
+    h += pend.length ? pend.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-reject', p.id, 'Rechazar'))).join('') : window.HalterApp.empty('check', 'Sin solicitudes pendientes', '');
     h += '</div>';
     h += `<div class="card sec"><span class="eyebrow">Atletas aprobados (${mem.length})</span>`;
     const HA = window.HalterAssign;
     h += mem.length ? mem.map(p => `<div class="person"><div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}</small>${HA ? `<small>${esc(HA.summary(p.id))}</small>` : ''}</div><div class="acts">` +
-      (HA ? `<button class="btn sm" data-act="as-open" data-uid="${esc(p.id)}">Semana</button>` : '') + cf('eq-remove', p.id, 'Quitar acceso') + '</div></div>').join('') : '<p class="muted">Aún no has aprobado atletas.</p>';
+      (HA ? `<button class="btn sm" data-act="as-open" data-uid="${esc(p.id)}">Semana</button>` : '') + cf('eq-remove', p.id, 'Quitar acceso') + '</div></div>').join('') : window.HalterApp.empty('team', 'Aún no has aprobado atletas', 'Cuando alguien solicite acceso, aprueba su solicitud aquí arriba.');
     h += '</div>';
     if (rej.length) h += `<div class="card sec"><span class="eyebrow">Rechazadas (${rej.length})</span>` + rej.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-delreq', p.id, 'Borrar'))).join('') + '</div>';
     h += '<p class="muted">Quitar el acceso a un atleta no borra sus datos: solo le impide volver a entrar.</p>';

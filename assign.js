@@ -297,7 +297,7 @@
     let h = '<h1>Mi semana</h1>';
     if (A.err) h += `<div class="note warn">${esc(A.err)}</div>`;
     if (a === undefined) return h + '<div class="card sec"><p class="muted">Cargando…</p></div>';
-    if (!a) return h + '<div class="card sec"><p class="muted">Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».</p></div>';
+    if (!a) return h + window.HalterApp.empty('semana', 'Aún no tienes semana asignada', 'Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
     const w = m.week;
     if (!w) return h + '<div class="card sec"><p class="muted">Cargando la semana…</p></div>';
     h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
@@ -390,7 +390,7 @@
     if (A.err) h += `<div class="note warn">${esc(A.err)}</div>`;
     h += `<div class="card sec"><span class="eyebrow">Semana asignada</span><p class="lead">${esc(asgLine(uid))}</p>` +
       (a ? `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small>` : '');
-    if (!A.active) h += '<p class="muted">Todavía no hay un plan activo. Publica y activa uno en «Planes».</p>';
+    if (!A.active) h += window.HalterApp.empty('plan', 'Todavía no hay un plan activo', 'Publica y activa uno en «Planes».');
     else if (!A.weeks.length) h += '<p class="muted">Cargando las semanas del plan…</p>';
     else h += `<label class="lab" for="asWeek">${a ? 'Mover a otra semana' : 'Asignar semana'}</label><select class="sel tall" id="asWeek" data-f="asx" data-as="week">${weekOptions()}</select>` +
       `<div class="stack"><button class="btn" data-act="as-assign"${A.busy ? ' disabled' : ''}>${A.busy || (a ? 'Mover' : 'Asignar')}</button></div>`;
