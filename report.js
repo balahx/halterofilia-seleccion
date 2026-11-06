@@ -36,13 +36,13 @@
     const all = (sets || []).filter(s => s && s.done), d = all.filter(s => !s.miss), groups = [], missed = all.length - d.length;
     let reps = 0, ton = 0, rs = 0, rn = 0;
     d.forEach(s => {
-      const r = parseReps(s.reps), kg = num(s.kg); reps += r; ton += kg * r;
+      const r = parseReps(s.reps), kg = num(s.kg), secs = num(s.secs) > 0 ? Math.round(num(s.secs)) : 0; reps += r; ton += kg * r;
       if (s.rpe != null && s.rpe !== '' && num(s.rpe) > 0) { rs += num(s.rpe); rn++; }
-      const key = kg + '|' + (s.reps == null ? '' : s.reps), last = groups[groups.length - 1];
-      if (last && last.key === key) last.n++; else groups.push({ key: key, kg: kg, reps: String(s.reps == null ? '' : s.reps), n: 1 });
+      const key = kg + '|' + (s.reps == null ? '' : s.reps) + '|' + secs, last = groups[groups.length - 1];
+      if (last && last.key === key) last.n++; else groups.push({ key: key, kg: kg, secs: secs, reps: String(s.reps == null ? '' : s.reps), n: 1 });
     });
     return { n: d.length, missed: missed, total: (sets || []).length, reps: reps, ton: ton, rpe: rn ? r1(rs / rn) : null,
-      text: groups.map(g => (g.n > 1 ? g.n + '×(' : '') + (g.kg > 0 ? fmt(g.kg) + ' kg × ' : '') + (g.reps || '–') + (g.n > 1 ? ')' : '')).join(', ') };
+      text: groups.map(g => (g.n > 1 ? g.n + '×(' : '') + (g.kg > 0 ? fmt(g.kg) + ' kg × ' : '') + (g.secs > 0 ? g.secs + ' s' : (g.reps || '–')) + (g.n > 1 ? ')' : '')).join(', ') };
   }
   function plannedSummary(sets) {
     const pcts = [], seen = {};

@@ -371,14 +371,34 @@
   }
   /* Rutinas especiales que el entrenador armó para mí (se muestran antes que la semana del plan) */
   const replacing = () => (A.me.routines || []).some(r => r.mode === 'replace');
-  function routinesHTML() {
-    const list = A.me.routines || [], S = window.HalterApp.state(), done = {}, todayNo = ((new Date().getDay() + 6) % 7) + 1;
+  function routinesHTML(opt) {
+    const todayOnly = !!(opt && opt.today), todayNo = ((new Date().getDay() + 6) % 7) + 1;
+    let list = A.me.routines || [];
+    if (opt && opt.mode) list = list.filter(r => (opt.mode === 'replace') === (r.mode === 'replace'));
+    const S = window.HalterApp.state(), done = {};
     (S && S.sessions || []).forEach(x => { if (x.routine && x.endedAt) { const k = x.routine.id + ':' + x.routine.idx; if (!done[k] || x.date > done[k]) done[k] = x.date; } });
-    return list.map(r => `<div class="card sec rt-card"><span class="eyebrow gd">${r.mode === 'replace' ? 'Rutina en lugar del plan semanal' : 'Rutina complementaria'}</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') +
-      '<ul class="plain">' + (r.sessions || []).map((x, i) => {
-        const d = done[r.id + ':' + i], n = (x.items || []).length, dl = x.day > 0 ? dayLabel(x.day) : '', today = x.day === todayNo;
-        return `<li><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${dl ? esc(dl) + (today ? ' (hoy)' : '') + ' · ' : ''}${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm${today ? '' : ' ghost'}" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></li>`;
-      }).join('') + '</ul></div>').join('');
+    return list.map(r => {
+      const rows = (r.sessions || []).map((x, i) => ({ x: x, i: i })).filter(o => !todayOnly || o.x.day === todayNo);
+      if (!rows.length) return '';
+      return `<div class="card sec rt-card${todayOnly ? ' today' : ''}"><span class="eyebrow gd">${todayOnly ? 'Hoy · ' : ''}${r.mode === 'replace' ? 'Rutina en lugar del plan semanal' : 'Rutina complementaria'}</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') +
+        '<ul class="plain">' + rows.map(o => {
+          const x = o.x, i = o.i, d = done[r.id + ':' + i], n = (x.items || []).length, dl = x.day > 0 ? dayLabel(x.day) : '', today = x.day === todayNo;
+          return `<li><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${dl ? esc(dl) + (today ? ' (hoy)' : '') + ' · ' : ''}${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm${today ? '' : ' ghost'}" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></li>`;
+        }).join('') + '</ul></div>';
+    }).join('');
+  }
+  /* «Hoy»: lo que el entrenador asignó para el día de hoy. Primero la rutina que reemplaza al plan (completa); la sesión del plan
+     va minimizada si hay rutina de reemplazo hoy; las rutinas complementarias del día cierran. Devuelve '' si no hay nada para hoy. */
+  function todayHTML() {
+    if (!H || !A.uid) return '';
+    const m = A.me, coach = A.role === 'coach', todayNo = ((new Date().getDay() + 6) % 7) + 1;
+    const rep = coach ? '' : routinesHTML({ today: true, mode: 'replace' }), ext = coach ? '' : routinesHTML({ today: true, mode: 'extra' });
+    let plan = '';
+    const w = m.week, a = m.asg;
+    if (a && w && w.kind !== 'transition') (w.sessions || []).forEach((s, i) => { if (s.day === todayNo) plan += sessionCard(w, i, s); });
+    if (!rep && !ext && !plan) return '';
+    const planBlock = plan ? (rep ? '<details class="hoy-min"><summary>Sesión del plan semanal de hoy (minimizada)</summary>' + plan + '</details>' : plan) : '';
+    return rep + planBlock + ext;
   }
   function startSession(i) {
     const w = A.me.week, a = A.me.asg; if (!w || !a) return;
@@ -574,7 +594,7 @@
   }
 
   root.HalterAssign = {
-    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, onFinish: onFinish, flush: flush,
+    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, onFinish: onFinish, flush: flush,
     selected: () => A.sel, detail: detailHTML, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);

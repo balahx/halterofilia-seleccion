@@ -20,6 +20,8 @@ console.log('1. Repeticiones y resúmenes');
 ok(R.parseReps('3') === 3 && R.parseReps('1+2') === 3 && R.parseReps('') === 0 && R.parseReps('max') === 0, 'parseReps: «3», «1+2», vacío');
 const ds = R.doneSummary([st(70, '3'), st(70, '3'), st(95, '1', true, 8), st(50, '3', false)]);
 ok(ds.n === 3 && ds.total === 4 && ds.reps === 7 && ds.ton === 70 * 6 + 95 && ds.rpe === 8, 'doneSummary: 3 de 4 series, 7 repeticiones, tonelaje y RPE');
+const dt = R.doneSummary([{ done: true, kg: 0, reps: '', secs: 45 }, { done: true, kg: 0, reps: '', secs: 45 }, { done: true, kg: 0, reps: '', secs: 60 }]);
+ok(dt.n === 3 && dt.text === '2×(45 s), 60 s', 'doneSummary: series de tiempo se agrupan en segundos (' + dt.text + ')');
 ok(ds.text === '2×(70 kg × 3), 95 kg × 1', 'las series iguales se agrupan: ' + ds.text);
 
 console.log('2. Planificado por ejercicio (ids de la app del atleta)');

@@ -181,17 +181,28 @@ function sessionLoad(s) {
   const d = sessionDurMin(s), r = sessionRpe(s);
   return d > 0 && r > 0 ? Math.round(d * r) : 0;
 }
-/* Resumen de un período [k0, k1) (fechas «AAAA-MM-DD»): sesiones, repeticiones (NL), tonelaje, intensidad media, carga y efectividad. */
+/* Series hechas válidas de un ejercicio de sesión (las «falladas» de versiones anteriores no cuentan). */
+function doneSets(it) { return (it.sets || []).filter(x => x.done && !x.miss).length; }
+/* Cumplimiento = series hechas / series planificadas. `p` (series planificadas) se anota al armar la sesión desde un plan o una rutina;
+   las sesiones sin `p` (libres o anteriores a la 4.3) no entran. Nunca pasa de 100 % por ejercicio. */
+function planCount(sessions, k0, k1) {
+  const o = { plan: 0, done: 0 };
+  for (const s of sessions) {
+    if (!s.endedAt || s.date < k0 || s.date >= k1) continue;
+    for (const it of s.items) if (it.p > 0) { o.plan += it.p; o.done += Math.min(it.p, doneSets(it)); }
+    for (const k of (s.skip || [])) if (k.p > 0) o.plan += k.p;   // ejercicios planificados que no se hicieron
+  }
+  return o;
+}
+/* Resumen de un período [k0, k1) (fechas «AAAA-MM-DD»): sesiones, repeticiones (NL), tonelaje, intensidad media, carga y cumplimiento. */
 function periodStats(sessions, k0, k1) {
-  const o = { n: 0, sets: 0, reps: 0, ton: 0, loadSum: 0, loadN: 0, attempts: 0, valid: 0, intNum: 0, intDen: 0 };
+  const o = { n: 0, sets: 0, reps: 0, ton: 0, loadSum: 0, loadN: 0, intNum: 0, intDen: 0 };
   for (const s of sessions) {
     if (!s.endedAt || s.date < k0 || s.date >= k1) continue;
     o.n++;
     const l = sessionLoad(s); if (l > 0) { o.loadSum += l; o.loadN++; }
     for (const it of s.items) for (const st of it.sets) {
-      if (!st.done) continue;
-      if (parseNum(st.kg) > 0) { o.attempts++; if (!st.miss) o.valid++; }
-      if (st.miss) continue;
+      if (!st.done || st.miss) continue;
       const r = parseReps(st.reps).total;
       o.sets++; o.reps += r; o.ton += setTon(st);
       if (st.pct > 0 && r > 0) { o.intNum += st.pct * r; o.intDen += r; }
@@ -199,23 +210,29 @@ function periodStats(sessions, k0, k1) {
   }
   o.load = o.loadSum;
   o.intAvg = o.intDen ? o.intNum / o.intDen : 0;
-  o.eff = o.attempts ? o.valid / o.attempts * 100 : null;
+  const c = planCount(sessions, k0, k1);
+  o.planSets = c.plan; o.planDone = c.done;
+  o.cump = c.plan ? c.done / c.plan * 100 : null;
   return o;
 }
-/* Intentos válidos / intentos, por ejercicio, y de los intentos desde 90 % (o más). Orden: competencia primero. */
-function efficiencyByExercise(sessions, sinceYmd, exInfo) {
+/* Series hechas / planificadas por ejercicio desde `sinceYmd`. Orden: competencia primero, luego por lo planificado. */
+function complianceByExercise(sessions, sinceYmd, exInfo) {
   const m = new Map();
   for (const s of sessions) {
     if (!s.endedAt || (sinceYmd && s.date < sinceYmd)) continue;
-    for (const it of s.items) for (const st of it.sets) {
-      if (!st.done || !(parseNum(st.kg) > 0)) continue;
-      let a = m.get(it.exId); if (!a) { a = { exId: it.exId, att: 0, ok: 0, hAtt: 0, hOk: 0 }; m.set(it.exId, a); }
-      a.att++; if (!st.miss) a.ok++;
-      if (st.pct >= 90) { a.hAtt++; if (!st.miss) a.hOk++; }
+    for (const it of s.items) {
+      if (!(it.p > 0)) continue;
+      let a = m.get(it.exId); if (!a) { a = { exId: it.exId, plan: 0, done: 0 }; m.set(it.exId, a); }
+      a.plan += it.p; a.done += Math.min(it.p, doneSets(it));
+    }
+    for (const k of (s.skip || [])) {
+      if (!(k.p > 0)) continue;
+      let a = m.get(k.exId); if (!a) { a = { exId: k.exId, plan: 0, done: 0 }; m.set(k.exId, a); }
+      a.plan += k.p;
     }
   }
   const rank = id => { const i = exInfo ? exInfo(id) : null; return i && i.cat === 'comp' ? 0 : 1; };
-  return Array.from(m.values()).sort((a, b) => rank(a.exId) - rank(b.exId) || b.att - a.att);
+  return Array.from(m.values()).sort((a, b) => rank(a.exId) - rank(b.exId) || b.plan - a.plan);
 }
 /* Razones entre máximos (en %): { clave: valor } solo si ambos máximos existen. `max(id)` devuelve el máximo del ejercicio. */
 const RATIOS = [['snatch', 'cj', 'Arranque / Dos tiempos'], ['bsq', 'cj', 'Sentadilla trasera / Dos tiempos'], ['fsq', 'cj', 'Sentadilla frontal / Dos tiempos'], ['snpull', 'snatch', 'Tirón de arranque / Arranque'], ['clpull', 'clean', 'Tirón de cargada / Cargada']];
@@ -291,15 +308,32 @@ function project(pts) {
 
 if (typeof module !== 'undefined') {
   module.exports = { parseNum, roundTo, parseReps, kRep, e1rm, weightForReps, zoneOf, platesFor, setE1rm, setTon, sessionStats, weeklyBest, topSingle, bestSetE1rm, project, fmtNum, fmtTime, fmtClock, fmtDur, ymd, parseYmd, addDays, mondayOf, weekdayIdx, esc,
-    WEIGHT_CATS, catOptions, categoryOf, catText, catSortKey, sessionDurMin, sessionRpe, sessionLoad, periodStats, efficiencyByExercise, ratiosOf, goalInfo };
+    WEIGHT_CATS, catOptions, categoryOf, catText, catSortKey, sessionDurMin, sessionRpe, sessionLoad, periodStats, planCount, complianceByExercise, ratiosOf, goalInfo };
 }
 
 /* ===== Estado, persistencia, datos de ejemplo, temporizador ===== */
 let KEY = 'halterofilia.v1.local';
 let APP = { requireSex: false, tabs: [], nav: null, more: null, accountHTML: null, onAct: null, onSave: null, cloud: false }; // lo define cloud.js al iniciar
-const CATS = [['comp', 'Competencia'], ['cmplx', 'Complejos'], ['tec', 'Técnica'], ['tiron', 'Tirones'], ['fuerza', 'Fuerza'], ['acc', 'Accesorios']];
+const CATS = [['comp', 'Competencia'], ['cmplx', 'Complejos'], ['tec', 'Técnica'], ['tiron', 'Tirones'], ['fuerza', 'Fuerza'], ['acc', 'Accesorios'], ['mov', 'Movilidad'], ['pc', 'Peso corporal']];
+/* Cómo se mide un ejercicio: 'kg' (peso y repeticiones), 'reps' (solo repeticiones) o 'time' (segundos). Movilidad y peso corporal parten sin kilos. */
+const MEAS = [['kg', 'Peso y repeticiones'], ['reps', 'Solo repeticiones'], ['time', 'Tiempo']];
+const measOf = e => e && (e.meas === 'kg' || e.meas === 'reps' || e.meas === 'time') ? e.meas : (e && e.cat === 'mov' ? 'time' : e && e.cat === 'pc' ? 'reps' : 'kg');
+/* «45» o «1:30» → segundos; 0 si no es válido. */
+function parseSecs(v) {
+  const t = String(v == null ? '' : v).trim(); if (!t) return 0;
+  const m = /^(\d{1,3}):([0-5]?\d)$/.exec(t); if (m) return +m[1] * 60 + +m[2];
+  return /^\d{1,5}$/.test(t) ? +t : 0;
+}
+const secsIn = n => n >= 60 ? Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0') : String(n);   // como se escribe en el campo
+const fmtSecs = n => n >= 60 ? secsIn(n) + ' min' : n + ' s';
+/* ¿La serie tiene lo necesario para marcarla como hecha? */
+function setReady(st, m) {
+  if (m === 'time') return parseSecs(st.secs) > 0;
+  if (m === 'reps') return parseReps(st.reps).total >= 1;
+  return parseNum(st.kg) > 0 && parseReps(st.reps).total >= 1;
+}
 const REST_OPTS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
-const DEFAULT_PROFILE = { name: '', bw: 0, bar: 20, rounding: 1, rest: 120, timerEnabled: true, autoTimer: false, timerMode: 'down', sound: true, vibrate: true, keepAwake: true, showRpe: true, prefs: 2, exLang: 'en', sex: '', cat: '', trackMiss: true };
+const DEFAULT_PROFILE = { name: '', bw: 0, bar: 20, rounding: 1, rest: 120, timerEnabled: true, autoTimer: false, timerMode: 'down', sound: true, vibrate: true, keepAwake: true, showRpe: true, prefs: 2, exLang: 'en', sex: '', cat: '' };
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
@@ -368,8 +402,7 @@ function demoState() {
           const pct = p.pct - (deload ? 8 : 0);
           const kg = roundTo(fm[p.exId] * g * pct / 100, 1);
           t += (40 + rnd() * 40) * 1000 + (k ? e.rest * 1000 * (0.85 + rnd() * 0.3) : 0);
-          const miss = pct >= 90 && rnd() < 0.15;
-          item.sets.push(Object.assign({ kg: kg, reps: p.reps, pct: pct, rpe: null, done: true, doneAt: t }, miss ? { miss: true } : {}));
+          item.sets.push(Object.assign({ kg: kg, reps: p.reps, pct: pct, rpe: null, done: true, doneAt: t }));
         }
         if (item.sets.length) items.push(item);
       }
@@ -427,6 +460,8 @@ function lastSetsFor(exId) {
   }
   return null;
 }
+/* Anota en cada ejercicio cuántas series estaban planificadas (base del cumplimiento). */
+function stampPlanned(s) { s.items.forEach(it => { if (!(it.p > 0)) it.p = it.sets.length; }); return s; }
 function newSession(dayIdx) {
   const day = dayIdx != null ? S.plan.days[dayIdx] : null;
   const s = { id: uid(), date: ymd(new Date()), dayIdx: dayIdx, name: day ? (day.name || 'Entrenamiento') : 'Sesión libre', startedAt: Date.now(), endedAt: null, notes: '', bw: S.profile.bw || null, items: [] };
@@ -436,7 +471,7 @@ function newSession(dayIdx) {
     if (!item) { item = { exId: p.exId, rest: p.rest > 0 ? p.rest : (e.rest || S.profile.rest), sets: [] }; s.items.push(item); }
     for (let k = 0; k < p.sets; k++) item.sets.push(mkSet(e, p.reps, p.pct));
   }
-  return s;
+  return day ? stampPlanned(s) : s;
 }
 
 /* ===== Temporizador / cronómetro ===== */
@@ -551,7 +586,7 @@ function planPreview(p, e, rt) {
 }
 function totalsText(s) {
   const st = sessionStats(s);
-  return 'Series ' + st.sets + ' de ' + (st.sets + st.missed + st.pending) + (st.missed ? ' (' + st.missed + (st.missed === 1 ? ' fallada' : ' falladas') + ')' : '') + '  ·  Tonelaje ' + fmtNum(st.ton, 0) + ' kg';
+  return 'Series ' + st.sets + ' de ' + (st.sets + st.missed + st.pending) + '  ·  Tonelaje ' + fmtNum(st.ton, 0) + ' kg';
 }
 function updateTotals() { const s = activeSession(); if (s) setText($('#sessTotals'), totalsText(s)); }
 
@@ -572,17 +607,22 @@ function planItemsList(day) {
     return '<li>' + plateDot(zoneOf(p.pct)) + '<span class="pl-n">' + esc(nm(e)) + '</span><span class="pl-d">' + esc(planPreview(p, e)) + (p.pct > 0 ? '<small>' + fmtNum(p.pct, 1) + '%</small>' : '') + '</span></li>';
   }).join('') + '</ul>';
 }
+/* Cifra grande de un indicador; las muy largas (p. ej. «258.808») se achican en pantallas angostas para no salirse del recuadro. */
+const statB = t => { t = String(t); return '<b' + (t.length >= 7 ? ' class="n' + Math.min(t.length, 9) + '"' : '') + '>' + t + '</b>'; };
 function viewHoy() {
   const a = activeSession();
   if (a) return viewLogger(a);
   const now = new Date(), di = weekdayIdx(now), day = S.plan.days[di];
   const ended = endedSessions().sort((x, y) => y.endedAt - x.endedAt);
   const todayDone = ended.some(s => s.date === ymd(now));
+  const asg = APP.hoyHTML ? APP.hoyHTML() : '';   // sesiones que el entrenador asignó para hoy (rutina y/o semana del plan)
   let title, sub;
   if (todayDone) { title = 'Sesión de hoy registrada'; sub = 'Puedes entrenar de nuevo o revisar tu progreso.'; }
+  else if (asg) { title = 'Tu entrenamiento de hoy'; sub = 'Lo que tu entrenador te asignó para hoy.'; }
   else if (day.on) { title = day.name || 'Entrenamiento'; sub = day.items.length ? day.items.length + (day.items.length === 1 ? ' ejercicio' : ' ejercicios') + ' en el plan' : 'Este día aún no tiene ejercicios.'; }
   else { title = 'Día de descanso'; sub = 'No tienes sesión planificada hoy.'; }
   let h = '<section class="sec"><p class="eyebrow">' + esc(cap(fmtDay.format(now))) + '</p><h1>' + esc(title) + '</h1><p class="muted">' + esc(sub) + '</p>' + weekStrip() + '</section>';
+  h += asg;
   if (day.on) {
     h += '<section class="card sec hoy-plan">' + (day.items.length ? planItemsList(day) : emptyHTML('plan', 'Este día no tiene ejercicios', 'Arma la sesión en tu plan semanal.')) +
       '<div class="actions go"><button class="btn block" data-act="start" data-d="' + di + '">' + svg('play') + '<span>Iniciar entrenamiento</span></button>' +
@@ -610,26 +650,27 @@ function rpeSelect(st, id) {
   return '<select class="sel rpe" id="' + id + '" data-f="rpe" aria-label="Esfuerzo percibido RPE">' + o.map(v => '<option value="' + v + '"' + (String(st.rpe == null ? '' : st.rpe) === String(v) ? ' selected' : '') + '>' + (v === '' ? '–' : fmtNum(v, 1)) + '</option>').join('') + '</select>';
 }
 function setRowHTML(i, j, st, it) {
-  const e = ex(it.exId), id = 's-' + i + '-' + j, rpe = S.profile.showRpe, tm = S.profile.trackMiss !== false;
-  return '<div class="set' + (rpe ? ' rpe' : '') + (tm ? ' tm' : '') + (st.done ? ' is-done' : '') + (st.miss ? ' is-miss' : '') + '" data-i="' + i + '" data-j="' + j + '">' +
-    '<span class="set-n">' + (j + 1) + '</span>' +
-    '<input class="num" id="' + id + '-kg" data-f="kg" inputmode="decimal" autocomplete="off" aria-label="Peso en kg, serie ' + (j + 1) + '" placeholder="kg" value="' + (st.kg > 0 ? fmtNum(st.kg, 2) : '') + '">' +
-    '<input class="num" id="' + id + '-reps" data-f="reps" inputmode="text" autocomplete="off" aria-label="Repeticiones, serie ' + (j + 1) + (st.pr ? ' (planificadas: ' + esc(st.pr) + ')' : '') + '" placeholder="' + esc(st.pr || 'reps') + '" value="' + esc(st.reps) + '">' +
-    '<div class="pctw"><input class="num" id="' + id + '-pct" data-f="pct" inputmode="decimal" autocomplete="off" aria-label="Porcentaje del máximo, serie ' + (j + 1) + '" placeholder="%"' + (e.max > 0 ? '' : ' disabled') + ' value="' + (st.pct > 0 ? fmtNum(st.pct, 1) : '') + '">' + plateDot(zoneOf(st.pct)) + '</div>' +
+  const e = ex(it.exId), id = 's-' + i + '-' + j, rpe = S.profile.showRpe, m = measOf(e), n = j + 1;
+  const kgIn = '<input class="num" id="' + id + '-kg" data-f="kg" inputmode="decimal" autocomplete="off" aria-label="Peso en kg, serie ' + n + '" placeholder="kg" value="' + (st.kg > 0 ? fmtNum(st.kg, 2) : '') + '">';
+  const repsIn = '<input class="num" id="' + id + '-reps" data-f="reps" inputmode="text" autocomplete="off" aria-label="Repeticiones, serie ' + n + (st.pr ? ' (planificadas: ' + esc(st.pr) + ')' : '') + '" placeholder="' + esc(st.pr || 'reps') + '" value="' + esc(st.reps) + '">';
+  const tmIn = '<input class="num" id="' + id + '-secs" data-f="secs" inputmode="text" autocomplete="off" aria-label="Tiempo en segundos, serie ' + n + (st.pr ? ' (planificado: ' + esc(st.pr) + ' s)' : '') + '" placeholder="' + esc(st.pr || 'seg') + '" value="' + (parseSecs(st.secs) > 0 ? secsIn(parseSecs(st.secs)) : '') + '">';
+  const pctIn = '<div class="pctw"><input class="num" id="' + id + '-pct" data-f="pct" inputmode="decimal" autocomplete="off" aria-label="Porcentaje del máximo, serie ' + n + '" placeholder="%"' + (e.max > 0 ? '' : ' disabled') + ' value="' + (st.pct > 0 ? fmtNum(st.pct, 1) : '') + '">' + plateDot(zoneOf(st.pct)) + '</div>';
+  return '<div class="set' + (rpe ? ' rpe' : '') + (m !== 'kg' ? ' m-' + m : '') + (st.done ? ' is-done' : '') + '" data-i="' + i + '" data-j="' + j + '">' +
+    '<span class="set-n">' + n + '</span>' + (m === 'kg' ? kgIn + repsIn + pctIn : m === 'reps' ? repsIn : tmIn) +
     (rpe ? rpeSelect(st, id + '-rpe') : '') +
-    (tm ? '<button class="missb" data-act="miss" aria-pressed="' + !!st.miss + '" aria-label="Serie ' + (j + 1) + ': levantamiento fallado">✕</button>' : '') +
-    '<button class="tick" data-act="tick" aria-pressed="' + st.done + '" aria-label="Marcar serie ' + (j + 1) + ' como hecha">' + svg('check') + '</button></div>';
+    '<button class="tick" data-act="tick" aria-pressed="' + st.done + '" aria-label="Marcar serie ' + n + ' como hecha">' + svg('check') + '</button></div>';
 }
 /* Complejo: ejercicio de la categoría «Complejos» o con «+» en el nombre (p. ej. «Arranque con pausa + tirón»). No tiene máximo propio. */
 const isComplex = e => !!e && (e.cat === 'cmplx' || /\s\+\s/.test(e.en || e.name || ''));
 function exerciseCard(it, i) {
-  const e = ex(it.exId), rpe = S.profile.showRpe, tm = S.profile.trackMiss !== false;
+  const e = ex(it.exId), rpe = S.profile.showRpe, m = measOf(e);
   return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) +
     (isComplex(e) ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
+      : m !== 'kg' ? '<span class="chip-note">' + (m === 'time' ? 'Se mide en tiempo' : 'Solo repeticiones') + '</span>'
       : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') +
     (it.pause > 0 ? '<span class="chip-pause">Pausa de ' + it.pause + ' s en el movimiento</span>' : '') + '</div>' +
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
-    '<div class="set sethead' + (rpe ? ' rpe' : '') + (tm ? ' tm' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + (tm ? '<span>Falló</span>' : '') + '<span></span></div>' +
+    '<div class="set sethead' + (rpe ? ' rpe' : '') + (m !== 'kg' ? ' m-' + m : '') + '" aria-hidden="true"><span></span>' + (m === 'kg' ? '<span>kg</span><span>reps</span><span>%</span>' : m === 'reps' ? '<span>reps</span>' : '<span>tiempo (seg)</span>') + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
     it.sets.map((st, j) => setRowHTML(i, j, st, it)).join('') +
     '<label class="inote-l"><span class="sr-only">Observación de este ejercicio</span><input class="txt inote" data-f="inote" maxlength="200" autocomplete="off" placeholder="Observación (técnica, dolor…)" value="' + esc(it.note || '') + '"></label>' +
     '<div class="exc-f"><button class="btn ghost sm" data-act="add-set" data-i="' + i + '">+ Serie</button>' +
@@ -802,17 +843,17 @@ function histRow(s) {
   let h = '<div class="hist' + (open ? ' open' : '') + '"><button class="hist-h" data-act="hist-toggle" data-id="' + s.id + '" aria-expanded="' + open + '"><span class="hd">' + esc(cap(fmtWk.format(parseYmd(s.date)).replace('.', ''))) + '</span><span class="hn">' + esc(s.name) + '</span><span class="hs">' + fmtNum(st.ton, 0) + ' kg</span></button>';
   if (open) {
     const ld = sessionLoad(s);
-    h += '<div class="hist-b"><p class="muted">' + st.sets + ' series' + (st.missed ? ' (+' + st.missed + (st.missed === 1 ? ' fallada' : ' falladas') + ')' : '') + ' · ' + st.reps + ' repeticiones · ' + fmtDur((s.endedAt - s.startedAt) / 1000) + (ld ? ' · carga ' + fmtNum(ld, 0) + ' UA' : '') + '</p>';
+    h += '<div class="hist-b"><p class="muted">' + st.sets + ' series' + ' · ' + st.reps + ' repeticiones · ' + fmtDur((s.endedAt - s.startedAt) / 1000) + (ld ? ' · carga ' + fmtNum(ld, 0) + ' UA' : '') + '</p>';
     for (const it of s.items) {
       const groups = [];
       for (const x of it.sets) {
-        const key = x.kg + '|' + x.reps + '|' + (x.miss ? 1 : 0), last = groups[groups.length - 1];
-        if (last && last.key === key) last.n++; else groups.push({ key: key, kg: x.kg, reps: x.reps, n: 1, miss: !!x.miss });
+        const key = x.kg + '|' + x.reps + '|' + (x.secs || 0) + '|' + (x.miss ? 1 : 0), last = groups[groups.length - 1];
+        if (last && last.key === key) last.n++; else groups.push({ key: key, kg: x.kg, reps: x.reps, secs: parseSecs(x.secs), n: 1, miss: !!x.miss });
       }
       const gaps = [];
       for (let k = 1; k < it.sets.length; k++) { const dgap = (it.sets[k].doneAt - it.sets[k - 1].doneAt) / 1000; if (dgap > 10 && dgap < 600) gaps.push(dgap); }
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
-      h += '<div class="hex"><b>' + esc(nm(ex(it.exId))) + '</b><span>' + groups.map(g => fmtNum(g.kg, 1) + ' kg · ' + g.n + '×' + esc(g.reps) + (g.miss ? ' ✕ fallada' : '')).join('  /  ') + (avg ? ' · descanso real ~' + fmtTime(avg) : '') + '</span>' + (it.note ? '<span class="inote-h">“' + esc(it.note) + '”</span>' : '') + '</div>';
+      h += '<div class="hex"><b>' + esc(nm(ex(it.exId))) + '</b><span>' + groups.map(g => (g.kg > 0 ? fmtNum(g.kg, 1) + ' kg · ' : '') + g.n + '×' + (g.secs > 0 ? fmtSecs(g.secs) : esc(g.reps)) + (g.miss ? ' ✕ fallada' : '')).join('  /  ') + (avg ? ' · descanso real ~' + fmtTime(avg) : '') + '</span>' + (it.note ? '<span class="inote-h">“' + esc(it.note) + '”</span>' : '') + '</div>';
     }
     if (s.notes) h += '<p class="notes">“' + esc(s.notes) + '”</p>';
     h += '<div class="row-end"><button class="lnk danger" data-act="del-sess" data-id="' + s.id + '">' + confirmLabel('ds' + s.id, 'Eliminar sesión', 'Confirmar eliminar') + '</button></div></div>';
@@ -830,7 +871,7 @@ function viewProg() {
   if (!all.length) return h + emptyHTML('prog', 'Aún no hay sesiones', 'Cuando termines tu primera sesión aquí verás tu tonelaje, tus intensidades y la proyección de tus máximos.', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
   const tot = { ton: 0, sets: 0, reps: 0 };
   ss.forEach(s => { const t = sessionStats(s); tot.ton += t.ton; tot.sets += t.sets; tot.reps += t.reps; });
-  h += '<section class="stats" aria-label="Resumen del período"><div><b>' + ss.length + '</b><span>sesiones</span></div><div><b>' + fmtNum(tot.sets, 0) + '</b><span>series</span></div><div><b>' + fmtNum(tot.ton, 0) + '</b><span>kg de tonelaje</span></div></section>';
+  h += '<section class="stats" aria-label="Resumen del período"><div>' + statB(ss.length) + '<span>sesiones</span></div><div>' + statB(fmtNum(tot.sets, 0)) + '<span>series</span></div><div>' + statB(fmtNum(tot.ton, 0)) + '<span>kg de tonelaje</span></div></section>';
 
   /* 1RM estimado semanal + proyección */
   const withData = S.exercises.filter(e => weeklyBest(S.sessions, e.id).length);
@@ -855,9 +896,9 @@ function viewProg() {
     h += tableTwin(['Semana', '1RM estimado (kg)'], shown.map(p => [shortDate(parseYmd(p.week)), fmtNum(p.y, 1)])) + '</section>';
   }
 
-  /* Indicadores del período: intensidad media, repeticiones (NL) y efectividad */
+  /* Indicadores del período: intensidad media, repeticiones (NL) y cumplimiento */
   const pStats = periodStats(all, cutYmd, ymd(addDays(now, 1)));
-  h += '<section class="stats" aria-label="Indicadores del período"><div><b>' + (pStats.intAvg ? fmtNum(pStats.intAvg, 0) + ' %' : '–') + '</b><span>intensidad media</span></div><div><b>' + fmtNum(pStats.reps, 0) + '</b><span>repeticiones (NL)</span></div><div><b>' + (pStats.eff != null ? fmtNum(pStats.eff, 0) + ' %' : '–') + '</b><span>efectividad</span></div></section>';
+  h += '<section class="stats" aria-label="Indicadores del período"><div>' + statB(pStats.intAvg ? fmtNum(pStats.intAvg, 0) + ' %' : '–') + '<span>intensidad media</span></div><div>' + statB(fmtNum(pStats.reps, 0)) + '<span>repeticiones (NL)</span></div><div>' + statB(pStats.cump != null ? fmtNum(pStats.cump, 0) + ' %' : '–') + '<span>cumplimiento</span></div></section>';
 
   /* Tonelaje y carga semanal */
   const mon = mondayOf(now), items = [], litems = [], wrows = [];
@@ -865,10 +906,10 @@ function viewProg() {
     const w0 = addDays(mon, -7 * i), k0 = ymd(w0), k1 = ymd(addDays(w0, 7)), p = periodStats(all, k0, k1);
     items.push({ label: shortDate(w0), v: p.ton, n: p.n, cur: i === 0 });
     litems.push({ label: shortDate(w0), v: p.load, n: p.n, cur: i === 0 });
-    wrows.push([shortDate(w0), String(p.n), fmtNum(p.reps, 0), fmtNum(p.ton, 0), p.intAvg ? fmtNum(p.intAvg, 0) + ' %' : '–', p.load ? fmtNum(p.load, 0) : '–', p.eff != null ? fmtNum(p.eff, 0) + ' %' : '–']);
+    wrows.push([shortDate(w0), String(p.n), fmtNum(p.reps, 0), fmtNum(p.ton, 0), p.intAvg ? fmtNum(p.intAvg, 0) + ' %' : '–', p.load ? fmtNum(p.load, 0) : '–', p.cump != null ? fmtNum(p.cump, 0) + ' %' : '–']);
   }
   ui.charts.c2 = { kind: 'bars', items: items, unit: 'kg', what: 'Tonelaje semanal', empty: 'Sin tonelaje registrado en el período.' };
-  h += '<section class="sec"><h2>Tonelaje semanal</h2><p class="muted">Kilos totales levantados (peso × repeticiones) por semana. Las series falladas no suman.</p><div class="chart" data-c="c2"></div></section>';
+  h += '<section class="sec"><h2>Tonelaje semanal</h2><p class="muted">Kilos totales levantados (peso × repeticiones) por semana.</p><div class="chart" data-c="c2"></div></section>';
   ui.charts.c3 = { kind: 'bars', items: litems, unit: 'UA', what: 'Carga semanal', empty: 'Aún no hay carga: anota el RPE de tus series o de la sesión.' };
   const lw = litems[litems.length - 2], lp = litems[litems.length - 3];
   let loadNote = '';
@@ -877,20 +918,20 @@ function viewProg() {
     loadNote = '<p class="' + (ch > 30 ? 'warn-t' : 'muted') + '">Última semana completa: ' + fmtNum(lw.v, 0) + ' UA (' + (ch >= 0 ? '+' : '') + fmtNum(ch, 0) + ' % frente a la anterior).' + (ch > 30 ? ' Es un salto grande: conviene que lo veas con tu entrenador.' : '') + '</p>';
   }
   h += '<section class="sec"><h2>Carga de entrenamiento</h2><p class="muted">Duración de la sesión × RPE de la sesión, en unidades arbitrarias (UA). Sirve para comparar tus semanas entre sí.</p><div class="chart" data-c="c3"></div>' + loadNote +
-    tableTwin(['Semana desde', 'Sesiones', 'Reps', 'Tonelaje (kg)', 'Int. media', 'Carga (UA)', 'Efectividad'], wrows) + '</section>';
+    tableTwin(['Semana desde', 'Sesiones', 'Reps', 'Tonelaje (kg)', 'Int. media', 'Carga (UA)', 'Cumpl.'], wrows) + '</section>';
   const mrows = [];
   for (let m = 5; m >= 0; m--) {
     const a = new Date(now.getFullYear(), now.getMonth() - m, 1), b = new Date(now.getFullYear(), now.getMonth() - m + 1, 1), p = periodStats(all, ymd(a), ymd(b));
-    mrows.push([cap(new Intl.DateTimeFormat('es-CL', { month: 'short', year: '2-digit' }).format(a).replace('.', '')), String(p.n), fmtNum(p.reps, 0), fmtNum(p.ton, 0), p.intAvg ? fmtNum(p.intAvg, 0) + ' %' : '–', p.load ? fmtNum(p.load, 0) : '–', p.eff != null ? fmtNum(p.eff, 0) + ' %' : '–']);
+    mrows.push([cap(new Intl.DateTimeFormat('es-CL', { month: 'short', year: '2-digit' }).format(a).replace('.', '')), String(p.n), fmtNum(p.reps, 0), fmtNum(p.ton, 0), p.intAvg ? fmtNum(p.intAvg, 0) + ' %' : '–', p.load ? fmtNum(p.load, 0) : '–', p.cump != null ? fmtNum(p.cump, 0) + ' %' : '–']);
   }
-  h += '<section class="sec"><h2>Resumen mensual</h2>' + tableTwin(['Mes', 'Sesiones', 'Reps', 'Tonelaje (kg)', 'Int. media', 'Carga (UA)', 'Efectividad'], mrows) + '</section>';
+  h += '<section class="sec"><h2>Resumen mensual</h2>' + tableTwin(['Mes', 'Sesiones', 'Reps', 'Tonelaje (kg)', 'Int. media', 'Carga (UA)', 'Cumpl.'], mrows) + '</section>';
 
-  /* Efectividad por ejercicio */
-  const eff = efficiencyByExercise(all, cutYmd, id => ex(id)).slice(0, 8);
-  if (eff.length) {
-    h += '<section class="sec"><h2>Efectividad</h2><p class="muted">Intentos válidos sobre intentos. Marca con ✕ las series falladas durante la sesión; sin esa marca todo cuenta como válido.</p><div class="etab" role="table" aria-label="Efectividad por ejercicio">' +
-      '<div class="er eh" role="row"><span>Ejercicio</span><span>Intentos</span><span>Efect.</span><span>Desde 90 %</span></div>' +
-      eff.map(a => '<div class="er" role="row"><span>' + esc(nm(ex(a.exId))) + '</span><span>' + a.ok + '/' + a.att + '</span><b>' + fmtNum(a.ok / a.att * 100, 0) + ' %</b><span>' + (a.hAtt ? a.hOk + '/' + a.hAtt : '–') + '</span></div>').join('') + '</div></section>';
+  /* Cumplimiento por ejercicio */
+  const cmp = complianceByExercise(all, cutYmd, id => ex(id)).slice(0, 8);
+  if (cmp.length) {
+    h += '<section class="sec"><h2>Cumplimiento</h2><p class="muted">Series hechas sobre series planificadas, en las sesiones armadas desde tu plan o tus rutinas. Una serie que no haces se quita con «− Serie».</p><div class="etab" role="table" aria-label="Cumplimiento por ejercicio">' +
+      '<div class="er eh" role="row"><span>Ejercicio</span><span>Series</span><span>Cumpl.</span></div>' +
+      cmp.map(a => '<div class="er" role="row"><span>' + esc(nm(ex(a.exId))) + '</span><span>' + a.done + '/' + a.plan + '</span><b>' + fmtNum(a.done / a.plan * 100, 0) + ' %</b></div>').join('') + '</div></section>';
   }
 
   /* Peso corporal */
@@ -1178,6 +1219,7 @@ function startPlanned(build) {
   if (S.demo) { openSheet('demo'); return false; }
   if (activeSession()) { toast('Ya tienes una sesión en curso. Termínala o descártala antes de iniciar otra.'); ui.tab = 'hoy'; render(); return false; }
   const s = build(S); if (!s) return false;
+  stampPlanned(s);
   S.sessions.push(s);
   T.mode = S.profile.timerMode; T.label = '';
   tReset(s.items[0] && s.items[0].rest ? s.items[0].rest : S.profile.rest);
@@ -1187,16 +1229,14 @@ function startPlanned(build) {
 function toggleDone(i, j) {
   const s = activeSession(), it = s.items[i], st = it.sets[j], e = ex(it.exId);
   if (!st.done) {
-    const r = parseReps(st.reps);
-    if (!(st.kg > 0) || r.total < 1) { toast('Anota el peso y las repeticiones antes de marcar la serie.'); return; }
+    const m = measOf(e);
+    if (!setReady(st, m)) { toast(m === 'time' ? 'Anota el tiempo antes de marcar la serie.' : m === 'reps' ? 'Anota las repeticiones antes de marcar la serie.' : 'Anota el peso y las repeticiones antes de marcar la serie.'); return; }
   }
   st.done = !st.done; st.doneAt = st.done ? Date.now() : null;
-  if (!st.done) st.miss = false;
   const row = $('.set[data-i="' + i + '"][data-j="' + j + '"]');
   if (row) {
-    row.classList.toggle('is-done', st.done); row.classList.toggle('is-miss', !!st.miss);
+    row.classList.toggle('is-done', st.done);
     row.querySelector('.tick').setAttribute('aria-pressed', String(st.done));
-    const mb = row.querySelector('.missb'); if (mb) mb.setAttribute('aria-pressed', String(!!st.miss));
   }
   updateTotals(); save();
   if (!st.done) return;
@@ -1207,22 +1247,6 @@ function toggleDone(i, j) {
     e.max = st.kg; e.maxDate = ymd(new Date()); recalcPct(e.id); save(); render();
     toast('Nuevo máximo de ' + nm(e) + ': ' + fmtNum(st.kg, 1) + ' kg', 'Deshacer', () => { e.max = prev.max; e.maxDate = prev.date; recalcPct(e.id); save(); render(); });
   }
-}
-/* Levantamiento fallado: cuenta como intento (efectividad) pero no suma tonelaje, repeticiones ni marcas. Si la serie no estaba hecha, la deja hecha. */
-function toggleMiss(i, j) {
-  const s = activeSession(), it = s.items[i], st = it.sets[j];
-  if (!st.miss) {
-    if (!(st.kg > 0) || parseReps(st.reps).total < 1) { toast('Anota el peso y las repeticiones antes de marcar la serie.'); return; }
-    const wasDone = st.done;
-    st.miss = true; st.done = true; if (!wasDone) { st.doneAt = Date.now(); startRest(it); }
-  } else st.miss = false;
-  const row = $('.set[data-i="' + i + '"][data-j="' + j + '"]');
-  if (row) {
-    row.classList.toggle('is-done', st.done); row.classList.toggle('is-miss', !!st.miss);
-    row.querySelector('.tick').setAttribute('aria-pressed', String(st.done));
-    row.querySelector('.missb').setAttribute('aria-pressed', String(!!st.miss));
-  }
-  updateTotals(); save();
 }
 function logBw(kg) {
   if (!(kg > 0)) return;
@@ -1249,8 +1273,10 @@ function finishRequest() {
 function finalize(mode) {
   const s = activeSession();
   if (!s) return;
-  if (mode === 'mark') s.items.forEach(it => it.sets.forEach(x => { if (!x.done && x.kg > 0 && parseReps(x.reps).total > 0) { x.done = true; x.doneAt = Date.now(); } }));
+  if (mode === 'mark') s.items.forEach(it => it.sets.forEach(x => { if (!x.done && setReady(x, measOf(ex(it.exId)))) { x.done = true; x.doneAt = Date.now(); } }));
   s.items.forEach(it => { it.sets = it.sets.filter(x => x.done); });
+  const skip = s.items.filter(it => !it.sets.length && it.p > 0).map(it => ({ exId: it.exId, p: it.p }));
+  if (skip.length) s.skip = skip;
   s.items = s.items.filter(it => it.sets.length);
   const prior = endedSessions(), records = [];
   s.items.forEach(it => {
@@ -1263,7 +1289,7 @@ function finalize(mode) {
   const stt = sessionStats(s), ps = periodStats([s], s.date, ymd(addDays(parseYmd(s.date), 1)));
   tPause(); tReset(); save(true); syncWake();
   if (APP.onFinish) { try { APP.onFinish(s); } catch (e) { /* no debe frenar el cierre de la sesión */ } }
-  openSheet('summary', { sum: { name: s.name, dur: (s.endedAt - s.startedAt) / 1000, sets: stt.sets, ton: stt.ton, records: records, missed: stt.missed, eff: ps.eff, intAvg: ps.intAvg, min: sessionDurMin(s), rpe: sessionRpe(s), load: sessionLoad(s) } });
+  openSheet('summary', { sum: { name: s.name, dur: (s.endedAt - s.startedAt) / 1000, sets: stt.sets, ton: stt.ton, records: records, plan: ps.planSets, done: ps.planDone, intAvg: ps.intAvg, min: sessionDurMin(s), rpe: sessionRpe(s), load: sessionLoad(s) } });
   render();
 }
 function discardActive() {
@@ -1282,8 +1308,8 @@ function clearDemo() {
 function csvCell(v) { const s = String(v == null ? '' : v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
 function csvHistory() {
   const num = v => (v == null || v === '') ? '' : String(v).replace('.', ',');
-  const rows = [['fecha', 'sesion', 'ejercicio', 'serie', 'kg', 'repeticiones', 'pct_1rm', 'rpe', 'hecha', 'fallada', 'duracion_min', 'rpe_sesion', 'carga_sesion']];
-  endedSessions().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.startedAt - b.startedAt).forEach(s => s.items.forEach(it => it.sets.forEach((st, j) => rows.push([s.date, s.name, ex(it.exId).name, j + 1, num(st.kg), st.reps, num(st.pct), num(st.rpe), st.done ? 'sí' : 'no', st.miss ? 'sí' : 'no', sessionDurMin(s) || '', num(sessionRpe(s) ? Math.round(sessionRpe(s) * 10) / 10 : ''), sessionLoad(s) || '']))));
+  const rows = [['fecha', 'sesion', 'ejercicio', 'serie', 'kg', 'repeticiones', 'pct_1rm', 'rpe', 'hecha', 'fallada', 'duracion_min', 'rpe_sesion', 'carga_sesion', 'segundos']];
+  endedSessions().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.startedAt - b.startedAt).forEach(s => s.items.forEach(it => it.sets.forEach((st, j) => rows.push([s.date, s.name, ex(it.exId).name, j + 1, num(st.kg), st.reps, num(st.pct), num(st.rpe), st.done ? 'sí' : 'no', st.miss ? 'sí' : 'no', sessionDurMin(s) || '', num(sessionRpe(s) ? Math.round(sessionRpe(s) * 10) / 10 : ''), sessionLoad(s) || '', st.secs || '']))));
   return '﻿' + rows.map(r => r.map(csvCell).join(';')).join('\r\n');
 }
 async function saveFile(name, data) {
@@ -1334,7 +1360,7 @@ function settingsHTML() {
     '<label class="fl"><span>Descanso predeterminado</span>' + restSelect(p.rest, 'id="sRest" data-f="set" data-k="rest" data-num="1"').replace('class="sel"', 'class="sel tall"') + '</label></div>' +
     '<p class="eyebrow">Temporizador</p><div class="checks">' + chk('timerEnabled', 'Mostrar temporizador y cronómetro') + chk('autoTimer', 'Iniciar solo al marcar una serie como hecha') + chk('sound', 'Sonido al terminar el descanso') + chk('vibrate', 'Vibración al terminar') + '</div>' +
     '<p class="eyebrow">Nombres de los ejercicios</p><label class="fl"><span>Idioma principal</span>' + sel('exLang', ['en', 'es'], v => v === 'en' ? 'English (principal) · Español debajo' : 'Español (principal) · English debajo', 'sLang').replace(' data-num="1"', '') + '</label>' +
-    '<p class="eyebrow">Sesión</p><div class="checks">' + chk('keepAwake', 'Mantener la pantalla encendida durante la sesión') + chk('showRpe', 'Anotar esfuerzo percibido (RPE) por serie') + chk('trackMiss', 'Marcar los levantamientos fallados (mide tu efectividad)') + '</div>' +
+    '<p class="eyebrow">Sesión</p><div class="checks">' + chk('keepAwake', 'Mantener la pantalla encendida durante la sesión') + chk('showRpe', 'Anotar esfuerzo percibido (RPE) por serie') + '</div>' +
     '<p class="eyebrow">Tus datos</p><p class="muted">' + (APP.cloud ? 'Se guardan en este dispositivo y se copian solos en tu cuenta, así los ves en cualquier dispositivo donde entres. ' : 'Se guardan en este dispositivo. ') + 'Descarga un respaldo de vez en cuando.</p><div class="stack">' +
     '<button class="btn ghost" data-act="export-json">Exportar respaldo (JSON)</button><button class="btn ghost" data-act="export-csv">Exportar historial (CSV para Excel)</button></div>' +
     '<label class="lab" for="impFile">Importar respaldo</label><input type="file" id="impFile" data-f="impFile" accept=".json,application/json" class="file">' +
@@ -1359,6 +1385,8 @@ function exSheetHTML(id) {
   return '<div class="form"><label class="lab" for="exName">Nombre</label><input class="txt" id="exName" maxlength="40" value="' + esc(e.name) + '" placeholder="Ej. Arranque colgado">' + (id ? '' : '<p class="muted">Para un complex, ponle nombre (ej. «Cargada + jerk») y elige la categoría Complejos. En cada serie escribes las reps así: 1+2.</p>') +
     '<div class="row2"><label class="fl"><span>Categoría</span><select class="sel tall" id="exCat">' + CATS.map(c => '<option value="' + c[0] + '"' + (e.cat === c[0] ? ' selected' : '') + '>' + c[1] + '</option>').join('') + '</select></label>' +
     '<label class="fl"><span>Descanso habitual</span>' + restSelect(e.rest, 'id="exRest"').replace('class="sel"', 'class="sel tall"') + '</label></div>' +
+    '<label class="fl"><span>Se mide en</span><select class="sel tall" id="exMeas">' + MEAS.map(c => '<option value="' + c[0] + '"' + (measOf(e) === c[0] ? ' selected' : '') + '>' + c[1] + '</option>').join('') + '</select></label>' +
+    '<p class="muted">Movilidad y peso corporal no llevan kilos: anotas solo repeticiones o tiempo. Si es de tiempo, el valor planificado se entiende en segundos.</p>' +
     '<div class="actions"><button class="btn" data-act="ex-save" data-ex="' + (id || '') + '">Guardar</button>' + (id && !e.builtin && !used ? '<button class="btn ghost" data-act="ex-del" data-ex="' + id + '">Eliminar</button>' : '') + '</div>' +
     (id && used && !e.builtin ? '<p class="muted">No se puede eliminar porque ya tiene registros o está en tu plan.</p>' : '') + '</div>';
 }
@@ -1368,7 +1396,7 @@ function summaryHTML(d) {
   if (d.load > 0) extra.push('Carga de sesión: <b>' + fmtNum(d.load, 0) + ' UA</b> (' + d.min + ' min × RPE ' + fmtNum(d.rpe, 1) + ')');
   else if (d.min > 0) extra.push('Para calcular la carga de la sesión falta el RPE: anótalo por serie o en «Carga de la sesión».');
   if (d.intAvg > 0) extra.push('Intensidad media: <b>' + fmtNum(d.intAvg, 0) + ' %</b> del máximo');
-  if (d.eff != null) extra.push('Efectividad: <b>' + fmtNum(d.eff, 0) + ' %</b>' + (d.missed ? ' (' + d.missed + (d.missed === 1 ? ' serie fallada' : ' series falladas') + ')' : ''));
+  if (d.plan > 0) extra.push('Cumplimiento: <b>' + fmtNum(d.done / d.plan * 100, 0) + ' %</b> (' + d.done + ' de ' + d.plan + ' series planificadas)');
   if (extra.length) h += '<ul class="recs">' + extra.map(x => '<li>' + x + '</li>').join('') + '</ul>';
   h += d.records.length ? '<p class="eyebrow">Marcas de hoy</p><ul class="recs prs">' + d.records.map(r => '<li>' + svg('trophy') + '<span>' + esc(r) + '</span></li>').join('') + '</ul>' : '<p class="muted">Sin marcas nuevas hoy. La constancia también suma.</p>';
   return h + '<div class="actions"><button class="btn" data-act="sheet-close">Listo</button><button class="lnk" data-act="to-prog">Ver progreso</button></div>';
@@ -1408,8 +1436,10 @@ function setField(t) {
     if (e.max > 0 && st.pct > 0) { st.kg = roundTo(e.max * st.pct / 100, S.profile.rounding); kgEl.value = fmtNum(st.kg, 2); }
   } else if (f === 'reps') {
     const c = t.value.replace(/[^\d+]/g, ''); if (c !== t.value) t.value = c; st.reps = c;
+  } else if (f === 'secs') {
+    const c = t.value.replace(/[^\d:]/g, ''); if (c !== t.value) t.value = c; st.secs = parseSecs(c) || 0;
   } else if (f === 'rpe') { const v = parseNum(t.value); st.rpe = isNaN(v) ? null : v; }
-  setDot(row.querySelector('.pl'), zoneOf(st.pct));
+  if (row.querySelector('.pl')) setDot(row.querySelector('.pl'), zoneOf(st.pct));
   updateTotals(); save();
 }
 function onSetting(t) {
@@ -1423,12 +1453,12 @@ function onSetting(t) {
   if (k === 'bw') logBw(v);
   save();
   if (k === 'timerEnabled') { if (!v) tPause(); renderDock(); }
-  if (k === 'showRpe' || k === 'rounding' || k === 'bar' || k === 'exLang' || k === 'sex' || k === 'cat' || k === 'trackMiss') refresh();
+  if (k === 'showRpe' || k === 'rounding' || k === 'bar' || k === 'exLang' || k === 'sex' || k === 'cat') refresh();
 }
 function onField(t) {
   const f = t.dataset.f, s = activeSession();
   switch (f) {
-    case 'kg': case 'reps': case 'pct': case 'rpe': setField(t); break;
+    case 'kg': case 'reps': case 'secs': case 'pct': case 'rpe': setField(t); break;
     case 'rest': if (s) { s.items[+t.closest('.exc').dataset.i].rest = parseNum(t.value); save(); } break;
     case 'notes': if (s) { s.notes = t.value; save(); } break;
     case 'srpe': if (s) { const v = parseInt(t.value, 10); if (v >= 1 && v <= 10) s.srpe = v; else delete s.srpe; save(); } break;
@@ -1499,7 +1529,7 @@ document.addEventListener('click', e => {
     case 'tick': { const row = t.closest('.set'); toggleDone(+row.dataset.i, +row.dataset.j); break; }
     case 'add-set': {
       const it = s.items[+t.dataset.i], last = it.sets[it.sets.length - 1];
-      it.sets.push(last ? Object.assign({ kg: last.kg, reps: last.pr ? '' : last.reps, pct: last.pct, rpe: null, done: false, doneAt: null }, last.pr ? { pr: last.pr } : {}) : mkSet(ex(it.exId), '', 0));
+      it.sets.push(last ? Object.assign({ kg: last.kg, reps: last.pr ? '' : last.reps, pct: last.pct, rpe: null, done: false, doneAt: null }, last.pr ? { pr: last.pr } : {}, last.secs ? { secs: last.pr ? '' : last.secs } : {}) : mkSet(ex(it.exId), '', 0));
       save(); render(); break;
     }
     case 'rm-set': {
@@ -1520,7 +1550,6 @@ document.addEventListener('click', e => {
       if (v !== 'F' && v !== 'M') break;
       S.profile.sex = v; S.profile.cat = ''; save(true); closeSheet(); render(); break;
     }
-    case 'miss': { const row = t.closest('.set'); toggleMiss(+row.dataset.i, +row.dataset.j); break; }
     case 'bw-save': {
       const v = parseNum(($('#bwq') || {}).value);
       if (!(v >= 30 && v <= 250)) { toast('Escribe tu peso en kilos (por ejemplo 81,5).'); break; }
@@ -1564,11 +1593,11 @@ document.addEventListener('click', e => {
     case 'ex-save': {
       const name = $('#exName').value.trim();
       if (!name) { toast('Ponle un nombre al ejercicio.'); break; }
-      const cat = $('#exCat').value, rest = parseNum($('#exRest').value) || S.profile.rest, id = t.dataset.ex, cb = ui.sheet.cb;
-      if (id) { const e = ex(id); e.name = name; e.cat = cat; e.rest = rest; save(); closeSheet(); render(); }
+      const cat = $('#exCat').value, meas = $('#exMeas').value, rest = parseNum($('#exRest').value) || S.profile.rest, id = t.dataset.ex, cb = ui.sheet.cb;
+      if (id) { const e = ex(id); e.name = name; e.cat = cat; e.meas = meas; e.rest = rest; save(); closeSheet(); render(); }
       else {
         const nid = 'x' + uid();
-        S.exercises.push({ id: nid, name: name, cat: cat, rest: rest, max: 0, maxDate: null, builtin: false });
+        S.exercises.push({ id: nid, name: name, cat: cat, meas: meas, rest: rest, max: 0, maxDate: null, builtin: false });
         save(); closeSheet(); render(); if (cb) cb(nid);
       }
       break;
@@ -1611,7 +1640,9 @@ document.addEventListener('click', e => {
   if (prevConfirm && !ui.confirm) { prevConfirm = null; refresh(); }
 });
 document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.f && e.target.dataset.f !== 'impFile') onField(e.target); });
-document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.f === 'impFile') onField(e.target); });
+document.addEventListener('change', e => {
+  if (e.target.id === 'exCat' && $('#exMeas')) $('#exMeas').value = measOf({ cat: e.target.value });   // al cambiar la categoría propone cómo se mide
+  if (e.target.dataset && e.target.dataset.f === 'impFile') onField(e.target); });
 
 /* ----- Inicio ----- */
 let started = false, tickId = null;
@@ -1621,7 +1652,7 @@ let started = false, tickId = null;
 function start(opts) {
   opts = opts || {};
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, cloud: !!opts.cloud };
+  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, hoyHTML: opts.hoyHTML || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);
@@ -1662,7 +1693,7 @@ let refreshLater = false;
 function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
 function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
 document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
-window.HalterApp = { icon: svg, empty: emptyHTML, rt: { bind: rtBind, card: rtCard, ex: rtEx }, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
+window.HalterApp = { csvHistory: csvHistory, icon: svg, empty: emptyHTML, rt: { bind: rtBind, card: rtCard, ex: rtEx }, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
   /* cálculos compartidos con la vista del entrenador (compare.js) */
   pure: { categoryOf: categoryOf, catText: catText, catOptions: catOptions, catSortKey: catSortKey, fmtNum: fmtNum, SEX_LABEL: SEX_LABEL, shortDate: shortDate, parseYmd: parseYmd, ymd: ymd } };
 })();

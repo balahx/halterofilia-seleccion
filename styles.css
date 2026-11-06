@@ -391,15 +391,9 @@ details > summary { cursor: pointer; }
 .inote-h { display: block; color: var(--muted); font-style: italic; margin-top: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* indicadores: series falladas, metas, razones, efectividad */
-.set.tm { grid-template-columns: 18px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 34px 44px; gap: 4px; }
-.set.tm.rpe { grid-template-columns: 18px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 46px 34px 44px; }
-.set.tm .num { font-size: 20px; padding: 0 2px; }
-.set.tm .tick { width: 44px; }
-.set.tm .set-n { font-size: 15px; }
-.missb { width: 34px; height: 48px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: transparent; color: var(--muted); font: 700 16px var(--font-body); cursor: pointer; padding: 0; }
-.missb[aria-pressed="true"] { background: var(--bad); border-color: var(--bad); color: #fff; }
-.set.is-miss .num { text-decoration: line-through; }
+/* indicadores: metas, razones, cumplimiento; series de solo repeticiones o de tiempo */
+.set.m-reps, .set.m-time { grid-template-columns: 22px minmax(0, 1fr) 48px; }
+.set.m-reps.rpe, .set.m-time.rpe { grid-template-columns: 22px minmax(0, 1fr) 54px 48px; }
 .goal { flex: 1 1 100%; display: grid; gap: 4px; padding: 0 0 10px 14px; font-size: 12.5px; }
 .goalbar { display: block; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .goalbar i { display: block; height: 100%; background: var(--ok); }
@@ -408,7 +402,7 @@ details > summary { cursor: pointer; }
 .ratio:last-child { border-bottom: 0; }
 .ratio b { font-variant-numeric: tabular-nums; }
 .etab { display: grid; gap: 0; margin-top: 8px; font-size: 13.5px; }
-.er { display: grid; grid-template-columns: minmax(0, 1.6fr) 64px 56px 74px; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: center; font-variant-numeric: tabular-nums; }
+.er { display: grid; grid-template-columns: minmax(0, 1.6fr) 64px 56px; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: center; font-variant-numeric: tabular-nums; }
 .er.eh { font: 600 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .er > span:first-child { overflow-wrap: anywhere; }
 
@@ -589,3 +583,11 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
 .opt b { display: block; }
 .opt small { display: block; color: var(--muted); }
 .rt-card .plain li .btn { flex: none; white-space: nowrap; }
+
+/* «Hoy»: la sesión del plan va minimizada cuando hay una rutina que lo reemplaza */
+.hoy-min { margin: 0 0 12px; }
+.hoy-min > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; padding: 0 4px; font: 600 14px var(--font-body); color: var(--muted); }
+.hoy-min[open] > summary { color: var(--ink); }
+
+/* indicadores con cifras largas en pantallas angostas (A6) */
+@media (max-width: 440px) { .stats b.n7 { font-size: 18px; } .stats b.n8 { font-size: 16px; } .stats b.n9 { font-size: 14px; } }

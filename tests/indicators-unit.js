@@ -31,15 +31,22 @@ ok(A.sessionRpe(s2) === 7.5 && A.sessionLoad(s2) === 675, 'RPE promedio 7,5 × 9
 ok(A.sessionLoad(Object.assign({}, s2, { srpe: 7, durMin: 90 })) === 630, 'los valores anotados a mano mandan (90 × 7 = 630)');
 ok(A.sessionLoad({ startedAt: T(18, 0), items: [{ sets: [set(60, 3, { doneAt: T(18, 30) })] }] }) === 0, 'sin RPE no hay carga');
 
-console.log('4. Período: intensidad, repeticiones y efectividad');
-const s3 = { date: '2026-11-02', endedAt: 1, startedAt: T(18, 0), srpe: 7, items: [{ exId: 'snatch', sets: [set(60, 3, { pct: 70, doneAt: T(18, 30) }), set(80, 1, { pct: 90 }), set(85, 1, { pct: 95, miss: true })] }] };
+console.log('4. Período: intensidad, repeticiones y cumplimiento');
+const s3 = { date: '2026-11-02', endedAt: 1, startedAt: T(18, 0), srpe: 7, items: [{ exId: 'snatch', p: 4, sets: [set(60, 3, { pct: 70, doneAt: T(18, 30) }), set(80, 1, { pct: 90 }), set(85, 1, { pct: 95 })] }, { exId: 'bsq', p: 3, sets: [set(100, 5, { pct: 80 })] }], skip: [{ exId: 'press', p: 2 }] };
 const p = A.periodStats([s3], '2026-11-02', '2026-11-03');
-ok(p.n === 1 && p.reps === 4 && p.sets === 2, 'repeticiones válidas (3 + 1)');
-ok(Math.abs(p.intAvg - (70 * 3 + 90) / 4) < 1e-9, 'intensidad media ponderada por repeticiones = 75 %');
-ok(p.attempts === 3 && p.valid === 2 && Math.abs(p.eff - 66.666) < 0.01, 'efectividad 2 de 3');
+ok(p.n === 1 && p.reps === 10 && p.sets === 4, 'repeticiones válidas (3 + 1 + 1 + 5)');
+ok(Math.abs(p.intAvg - (70 * 3 + 90 + 95 + 80 * 5) / 10) < 1e-9, 'intensidad media ponderada por repeticiones');
+ok(p.planSets === 9 && p.planDone === 4 && Math.abs(p.cump - 44.444) < 0.01, 'cumplimiento: 4 series hechas de 9 planificadas (incluye el ejercicio omitido)');
 ok(A.periodStats([s3], '2026-11-03', '2026-11-09').n === 0, 'fuera del período no cuenta');
-const eff = A.efficiencyByExercise([s3], '', id => ({ cat: id === 'snatch' ? 'comp' : 'acc' }));
-ok(eff.length === 1 && eff[0].hAtt === 2 && eff[0].hOk === 1, 'efectividad desde 90 %: 1 de 2');
+const sOld = { date: '2026-11-02', endedAt: 1, startedAt: T(18, 0), items: [{ exId: 'snatch', sets: [set(60, 3)] }] };
+ok(A.periodStats([sOld], '2026-11-02', '2026-11-03').cump === null, 'una sesión sin series planificadas (libre o anterior a la 4.3) no entra al cumplimiento');
+const sOver = { date: '2026-11-02', endedAt: 1, items: [{ exId: 'snatch', p: 2, sets: [set(60, 3), set(60, 3), set(60, 3)] }] };
+ok(A.periodStats([sOver], '2026-11-02', '2026-11-03').cump === 100, 'hacer más series de las planificadas no pasa de 100 %');
+const sMiss = { date: '2026-11-02', endedAt: 1, items: [{ exId: 'snatch', p: 2, sets: [set(60, 3), set(60, 3, { miss: true })] }] };
+ok(A.periodStats([sMiss], '2026-11-02', '2026-11-03').cump === 50, 'una serie «fallada» de versiones anteriores no cuenta como hecha');
+const cmp = A.complianceByExercise([s3], '', id => ({ cat: id === 'snatch' ? 'comp' : 'acc' }));
+ok(cmp.length === 3 && cmp[0].exId === 'snatch' && cmp[0].plan === 4 && cmp[0].done === 3, 'cumplimiento por ejercicio: competencia primero (3 de 4)');
+ok(cmp.some(x => x.exId === 'press' && x.plan === 2 && x.done === 0), 'el ejercicio omitido aparece con 0 de 2');
 
 console.log('5. Razones y metas');
 const mx = { snatch: 80, cj: 100, bsq: 130, fsq: 0 };
