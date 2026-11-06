@@ -632,7 +632,7 @@
       case 'as-self': assignSelf(); return true;
       case 'as-advance': advance(); return true;
       case 'rt-new': case 'rt-edit': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': return rtAct(act, el);
-      case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': return !!root.HalterReport && root.HalterReport.onAct(act, el, reportCtx());
+      case 'rp-toggle': case 'rp-refresh': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': return !!root.HalterReport && root.HalterReport.onAct(act, el, reportCtx());
       case 'as-adj-save': {
         const a = A.asg[A.sel]; if (!a) return true;
         const pcts = {}; Object.keys(A.draft || {}).forEach(k => { if (A.draft[k] > 0 && A.draft[k] <= (k.indexOf('f_') === 0 ? 200 : 130)) pcts[k] = A.draft[k]; });

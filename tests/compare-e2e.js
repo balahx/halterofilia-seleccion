@@ -60,6 +60,14 @@ const ATH = [
   await page.click('[data-act="cmp-open"][data-uid="a3"]'); await page.waitForSelector('.cmp-det .ratio');
   const det = await txt('.cmp-det');
   ok(/Arranque/.test(det) && /100/.test(det) && /meta 105/.test(det), 'detalle de Carlos: arranque 100 con meta 105');
+  ok(/Leído a las/.test(await page.locator('.cmp-bar .muted').last().innerText()) && /lecturas/.test(await page.locator('.cmp-bar .muted').last().innerText()), 'la primera vez se lee del servidor y dice cuántas lecturas fueron');
+  await page.reload(); await page.waitForSelector('#appRoot:not([hidden])', { timeout: 8000 }); await tab('marcas'); await page.waitForSelector('.cmp-tab', { timeout: 8000 });
+  ok(/Guardado en este dispositivo/.test(await page.locator('.cmp-bar .muted').last().innerText()), 'al reabrir la app (dentro de 10 min) usa la copia guardada: 0 lecturas');
+  await page.evaluate(() => __fake.admin('users/a1/records/e_snatch', { t: 'exercise', d: JSON.stringify({ id: 'snatch', name: 'Arranque', max: 99, maxDate: '2026-11-05', cat: 'comp' }), u: Date.now(), at: Date.now() }));
+  await page.click('[data-act="cmp-refresh"]'); await page.waitForTimeout(700);
+  ok(/Leído a las/.test(await page.locator('.cmp-bar .muted').last().innerText()) && /99/.test(await page.locator('tr', { hasText: 'Ana Rojas' }).innerText()), '«Actualizar» vuelve a leer y trae el cambio');
+  await page.click('#nav button[data-tab="mas"]'); await page.waitForTimeout(300); await page.click('.mrow[data-act="settings"]'); await page.waitForTimeout(500);
+  ok(/Uso de la nube/i.test(await txt('body')) && /Lecturas de hoy en este dispositivo: \d/.test(await txt('body')), 'Ajustes muestra «Lecturas de hoy»');
   await page.screenshot({ path: path.join(SHOTS, 'marcas-2.png'), fullPage: true });
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'sin scroll horizontal en la página');
   console.log(errors.length ? 'Errores: ' + errors.join(' | ') : 'Sin errores de consola ni de página');

@@ -305,3 +305,7 @@ export function project(pts) {
   const yl = m * last.x + b;
   return { m: m, yFit: yl, p4: yl + 4 * m, p8: yl + 8 * m, xl: last.x };
 }
+
+/* Fecha corta en español de Chile («5 nov») */
+export const fmtShort = new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short' });
+export function shortDate(d) { return fmtShort.format(d).replace('.', ''); }

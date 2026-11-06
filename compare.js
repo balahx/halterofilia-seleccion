@@ -2,7 +2,7 @@
    Muestra las marcas de arranque, dos tiempos y total de cada atleta, separadas por sexo y por categoría de peso,
    ordenadas por total, con la diferencia respecto del líder de la categoría. Al tocar un atleta se ven todos sus máximos y metas.
    Lee del perfil de cada atleta (sexo, peso, categoría) y de sus ejercicios (users/{uid}/records/profile, e_snatch, e_cj),
-   que las reglas ya dejan leer al entrenador. Cuesta 3 lecturas por atleta al abrir o actualizar (y las del detalle al tocar uno).
+   que las reglas ya dejan leer al entrenador. Cuesta 3 lecturas por atleta, pero con reads.js se reutiliza 10 min (también al reabrir la app); «Actualizar» las vuelve a leer (y las del detalle se leen al tocar un atleta).
    La parte pura (sin DOM) se prueba con Node: node tests/compare-unit.js */
 (function (root) {
   'use strict';
@@ -63,25 +63,37 @@
 
   /* ---------- Interfaz ---------- */
   const H = { remote: () => null, members: () => [], toast: () => {}, render: () => {}, err: e => String(e && e.message || e), P: () => (root.HalterApp && root.HalterApp.pure) || {} };
-  const K = { sex: 'all', cat: 'all', rows: null, loading: false, err: '', at: 0, reads: 0, open: null, detail: {}, ids: '' };
+  const K = { sex: 'all', cat: 'all', rows: null, loading: false, err: '', at: 0, reads: 0, cached: false, open: null, detail: {}, ids: '' };
 
   function init(o) { Object.assign(H, o || {}); }
-  function reset() { Object.assign(K, { sex: 'all', cat: 'all', rows: null, loading: false, err: '', at: 0, reads: 0, open: null, detail: {}, ids: '' }); }
+  function reset() { Object.assign(K, { sex: 'all', cat: 'all', rows: null, loading: false, err: '', at: 0, reads: 0, cached: false, open: null, detail: {}, ids: '' }); }
 
-  async function load() {
+  const hashIds = s => { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x * 33) ^ s.charCodeAt(i)) >>> 0; return x.toString(36); };
+  const TTL = 10 * 60000;   // las marcas leídas se reutilizan 10 min (también al reabrir la app); «Actualizar» las vuelve a leer
+  async function load(force) {
     if (K.loading) return;
     const r = H.remote(), members = H.members().slice();
     if (!r) return;
     K.loading = true; K.err = '';
-    const P = H.P();
-    let reads = 0;
-    try {
+    const P = H.P(), ids = members.map(m => m.id).sort().join(',');
+    let fetched = false; const t0 = Date.now();
+    const fetchAll = async () => {
+      fetched = true;
+      let reads = 0;
       const rows = await Promise.all(members.map(async m => {
         const g = async k => { reads++; return r.getDoc('users/' + m.id + '/records/' + k); };
         const [pf, sn, cj] = await Promise.all([g('profile'), g('e_snatch'), g('e_cj')]);
         return buildRow(m, pf, sn, cj, P);
       }));
-      K.rows = rows; K.at = Date.now(); K.reads = reads; K.ids = members.map(m => m.id).sort().join(',');
+      return { rows: rows, reads: reads, ids: ids, at: Date.now() };
+    };
+    const apply = v => { K.rows = v.rows; K.at = v.at; K.reads = v.reads; K.ids = ids; };
+    try {
+      /* Con reads.js la lectura (3 documentos por atleta) se guarda en el dispositivo y se reutiliza mientras el equipo sea el mismo */
+      let v;
+      if (root.HalterReads) v = await root.HalterReads.swr('compare:' + hashIds(ids), TTL, fetchAll, (c, m) => { if (m && m.fromCache && !fetched) { apply(c); K.cached = true; H.render(); } }, !!force);
+      else v = await fetchAll();
+      apply(v); K.cached = v.at < t0;   // lo que se muestra es la copia guardada (no se leyó ahora)
     } catch (e) { K.err = H.err(e); K.rows = K.rows || []; }
     K.loading = false;
     H.render();
@@ -154,7 +166,7 @@
       h += '</section>';
     });
     h += '<div class="cmp-bar"><button class="btn ghost sm" data-act="cmp-refresh"' + (K.loading ? ' disabled' : '') + '>' + (K.loading ? 'Actualizando…' : 'Actualizar') + '</button>' +
-      '<span class="muted">' + (K.at ? 'Leído a las ' + new Date(K.at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) + ' · ' + K.reads + ' lecturas' : '') + '</span></div>' +
+      '<span class="muted">' + (K.at ? (K.cached ? 'Guardado en este dispositivo a las ' : 'Leído a las ') + new Date(K.at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) + (K.cached ? ' (se renueva cada 10 min o con «Actualizar»)' : ' · ' + K.reads + ' lecturas') : '') + '</span></div>' +
       '<p class="muted">★ = líder de la categoría por total. Dif. = diferencia de total con el líder. Las categorías siguen la tabla de la IWF vigente desde el 1 de agosto de 2026; confirma con el reglamento de cada torneo. Compara solo marcas registradas por los atletas, no resultados de competencia oficial.</p>';
     return h;
   }
@@ -163,7 +175,7 @@
     switch (act) {
       case 'cmp-sex': K.sex = el.dataset.v; K.cat = 'all'; break;
       case 'cmp-cat': K.cat = el.dataset.v; break;
-      case 'cmp-refresh': K.detail = {}; K.rows = K.rows || []; load(); break;
+      case 'cmp-refresh': K.detail = {}; K.rows = K.rows || []; load(true); break;
       case 'cmp-open': {
         const u = el.dataset.uid;
         K.open = K.open === u ? null : u;

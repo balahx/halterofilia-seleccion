@@ -222,11 +222,14 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ymdChile = ms => { const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)); return p; };
   let H = null, unsub = null;
-  const R = { uid: null, open: false, mode: 'week', weekId: '', date: '', recs: null, err: '', adj: {}, adjAsked: {}, doneMap: {}, doneAsked: {}, copied: '' };
+  const R = { uid: null, open: false, mode: 'week', weekId: '', date: '', recs: null, err: '', at: 0, busy: false, adj: {}, adjAsked: {}, doneMap: {}, doneAsked: {}, copied: '' };
 
-  function reset() { if (unsub) { try { unsub(); } catch (e) { /* ya cerrado */ } } unsub = null; R.uid = null; R.open = false; R.recs = null; R.err = ''; R.adj = {}; R.adjAsked = {}; R.doneMap = {}; R.doneAsked = {}; R.weekId = ''; R.copied = ''; }
+  let tick = null;
+  const AUTO_MS = 5 * 60000, FOCUS_MS = 60000;   // renovación automática con el informe abierto: cada 5 min, y al volver a la pestaña si pasó más de 1 min
+  function reset() { if (unsub) { try { unsub(); } catch (e) { /* ya cerrado */ } } unsub = null; if (tick) { clearInterval(tick); tick = null; } R.uid = null; R.open = false; R.recs = null; R.err = ''; R.at = 0; R.busy = false; R.adj = {}; R.adjAsked = {}; R.doneMap = {}; R.doneAsked = {}; R.weekId = ''; R.copied = ''; }
   function init(helpers) {
     H = helpers;
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && R.open && root.HalterReads && !R.busy && Date.now() - R.at > FOCUS_MS) load(R.uid, false); });
     document.addEventListener('change', e => {
       const t = e.target; if (!t || !t.dataset) return;
       if (t.dataset.as === 'rpweek') { R.weekId = t.value; H.render(); }
@@ -248,12 +251,36 @@
     reset(); R.uid = uid; R.open = true;
     if (root.HalterReads) {
       /* Con reads.js: la primera vez se baja el historial del atleta y queda guardado en este dispositivo; después solo se leen
-         los registros escritos desde la última vez (antes se descargaban todos en cada apertura y quedaban escuchándose). */
+         los registros escritos desde la última vez (antes se descargaban todos en cada apertura y quedaban escuchándose).
+         Con el informe abierto se renueva solo cada 5 min (1 lectura si no hay nada nuevo), al volver a la pestaña y con el botón «Actualizar». */
       let live = true; unsub = () => { live = false; };
-      root.HalterReads.records(H.remote(), uid).then(res => { if (!live) return; R.recs = parseRecords(res.list); R.err = ''; H.render(); }, e => { if (!live) return; R.err = H.err(e); R.recs = null; H.render(); });
+      load(uid, false);
+      tick = setInterval(() => { if (live && !R.busy && document.visibilityState === 'visible') load(uid, false); }, AUTO_MS);
       return;
     }
     unsub = H.remote().watchCol('users/' + uid + '/records', list => { R.recs = parseRecords(list); R.err = ''; H.render(); }, e => { R.err = H.err(e); R.recs = null; H.render(); });
+  }
+  /* Renueva los registros del atleta (solo lo nuevo). `manual`: botón «Actualizar» → además vuelve a pedir ajustes y sesiones cumplidas de la semana */
+  function load(uid, manual) {
+    if (!root.HalterReads || R.busy) return;
+    R.busy = true; if (manual) H.render();
+    root.HalterReads.records(H.remote(), uid).then(res => {
+      if (!R.open || R.uid !== uid) return;
+      R.busy = false; if (!res.stale) R.at = Date.now(); R.err = '';
+      if (manual || res.fresh > 0) { R.adjAsked = {}; R.doneAsked = {}; }   // hubo cambios: también se vuelven a leer los ajustes y las sesiones cumplidas
+      if (res.stale && manual) H.toast('Sin conexión: se muestra lo último guardado.');
+      R.recs = parseRecords(res.list); H.render();
+    }, e => {
+      if (!R.open || R.uid !== uid) return;
+      R.busy = false;
+      if (R.recs) { if (manual) H.toast('No se pudo actualizar. ' + H.err(e)); H.render(); }
+      else { R.err = H.err(e); R.recs = null; H.render(); }
+    });
+  }
+  function ago() {
+    if (!R.at) return '';
+    const m = Math.floor((Date.now() - R.at) / 60000);
+    return m < 1 ? 'Actualizado hace un momento' : 'Actualizado hace ' + m + ' min';
   }
   function needAdj(uid, planId, weekId) {
     const k = uid + '_' + planId + '_' + weekId; if (R.adjAsked[k]) return;
@@ -322,6 +349,7 @@
       });
       h += `<label class="lab" for="rpWeek">Semana del plan</label><select class="sel tall" id="rpWeek" data-as="rpweek">${opts}${last !== null ? '</optgroup>' : ''}</select>`;
     } else h += `<label class="lab" for="rpDate">Fecha</label><input class="txt" type="date" id="rpDate" data-as="rpdate" value="${esc(R.date)}">`;
+    if (root.HalterReads && R.recs) h += `<div class="rp-refresh"><button class="btn ghost sm" data-act="rp-refresh"${R.busy ? ' disabled' : ''}>${R.busy ? 'Actualizando…' : 'Actualizar'}</button><small class="muted" role="status">${esc(ago())}</small></div>`;
     if (R.err) h += window.HalterApp.errorBox(R.err);
     else if (!R.recs) h += '<p class="muted">Cargando los registros del atleta…</p>';
     else {
@@ -339,6 +367,7 @@
   function onAct(act, el, ctx) {
     switch (act) {
       case 'rp-toggle': if (R.open) { const u = R.uid; reset(); R.uid = null; } else start(ctx.uid); return true;
+      case 'rp-refresh': load(R.uid, true); return true;
       case 'rp-mode': R.mode = el.dataset.m === 'day' ? 'day' : 'week'; return true;
       case 'rp-copy': {
         const done = () => { R.copied = '1'; H.render(); setTimeout(() => { R.copied = ''; H.render(); }, 2000); };

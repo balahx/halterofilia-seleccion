@@ -256,6 +256,16 @@ const WEEKS = {
   await page.fill('#rpDate', await page.evaluate(() => new Date().toISOString().slice(0, 10))); await page.waitForTimeout(300);
   await page.dispatchEvent('#rpDate', 'change'); await page.waitForTimeout(500);
   ok(/Semana 1 · Lunes/.test(await txt('#rpCard')) && /Dolor leve/.test(await txt('#rpCard')), 'informe de un día: la sesión del plan con su observación');
+  ok(/Actualizado hace un momento/.test(await txt('#rpCard')) && /Actualizar/.test(await txt('#rpCard')), 'el informe ofrece «Actualizar» y dice cuándo se actualizó');
+  await page.evaluate(u => {
+    const day = new Date().toISOString().slice(0, 10);
+    const sess = { id: 'inf2', date: day, name: 'Libre', startedAt: Date.now() - 1800000, endedAt: Date.now(), notes: 'Nota nueva tras actualizar', items: [{ exId: 'snatch', sets: [{ kg: 60, reps: '2', done: true, doneAt: 1 }] }] };
+    __fake.admin('users/' + u + '/records/s_inf2', { t: 'session', d: JSON.stringify(sess), u: Date.now(), at: Date.now() + 5 });
+  }, auid);
+  await page.waitForTimeout(300);
+  ok(!/Nota nueva tras actualizar/.test(await txt('#rpCard')), 'con el informe abierto no cambia solo al instante (sin escucha en vivo)');
+  await page.click('[data-act="rp-refresh"]'); await page.waitForTimeout(700);
+  ok(/Nota nueva tras actualizar/.test(await txt('#rpCard')), '«Actualizar» trae la sesión registrada después de abrir el informe');
   await page.evaluate(() => { window.print = () => { window.__printed = document.body.classList.contains('rp-print'); }; });
   await page.click('[data-act="rp-print"]'); await page.waitForTimeout(200);
   ok(await page.evaluate(() => window.__printed), 'imprimir marca la vista para que solo salga el informe');
