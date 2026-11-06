@@ -153,8 +153,8 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 ## Actualizar la app sin reinstalarla
 - **Ajustes → Aplicación → «Buscar actualización»** compara la versión que corre con la publicada (`version.js`, siempre pedida a la red). Si hay una nueva aparece «Actualizar ahora»: renueva el service worker, borra lo guardado antes y recarga. **La cuenta y los datos se conservan: no hay que volver a ingresar.** Sin conexión avisa y no se rompe. Es igual en computador y celular.
 - 6 segundos después de abrir la app se comprueba en silencio; si hay una versión nueva, el engranaje muestra un punto dorado.
-- La versión se ve al final de «Más» y de Ajustes («Versión 4.1.3»), con el crédito discreto «Created & Developed by Felipe González» debajo.
-- **Al publicar cambios, sube la versión en `version.js`**: `n` (el número que se ve, «Versión 4.1.3») y `v` (`AAAA.MM.DD.n`, nombra el caché; la fecha debe coincidir). **Regla de `n` (X.Y.Z), sube en cada publicación:** arreglo pequeño → Z (4.1.3 → 4.1.4); función nueva → Y y Z vuelve a 0 (4.1.4 → 4.2.0); cambio grande → X (4.2.0 → 5.0.0). La comparación es numérica por partes (4.10.0 es más nueva que 4.9.0). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
+- La versión se ve al final de «Más» y de Ajustes («Versión 4.1.4»), con el crédito «Created & Developed by Felipe González» debajo, en dorado y seminegrita.
+- **Al publicar cambios, sube la versión en `version.js`**: `n` (el número que se ve, «Versión 4.1.4») y `v` (`AAAA.MM.DD.n`, nombra el caché; la fecha debe coincidir). **Regla de `n` (X.Y.Z), sube en cada publicación:** arreglo pequeño → Z (4.1.4 → 4.1.5); función nueva → Y y Z vuelve a 0 (4.1.5 → 4.2.0); cambio grande → X (4.2.0 → 5.0.0). La comparación es numérica por partes (4.10.0 es más nueva que 4.9.0). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
 - Pruebas: `node tests/update-unit.js` y `node tests/update-e2e.js`.
 
 ## Lo que viene
