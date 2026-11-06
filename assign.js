@@ -150,7 +150,7 @@
       const sets = [];
       for (let k = 0; k < (p.sets > 0 ? p.sets : 1); k++) sets.push(Object.assign({ kg: kg, reps: '', pct: pct, rpe: null, done: false, doneAt: null }, pr ? { pr: pr } : {}));
       const prev = items.find(q => q.exId === e.id);
-      if (prev) prev.sets = prev.sets.concat(sets); else items.push({ exId: e.id, rest: p.rest > 0 ? p.rest : (e.rest || S.profile.rest || 120), sets: sets });
+      if (prev) prev.sets = prev.sets.concat(sets); else items.push(Object.assign({ exId: e.id, rest: p.rest > 0 ? p.rest : (e.rest || S.profile.rest || 120), sets: sets }, p.pause > 0 ? { pause: Math.min(Math.round(p.pause), 10) } : {}));
     });
     if (!items.length) return null;
     const dt = new Date();
@@ -513,7 +513,7 @@
     for (let i = 0; i < R.sessions.length; i++) {
       const d = R.sessions[i], items = (d.items || []).filter(p => p.exId);
       if (!items.length) { H.toast('La sesión ' + (i + 1) + ' no tiene ejercicios: agrégalos o quítala.'); return; }
-      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 10) })) });
+      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) })) });
     }
     const data = { uid: R.uid, name: name.slice(0, 80), sessions: sessions, setBy: A.uid }, note = (R.note || '').trim().slice(0, 400); if (note) data.note = note;
     const id = R.id || (R.uid.slice(0, 12) + '_' + Date.now().toString(36));

@@ -544,7 +544,7 @@ function legendHTML() {
 }
 function planPreview(p, e, rt) {
   const parts = [p.sets + '×' + (p.reps || '?')];
-  if (rt) { if (p.pct > 0) parts.push(fmtNum(p.pct, 1) + ' %'); if (p.rest > 0) parts.push('pausa ' + fmtTime(p.rest)); }   // los kilos los calcula cada atleta con su máximo
+  if (rt) { if (p.pct > 0) parts.push(fmtNum(p.pct, 1) + ' %'); if (p.pause > 0) parts.push('pausa ' + p.pause + ' s'); if (p.rest > 0) parts.push('descanso ' + fmtTime(p.rest)); }   // los kilos los calcula cada atleta con su máximo
   else if (p.pct > 0 && e.max > 0) parts.push('≈ ' + fmtNum(roundTo(e.max * p.pct / 100, S.profile.rounding), 1) + ' kg');
   else if (p.pct > 0) parts.push('sin máximo');
   return parts.join(' · ');
@@ -626,7 +626,8 @@ function exerciseCard(it, i) {
   const e = ex(it.exId), rpe = S.profile.showRpe, tm = S.profile.trackMiss !== false;
   return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) +
     (isComplex(e) ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
-      : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') + '</div>' +
+      : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') +
+    (it.pause > 0 ? '<span class="chip-pause">Pausa de ' + it.pause + ' s en el movimiento</span>' : '') + '</div>' +
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
     '<div class="set sethead' + (rpe ? ' rpe' : '') + (tm ? ' tm' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + (tm ? '<span>Falló</span>' : '') + '<span></span></div>' +
     it.sets.map((st, j) => setRowHTML(i, j, st, it)).join('') +
@@ -657,11 +658,11 @@ function planRow(d, i, p, k, rt) {
   const e = rt ? rtEx(p) : ex(p.exId), id = i + '-' + k;
   return '<div class="prow" data-d="' + i + '" data-k="' + k + '"><div class="prow-h"><span class="pn">' + plateDot(zoneOf(p.pct)) + esc(nm(e)) + '</span><span class="pv" id="pv-' + id + '">' + esc(planPreview(p, e, rt)) + '</span>' +
     '<button class="icon-btn sm" data-act="plan-rm" data-d="' + i + '" data-k="' + k + '" aria-label="Quitar ' + esc(nm(e)) + ' del plan">' + svg('close') + '</button></div>' +
-    '<div class="prow-f"><label><span>Series</span><input class="num sm" id="ps-' + id + '" data-f="psets" inputmode="numeric" value="' + p.sets + '"></label>' +
+    '<div class="prow-f' + (rt ? ' rt' : '') + '"><label><span>Series</span><input class="num sm" id="ps-' + id + '" data-f="psets" inputmode="numeric" value="' + p.sets + '"></label>' +
     '<label><span>Reps</span><input class="num sm" id="pr-' + id + '" data-f="preps" inputmode="text" value="' + esc(p.reps) + '"></label>' +
     '<label><span>% máx.</span><input class="num sm" id="pp-' + id + '" data-f="ppct" inputmode="decimal" value="' + (p.pct > 0 ? fmtNum(p.pct, 1) : '') + '"></label>' +
-    (rt ? '<label><span>Pausa (s)</span><input class="num sm" id="pd-' + id + '" data-f="prest" inputmode="numeric" placeholder="0–10" maxlength="2" aria-label="Pausa entre series, de 0 a 10 segundos" value="' + (p.rest > 0 ? p.rest : '') + '"></label>'
-        : '<label><span>Descanso</span>' + restSelect(p.rest, 'id="pd-' + id + '" data-f="prest"', true) + '</label>') + '</div></div>';
+    '<label><span>Descanso</span>' + restSelect(p.rest, 'id="pd-' + id + '" data-f="prest"', true) + '</label>' +
+    (rt ? '<label><span>Pausa (s)</span><input class="num sm" id="pz-' + id + '" data-f="ppause" inputmode="numeric" placeholder="0–10" maxlength="2" aria-label="Pausa en el movimiento, de 0 a 10 segundos" value="' + (p.pause > 0 ? p.pause : '') + '"></label>' : '') + '</div></div>';
 }
 function dayCard(d, i) {
   const isToday = weekdayIdx(new Date()) === i;
@@ -1433,12 +1434,13 @@ function onField(t) {
     case 'inote': if (s) { const it = s.items[+t.closest('.exc').dataset.i]; if (it) { it.note = t.value.slice(0, 200); save(); } } break;
     case 'dname': { const c = t.closest('.day'); if (c.dataset.rt) { RT.days[+c.dataset.d].name = t.value; if (RT.onChange) RT.onChange(); } else { S.plan.days[+c.dataset.d].name = t.value; save(); } break; }
     case 'don': { const d = S.plan.days[+t.closest('.day').dataset.d]; d.on = t.checked; save(); render(); break; }
-    case 'psets': case 'preps': case 'ppct': case 'prest': {
+    case 'psets': case 'preps': case 'ppct': case 'prest': case 'ppause': {
       const row = t.closest('.prow'), isRt = !!t.closest('[data-rt]'), p = (isRt ? RT.days : S.plan.days)[+row.dataset.d].items[+row.dataset.k], e = ex(p.exId);
       if (f === 'psets') { const n = parseInt(t.value, 10); if (n >= 1 && n <= 30) p.sets = n; }
       else if (f === 'preps') { const c = t.value.replace(/[^\d+]/g, ''); if (c !== t.value) t.value = c; p.reps = c; }
       else if (f === 'ppct') { const v = parseNum(t.value); p.pct = isNaN(v) || v < 0 ? 0 : v; setDot(row.querySelector('.pn .pl'), zoneOf(p.pct)); }
-      else { const r = parseNum(t.value) || 0; if (isRt) { p.rest = Math.min(Math.max(Math.round(r), 0), 10); if (t.value !== '' && String(p.rest) !== t.value.trim()) t.value = String(p.rest); } else p.rest = r; }
+      else if (f === 'ppause') { const r = Math.min(Math.max(Math.round(parseNum(t.value) || 0), 0), 10); p.pause = r; if (t.value !== '' && String(r) !== t.value.trim()) t.value = String(r); }
+      else p.rest = parseNum(t.value) || 0;
       setText(document.getElementById('pv-' + row.dataset.d + '-' + row.dataset.k), planPreview(p, e, isRt)); if (isRt) { if (RT.onChange) RT.onChange(); } else save(); break;
     }
     case 'autoTimer': S.profile.autoTimer = t.checked; save(); break;
@@ -1540,12 +1542,12 @@ document.addEventListener('click', e => {
     case 'del-sess': if (askConfirm('ds' + t.dataset.id)) { S.sessions = S.sessions.filter(x => x.id !== t.dataset.id); ui.openSess = null; save(); render(); } break;
     case 'plan-add': {
       const di = +t.dataset.d;
-      openSheet('pick', { cb: id => { S.plan.days[di].items.push({ exId: id, sets: 3, reps: '3', pct: 70, rest: 0 }); save(); render(); } }); break;
+      openSheet('pick', { cb: id => { S.plan.days[di].items.push({ exId: id, sets: 3, reps: '3', pct: 70, rest: 0, pause: 0 }); save(); render(); } }); break;
     }
     case 'plan-rm': { const rt = !!t.closest('[data-rt]'); (rt ? RT.days : S.plan.days)[+t.dataset.d].items.splice(+t.dataset.k, 1); if (rt) { if (RT.onChange) RT.onChange(true); } else { save(); render(); } break; }
     case 'rt-add': {
       const di = +t.dataset.d;
-      openSheet('pick', { cb: id => { const e = ex(id); RT.days[di].items.push({ exId: id, name: e.name, cat: e.cat, sets: 3, reps: '3', pct: 70, rest: 0 }); if (RT.onChange) RT.onChange(true); } }); break;
+      openSheet('pick', { cb: id => { const e = ex(id); RT.days[di].items.push({ exId: id, name: e.name, cat: e.cat, sets: 3, reps: '3', pct: 70, rest: 0, pause: 0 }); if (RT.onChange) RT.onChange(true); } }); break;
     }
     case 'pick': { const cb = ui.sheet && ui.sheet.cb; closeSheet(); if (cb) cb(t.dataset.ex); break; }
     case 'plates-toggle': ui.platesOpen = !ui.platesOpen; render(); break;
