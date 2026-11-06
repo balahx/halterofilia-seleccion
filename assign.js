@@ -146,7 +146,7 @@
       if (!p.exId) return;
       let e = S.exercises.find(q => q.id === p.exId);
       if (!e) { e = { id: p.exId, name: p.name || 'Ejercicio', cat: p.cat || 'acc', rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }; S.exercises.push(e); }
-      const pct = p.pct || 0, kg = e.max > 0 && pct > 0 ? roundTo(e.max * pct / 100, rounding) : 0, pr = String(p.reps || '');
+      const fixed = p.kg > 0 ? +p.kg : 0, kg = fixed || (e.max > 0 && p.pct > 0 ? roundTo(e.max * p.pct / 100, rounding) : 0), pct = p.pct > 0 ? p.pct : (fixed && e.max > 0 ? Math.round(fixed / e.max * 1000) / 10 : 0), pr = String(p.reps || '');
       const sets = [];
       for (let k = 0; k < (p.sets > 0 ? p.sets : 1); k++) sets.push(Object.assign({ kg: kg, reps: '', pct: pct, rpe: null, done: false, doneAt: null }, pr ? { pr: pr } : {}));
       const prev = items.find(q => q.exId === e.id);
@@ -203,7 +203,8 @@
     H = helpers; if (root.HalterReport) root.HalterReport.init(helpers);
     document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } if (t && t.dataset && t.dataset.as === 'selfweek') { A.selfPick = t.value; } });
     document.addEventListener('input', e => {
-      const t = e.target; if (t && t.dataset && A.rt && (t.dataset.as === 'rtname' || t.dataset.as === 'rtnote')) { if (t.dataset.as === 'rtname') A.rt.name = t.value; else A.rt.note = t.value; A.rt.dirty = true; return; }
+      const t = e.target; if (t && t.dataset && A.rt && t.dataset.as === 'rtmode') { if (t.checked) { A.rt.mode = t.value === 'replace' ? 'replace' : 'extra'; A.rt.dirty = true; } return; }
+      if (t && t.dataset && A.rt && (t.dataset.as === 'rtname' || t.dataset.as === 'rtnote')) { if (t.dataset.as === 'rtname') A.rt.name = t.value; else A.rt.note = t.value; A.rt.dirty = true; return; }
       if (!t || !t.dataset || t.dataset.as !== 'pct') return;
       const v = parseFloat(String(t.value).replace(',', '.')); A.draft = A.draft || {};
       if (t.value === '' || isNaN(v)) delete A.draft[t.dataset.key]; else A.draft[t.dataset.key] = Math.round(v * 10) / 10;
@@ -331,10 +332,11 @@
     if (a === undefined) return h + '<div class="card sec"><p class="muted">Cargando…</p></div>';
     const coach = A.role === 'coach';
     if (!a && coach) return h + '<p class="muted">Elige una semana del plan activo para entrenarla tú también. Tus sesiones y tus marcas quedan solo en tu cuenta; no entran en las comparaciones del equipo.</p>' + selfPicker(null);
-    const rts = coach ? '' : routinesHTML();
-    if (!a && rts) return h + rts + '<p class="muted">Aún no tienes una semana del plan asignada; mientras tanto, entrena con la rutina de tu entrenador.</p>';
+    const rts = coach ? '' : routinesHTML(), rep = !coach && replacing();
+    if (!a && rts) return h + rts + (rep ? '' : '<p class="muted">Aún no tienes una semana del plan asignada; mientras tanto, entrena con la rutina de tu entrenador.</p>');
     if (!a) return h + window.HalterApp.empty('semana', 'Aún no tienes semana asignada', 'Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
     h += rts;
+    if (rep) return h + '<div class="card sec"><span class="eyebrow">Plan semanal</span><p class="muted">Tu entrenador reemplazó tu plan semanal por la rutina de arriba. Tu semana asignada queda guardada y vuelve a verse cuando él quite la rutina o la deje como complementaria.</p></div>';
     const w = m.week;
     if (!w && m.weekErr) return h + window.HalterApp.errorBox('No se pudo leer tu semana (' + m.weekErr + ').', { retry: 'sync-now' });
     if (!w && m.weekMissing) return h + window.HalterApp.errorBox('La semana que tienes asignada ya no existe en el plan activo. ' + (A.role === 'coach' ? 'Elige otra semana más abajo.' : 'Pídele a tu entrenador que te la asigne de nuevo.'), { title: 'Semana no encontrada' }) + (A.role === 'coach' ? selfPicker(a) : '');
@@ -368,13 +370,14 @@
     window.HalterApp.startPlanned(S => buildRoutineSession(S, rt, i));
   }
   /* Rutinas especiales que el entrenador armó para mí (se muestran antes que la semana del plan) */
+  const replacing = () => (A.me.routines || []).some(r => r.mode === 'replace');
   function routinesHTML() {
-    const list = A.me.routines || [], S = window.HalterApp.state(), done = {};
+    const list = A.me.routines || [], S = window.HalterApp.state(), done = {}, todayNo = ((new Date().getDay() + 6) % 7) + 1;
     (S && S.sessions || []).forEach(x => { if (x.routine && x.endedAt) { const k = x.routine.id + ':' + x.routine.idx; if (!done[k] || x.date > done[k]) done[k] = x.date; } });
-    return list.map(r => `<div class="card sec rt-card"><span class="eyebrow gd">Rutina de tu entrenador</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') +
+    return list.map(r => `<div class="card sec rt-card"><span class="eyebrow gd">${r.mode === 'replace' ? 'Rutina en lugar del plan semanal' : 'Rutina complementaria'}</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') +
       '<ul class="plain">' + (r.sessions || []).map((x, i) => {
-        const d = done[r.id + ':' + i], n = (x.items || []).length;
-        return `<li><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></li>`;
+        const d = done[r.id + ':' + i], n = (x.items || []).length, dl = x.day > 0 ? dayLabel(x.day) : '', today = x.day === todayNo;
+        return `<li><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${dl ? esc(dl) + (today ? ' (hoy)' : '') + ' · ' : ''}${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm${today ? '' : ' ghost'}" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></li>`;
       }).join('') + '</ul></div>').join('');
   }
   function startSession(i) {
@@ -483,10 +486,11 @@
 
   /* ---------- Rutinas especiales (el entrenador las arma con el mismo editor de la app; los kilos los calcula cada atleta) ---------- */
   const nEx = r => (r.sessions || []).reduce((n, x) => n + (x.items || []).length, 0);
+  const rtDays = r => (r.sessions || []).filter(x => x.day > 0).map(x => dayLabel(x.day).slice(0, 3)).join(' · ');
   function rtListHTML(uid) {
     const list = A.routines.filter(x => x.uid === uid);
     let h = '<div class="card sec"><span class="eyebrow">Rutinas especiales</span>';
-    h += list.length ? list.map(r => `<div class="person"><div class="who-row"><div><b>${esc(r.name)}</b><small>${(r.sessions || []).length} ${(r.sessions || []).length === 1 ? 'sesión' : 'sesiones'} · ${nEx(r)} ejercicios</small></div></div><div class="acts">` +
+    h += list.length ? list.map(r => `<div class="person"><div class="who-row"><div><b>${esc(r.name)}</b><small>${(r.sessions || []).length} ${(r.sessions || []).length === 1 ? 'sesión' : 'sesiones'} · ${nEx(r)} ejercicios · ${r.mode === 'replace' ? 'reemplaza el plan semanal' : 'complementa el plan semanal'}${rtDays(r) ? ' · ' + rtDays(r) : ''}</small></div></div><div class="acts">` +
       `<button class="btn sm" data-act="rt-edit" data-id="${esc(r.id)}">Editar</button><button class="btn ghost sm" data-act="rt-del" data-id="${esc(r.id)}">${A.rtDel === r.id ? 'Confirmar' : 'Quitar'}</button></div></div>`).join('')
       : '<p class="muted">Sin rutinas especiales. Crea una cuando necesites algo distinto a la semana del plan: el atleta la ve en «Semana».</p>';
     return h + `<div class="stack"><button class="btn${list.length ? ' ghost' : ''}" data-act="rt-new" data-uid="${esc(uid)}">+ Crear rutina</button></div></div>`;
@@ -496,9 +500,12 @@
   function rtEditorHTML() {
     const R = A.rt, ha = root.HalterApp;
     let h = `<p><button class="lnk" data-act="rt-cancel">← ${esc(memberName(R.uid))}</button></p><h1>${R.id ? 'Editar rutina' : 'Nueva rutina'}</h1>` +
-      `<p class="muted">Para <b>${esc(memberName(R.uid))}</b>. Se arma igual que tu plan semanal: series, repeticiones, % del máximo y la pausa en segundos entre series. Los kilos los calcula cada atleta con su propio máximo.</p>`;
+      `<p class="muted">Para <b>${esc(memberName(R.uid))}</b>. Se arma igual que tu plan semanal: series, repeticiones y % del máximo (los kilos los calcula cada atleta con su propio máximo) o, si prefieres, kilos fijos. Cada ejercicio también lleva su descanso y la pausa en el movimiento (0 a 10 s). A cada sesión puedes ponerle un día de entrenamiento.</p>`;
     if (A.err) h += ha.errorBox(A.err, { retry: 'sync-now' });
     h += `<div class="card sec"><label class="lab" for="rtName">Nombre de la rutina</label><input class="txt" id="rtName" data-as="rtname" maxlength="80" placeholder="Ej.: Rehabilitación de hombro" value="${esc(R.name)}"></div>`;
+    const md = R.mode === 'replace' ? 'replace' : 'extra';
+    h += `<div class="card sec"><span class="eyebrow">¿Cómo se usa esta rutina?</span><label class="opt"><input type="radio" name="rtmode" data-as="rtmode" value="extra"${md === 'extra' ? ' checked' : ''}><span><b>Complementa el plan semanal</b><small>El atleta ve su semana del plan y, además, esta rutina. Puede entrenar una, otra o ambas.</small></span></label>` +
+      `<label class="opt"><input type="radio" name="rtmode" data-as="rtmode" value="replace"${md === 'replace' ? ' checked' : ''}><span><b>Reemplaza el plan semanal</b><small>Mientras exista, el atleta solo ve esta rutina. Su semana asignada queda guardada, oculta.</small></span></label></div>`;
     h += R.sessions.map((d, i) => ha.rt.card(d, i)).join('');
     h += `<button class="btn ghost block" data-act="rt-ses-add"${R.sessions.length >= 14 ? ' disabled' : ''}>+ Sesión</button>`;
     h += `<div class="card sec"><label class="lab" for="rtNote">Nota para el atleta (opcional)</label><textarea class="txt area" id="rtNote" data-as="rtnote" rows="3" maxlength="400" placeholder="Indicaciones, molestias a cuidar…">${esc(R.note || '')}</textarea></div>`;
@@ -513,16 +520,16 @@
     for (let i = 0; i < R.sessions.length; i++) {
       const d = R.sessions[i], items = (d.items || []).filter(p => p.exId);
       if (!items.length) { H.toast('La sesión ' + (i + 1) + ' no tiene ejercicios: agrégalos o quítala.'); return; }
-      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) })) });
+      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), day: d.day >= 1 && d.day <= 7 ? d.day : 0, items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), kg: Math.min(Math.max(Math.round((+p.kg || 0) * 10) / 10, 0), 600), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) })) });
     }
-    const data = { uid: R.uid, name: name.slice(0, 80), sessions: sessions, setBy: A.uid }, note = (R.note || '').trim().slice(0, 400); if (note) data.note = note;
+    const data = { uid: R.uid, name: name.slice(0, 80), mode: R.mode === 'replace' ? 'replace' : 'extra', sessions: sessions, setBy: A.uid }, note = (R.note || '').trim().slice(0, 400); if (note) data.note = note;
     const id = R.id || (R.uid.slice(0, 12) + '_' + Date.now().toString(36));
     guard(async () => { await H.remote().setRoutine(id, data); A.rt = null; }, 'Rutina guardada');
   }
   function rtAct(act, el) {
     switch (act) {
-      case 'rt-new': rtOpen({ id: null, uid: el.dataset.uid || A.sel, name: '', note: '', sessions: [{ name: 'Sesión 1', items: [] }], dirty: false }); return true;
-      case 'rt-edit': { const r = A.routines.find(x => x.id === el.dataset.id); if (r) rtOpen({ id: r.id, uid: r.uid, name: r.name, note: r.note || '', sessions: clone(r.sessions || []), dirty: false }); return true; }
+      case 'rt-new': rtOpen({ id: null, uid: el.dataset.uid || A.sel, name: '', note: '', mode: 'extra', sessions: [{ name: 'Sesión 1', items: [] }], dirty: false }); return true;
+      case 'rt-edit': { const r = A.routines.find(x => x.id === el.dataset.id); if (r) rtOpen({ id: r.id, uid: r.uid, name: r.name, note: r.note || '', mode: r.mode === 'replace' ? 'replace' : 'extra', sessions: clone(r.sessions || []), dirty: false }); return true; }
       case 'rt-cancel': A.rt = null; A.err = ''; rerender(); return true;
       case 'rt-ses-add': if (A.rt && A.rt.sessions.length < 14) { A.rt.sessions.push({ name: 'Sesión ' + (A.rt.sessions.length + 1), items: [] }); A.rt.dirty = true; rerender(); } return true;
       case 'rt-ses-rm': if (A.rt && A.rt.sessions.length > 1) { A.rt.sessions.splice(+el.dataset.d, 1); A.rt.dirty = true; rerender(); } else H.toast('Una rutina necesita al menos una sesión.'); return true;

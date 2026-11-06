@@ -32,12 +32,12 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await page.evaluate(u => __fake.admin('members/' + u, { name: 'Camila Rojas', email: 'camila@correo.cl', approvedAt: Date.now() }), cuid);
   await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(600);
   await page.click('#nav [data-tab="mas"]'); await page.waitForTimeout(250);
-  ok(new RegExp('Versión ' + V.n.replace(/\./g, '\\.') + '(?![\\d.])').test(await txt('#view')) && !(await txt('#view')).includes(V.v), 'al final de «Más» se ve solo «Versión ' + V.n + '»');
+  ok(/Created & Developed by Felipe González/.test(await txt('#view')) && !/Versión \d+\.\d+\.\d+/.test(await txt('#verLine')), 'al final de «Más» solo va el crédito del autor (la versión se ve en Ajustes → Aplicación)');
   await page.click('#gear'); await page.waitForSelector('#dlg[open] #updCard'); await page.waitForTimeout(900);
   let card = await txt('#updCard');
   ok(new RegExp('Versión ' + V.n.replace(/\./g, '\\.') + '(?![\\d.])').test(card) && !card.includes(V.v), 'la tarjeta de Ajustes muestra solo «Versión ' + V.n + '»');
   ok(/Ya tienes la última versión/.test(card), 'con la misma versión publicada dice que está al día');
-  ok(/Versión/.test(await txt('#dlg #verLine')) && /Created & Developed by Felipe González/.test(await txt('#dlg #verLine')), 'la versión y el crédito también van al final de Ajustes');
+  ok(/Created & Developed by Felipe González/.test(await txt('#dlg #verLine')) && !/Versión/.test(await txt('#dlg #verLine')), 'el crédito va al final de Ajustes, sin repetir la versión');
   await shot('01-al-dia');
 
   console.log('2. Hay una versión nueva publicada');

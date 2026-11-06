@@ -67,13 +67,16 @@ const WEEKS = {
   await page.click('[data-act="rt-save"]'); await page.waitForTimeout(250);
   ok(/no tiene ejercicios/.test(await txt('#toast')), 'no deja guardar una sesión sin ejercicios');
   await page.fill('#dn-0', 'Movilidad y técnica');
+  ok((await page.locator('input[name="rtmode"]:checked').getAttribute('value')) === 'extra' && /Complementa el plan semanal/.test(await txt('#view')) && /Reemplaza el plan semanal/.test(await txt('#view')), 'el entrenador elige si complementa o reemplaza el plan: por defecto complementa');
+  await page.selectOption('#dd-0', '3');
   await page.click('[data-act="rt-add"][data-d="0"]'); await page.waitForSelector('.pick');
   await page.click('.pick[data-ex="snatch"]'); await page.waitForSelector('.prow');
   ok((await page.locator('.prow').count()) === 1 && (await page.locator('#pd-0-0').getAttribute('data-f')) === 'prest' && (await page.locator('#pz-0-0').getAttribute('data-f')) === 'ppause' && /Descanso/i.test(await txt('.prow')) && /Pausa \(s\)/i.test(await txt('.prow')), 'mismo editor de la app: Descanso (como siempre) y además «Pausa (s)» en el movimiento');
   await page.fill('#ps-0-0', '4'); await page.fill('#pr-0-0', '2'); await page.fill('#pp-0-0', '65'); await page.selectOption('#pd-0-0', '45'); await page.fill('#pz-0-0', '1');
   ok(/4×2/.test(await txt('#pv-0-0')) && /65 %/.test(await txt('#pv-0-0')) && /pausa 1 s/.test(await txt('#pv-0-0')) && /descanso 0:45/.test(await txt('#pv-0-0')), 'la vista previa muestra series, %, pausa y descanso: ' + (await txt('#pv-0-0')));
   await page.click('[data-act="rt-add"][data-d="0"]'); await page.waitForSelector('.pick'); await page.click('.pick[data-ex="bsq"]'); await page.waitForTimeout(200);
-  await page.fill('#ps-0-1', '3'); await page.fill('#pr-0-1', '5'); await page.fill('#pp-0-1', '70'); await page.selectOption('#pd-0-1', '90'); await page.fill('#pz-0-1', '2');
+  await page.fill('#ps-0-1', '3'); await page.fill('#pr-0-1', '5'); await page.fill('#pp-0-1', '70'); await page.selectOption('#pd-0-1', '90'); await page.fill('#pz-0-1', '2'); await page.fill('#pk-0-1', '80');
+  ok(/80 kg/.test(await txt('#pv-0-1')), 'se pueden poner kilos fijos: ' + (await txt('#pv-0-1')));
   await page.click('[data-act="rt-ses-add"]'); await page.waitForSelector('#dn-1');
   await page.fill('#dn-1', 'Tirones'); await page.click('[data-act="rt-add"][data-d="1"]'); await page.waitForSelector('.pick'); await page.click('.pick[data-ex="snpull"]'); await page.waitForTimeout(200);
   await page.fill('#ps-1-0', '3'); await page.fill('#pr-1-0', '3'); await page.fill('#pp-1-0', '90'); await page.fill('#pz-1-0', '99');
@@ -83,7 +86,8 @@ const WEEKS = {
   await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
   let d = await docs(), rid = Object.keys(d).find(k => k.startsWith('routines/')), r = d[rid];
   ok(r && r.uid === auid && r.name === 'Rehabilitación de hombro' && r.setBy === cuid && r.sessions.length === 2 && r.note.startsWith('Sin dolor'), 'la rutina quedó guardada para Ana');
-  ok(r.sessions[0].name === 'Movilidad y técnica' && r.sessions[0].items.length === 2 && r.sessions[0].items[0].sets === 4 && r.sessions[0].items[0].reps === '2' && r.sessions[0].items[0].pct === 65 && r.sessions[0].items[0].rest === 45 && r.sessions[0].items[0].pause === 1 && r.sessions[0].items[1].rest === 90 && r.sessions[0].items[1].pause === 2, 'con series, repeticiones, %, descanso y pausa (segundos) de cada ejercicio');
+  ok(r.sessions[0].name === 'Movilidad y técnica' && r.sessions[0].items.length === 2 && r.sessions[0].items[0].sets === 4 && r.sessions[0].items[0].reps === '2' && r.sessions[0].items[0].pct === 65 && r.sessions[0].items[0].rest === 45 && r.sessions[0].items[0].pause === 1 && r.sessions[0].items[1].rest === 90 && r.sessions[0].items[1].pause === 2, 'con series, repeticiones, %, descanso y pausa (segundos) de cada ejercicio'); 
+  ok(r.sessions[0].items[1].kg === 80 && !(r.sessions[0].items[0].kg > 0) && r.sessions[0].day === 3 && !(r.sessions[1].day > 0) && r.mode === 'extra', 'guarda los kilos fijos, el día de cada sesión y el modo (complementa)');
   ok(/Rehabilitación de hombro/.test(await txt('#view')) && /2 sesiones · 3 ejercicios/.test(await txt('#view')), 'aparece en la lista del atleta');
 
   console.log('2. Editar y volver a guardar');
@@ -98,19 +102,18 @@ const WEEKS = {
   await logout(); await login('ana@correo.cl'); await tab('semana');
   await page.waitForSelector('[data-act="rt-start"]');
   const vt = await txt('#view');
-  ok(/Rutina de tu entrenador/i.test(vt) && /Rehabilitación de hombro/.test(vt) && /Movilidad y técnica/.test(vt) && /Tirones/.test(vt) && /Sin dolor/.test(vt), 've la rutina, sus sesiones y la nota');
+  ok(/Rutina complementaria/i.test(vt) && /Miércoles · 2 ejercicios/.test(vt) && /Rehabilitación de hombro/.test(vt) && /Movilidad y técnica/.test(vt) && /Tirones/.test(vt) && /Sin dolor/.test(vt), 've la rutina, sus sesiones y la nota');
   ok(/mientras tanto, entrena con la rutina/.test(vt), 'aunque no tenga semana del plan, no queda vacío');
   await page.evaluate(() => HalterApp.commit(S => { S.exercises.find(e => e.id === 'snatch').max = 80; }));
   if (process.env.SHOTS) await page.screenshot({ path: path.join(SHOTS, 'rutina-atleta.png') });
   await page.click('[data-act="rt-start"][data-i="0"]'); await page.waitForSelector('.tick');
   const rows = await page.locator('.set[data-i]').evaluateAll(l => l.map(x => ({ kg: x.querySelector('[data-f="kg"]').value, ph: x.querySelector('[data-f="reps"]').placeholder, v: x.querySelector('[data-f="reps"]').value })));
-  ok(rows.length === 7 && rows.slice(0, 4).every(x => x.kg === '52' && x.ph === '2' && x.v === '') && rows.slice(4).every(x => x.ph === '5' && x.v === ''), 'series: kilos con el máximo de Ana (65 % de 80 = 52) y repeticiones sombreadas: ' + JSON.stringify(rows.slice(0, 2)));
+  ok(rows.length === 7 && rows.slice(0, 4).every(x => x.kg === '52' && x.ph === '2' && x.v === '') && rows.slice(4).every(x => x.kg === '80' && x.ph === '5' && x.v === ''), 'series: kilos con el máximo de Ana (65 % de 80 = 52), kilos fijos del entrenador (80) y repeticiones sombreadas: ' + JSON.stringify(rows.slice(0, 2)));
   const rest = await page.evaluate(() => HalterApp.state().sessions.find(s => !s.endedAt).items.map(i => i.rest + '/' + (i.pause || 0)));
   ok(rest.join(',') === '60/3,90/2', 'descanso y pausa de cada ejercicio son los que puso el entrenador: ' + rest);
   ok(/Pausa de 3 s en el movimiento/.test(await txt('.exc')), 'el atleta ve la indicación de pausa en el ejercicio');
   const clock = await page.evaluate(() => document.querySelector('#dockBox') ? document.querySelector('#dockBox').innerText : '');
   ok(/1:00/.test(clock), 'el temporizador parte con el descanso del primer ejercicio (1:00): ' + clock.replace(/\s+/g, ' '));
-  const kgs = page.locator('[data-f="kg"]'); for (let i = 4; i < await kgs.count(); i++) await kgs.nth(i).fill('70');   // sentadilla trasera: Ana aún no tiene máximo, anota el peso
   const reps = page.locator('[data-f="reps"]'); for (let i = 0; i < await reps.count(); i++) await reps.nth(i).fill(i < 4 ? '2' : '5');
   for (const t of await page.locator('.tick').all()) await t.click();
   await page.click('[data-act="finish"]'); await page.waitForSelector('#dlg[open]'); await page.waitForTimeout(500);
@@ -118,6 +121,32 @@ const WEEKS = {
   ok(ss.length === 1 && ss[0].id === rid.split('/')[1] && ss[0].idx === 0, 'la sesión queda marcada como de la rutina');
   await page.keyboard.press('Escape'); await tab('semana');
   ok(/hecha el/.test(await txt('#view')), 'en «Semana» la sesión aparece como hecha');
+
+  console.log('3b. Complementaria: Ana ve el plan y la rutina; reemplaza: solo la rutina');
+  await page.evaluate(({ a, c, W }) => {
+    __fake.admin('exercises/snatch', { en: 'Snatch', es: 'Arranque', aliases: [] }); __fake.admin('exercises/snatch-pull', { en: 'Snatch Pull', es: 'Tirón de arranque', aliases: [] });
+    __fake.admin('plans/p1', { name: 'Plan 2026', year: 2026, format: 'x', stages: 1, weeks: 2, createdAt: Date.now() }); __fake.admin('plans/p1/stages/e1', { name: 'Preparatorio General', order: 1 });
+    Object.keys(W).forEach(k => __fake.admin('plans/p1/weeks/' + k, W[k])); __fake.admin('config/plan', { activePlanId: 'p1', at: Date.now() });
+    __fake.admin('assignments/' + a, { planId: 'p1', weekId: 'e1_1', week: 1, stageId: 'e1', weekEndsAt: Date.now() + 1e9, setBy: c, at: 1 });
+  }, { a: auid, c: cuid, W: WEEKS });
+  await logout(); await login('ana@correo.cl'); await tab('semana'); await page.waitForSelector('[data-act="as-start"]');
+  let v3 = await txt('#view');
+  ok(/Rutina complementaria/i.test(v3) && /Rehabilitación de hombro/.test(v3) && /Semana 1/i.test(v3) && (await page.locator('[data-act="as-start"]').count()) === 2 && /Cambiar de semana/i.test(v3), 'complementaria: Ana ve la rutina y también las sesiones de su semana del plan');
+  await logout(); await login('cristian@correo.cl'); await tab('equipo');
+  await page.locator('.person', { hasText: 'Ana Rojas' }).locator('[data-act="as-open"]').click(); await page.waitForSelector('[data-act="rt-edit"]');
+  ok(/complementa el plan semanal/.test(await txt('#view')) && /Mié/.test(await txt('#view')), 'el entrenador ve en la lista si complementa o reemplaza, y los días');
+  await page.click('[data-act="rt-edit"]'); await page.waitForSelector('#rtName');
+  ok((await page.locator('input[name="rtmode"]:checked').getAttribute('value')) === 'extra' && (await page.inputValue('#dd-0')) === '3' && (await page.inputValue('#pk-0-1')) === '80', 'al editar vuelven el modo, el día y los kilos');
+  await page.check('input[name="rtmode"][value="replace"]'); await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
+  d = await docs(); ok(d[rid].mode === 'replace' && /reemplaza el plan semanal/.test(await txt('#view')), 'el entrenador la deja como reemplazo del plan semanal');
+  await logout(); await login('ana@correo.cl'); await tab('semana'); await page.waitForSelector('[data-act="rt-start"]'); await page.waitForTimeout(400);
+  v3 = await txt('#view');
+  ok(/Rutina en lugar del plan semanal/i.test(v3) && /reemplazó tu plan semanal/.test(v3) && (await page.locator('[data-act="as-start"]').count()) === 0 && !/Cambiar de semana/i.test(v3), 'reemplaza: Ana solo ve la rutina; el plan semanal queda oculto');
+  if (process.env.SHOTS) await page.screenshot({ path: path.join(SHOTS, 'rutina-reemplaza.png') });
+  let rs = await remoteTry("await r.setRoutine('x3', { uid: '" + auid + "', name: 'Mala', mode: 'otro', sessions: [{ name: 'a', items: [] }], setBy: '" + cuid + "' })");
+  await logout(); await login('cristian@correo.cl');
+  rs = await remoteTry("await r.setRoutine('x3', { uid: '" + auid + "', name: 'Mala', mode: 'otro', sessions: [{ name: 'a', items: [] }], setBy: '" + cuid + "' })");
+  ok(rs === 'permission-denied', 'las reglas rechazan un modo que no sea complementa/reemplaza (' + rs + ')');
 
   console.log('4. Solo Ana la ve; las reglas protegen a los demás');
   await logout(); await login('beto@correo.cl'); await tab('semana');

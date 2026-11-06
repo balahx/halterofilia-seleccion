@@ -576,7 +576,16 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
 .rt-card .plain li > div { min-width: 0; }
 .rt-card .plain li small { display: block; color: var(--muted); }
 
-.ver-line .credit { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--gold-ink); letter-spacing: .03em; }
+.ver-line .credit { display: block; margin-top: 0; font-size: 13px; font-weight: 600; color: var(--gold-ink); letter-spacing: .03em; }
 
 .chip-pause { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--gold-ink, #7a5f1f); background: color-mix(in srgb, var(--gold, #A07E34) 16%, transparent); }
 .prow-f.rt { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.rt-day { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; font: 600 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rt-day .sel { height: 42px; width: 100%; text-transform: none; letter-spacing: 0; font-size: 16px; font-weight: 500; color: var(--ink); }
+.opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; cursor: pointer; }
+.opt + .opt { border-top: 1px solid var(--line); }
+.opt input { margin-top: 4px; width: 20px; height: 20px; flex: none; accent-color: var(--btn); }
+.opt b { display: block; }
+.opt small { display: block; color: var(--muted); }
+.rt-card .plain li .btn { flex: none; white-space: nowrap; }

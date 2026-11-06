@@ -58,9 +58,9 @@
       if (op === 'list') return coach || member;
       if (op === 'delete') return coach;
       const d = data || {};
-      return coach && keysOnly(d, ['uid', 'name', 'note', 'sessions', 'setBy', 'at']) && ['uid', 'name', 'sessions', 'setBy', 'at'].every(k => k in d)
+      return coach && keysOnly(d, ['uid', 'name', 'note', 'mode', 'sessions', 'setBy', 'at']) && ['uid', 'name', 'sessions', 'setBy', 'at'].every(k => k in d)
         && typeof d.uid === 'string' && !!s.docs['members/' + d.uid] && typeof d.name === 'string' && d.name.length > 0 && d.name.length <= 80
-        && (!('note' in d) || (typeof d.note === 'string' && d.note.length <= 400)) && Array.isArray(d.sessions) && d.sessions.length >= 1 && d.sessions.length <= 14 && d.setBy === u.uid;
+        && (!('note' in d) || (typeof d.note === 'string' && d.note.length <= 400)) && (!('mode' in d) || d.mode === 'extra' || d.mode === 'replace') && Array.isArray(d.sessions) && d.sessions.length >= 1 && d.sessions.length <= 14 && d.setBy === u.uid;
     }
     if (col === 'users') { // users/{uid}/records/{clave}
       const owner = u.uid === id;
