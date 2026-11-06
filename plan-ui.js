@@ -143,10 +143,10 @@
     if (P.err) h += `<div class="note warn">${esc(P.err)}</div>`;
     h += '<div class="card sec"><span class="eyebrow">Planes publicados</span>';
     if (!P.plansReady) h += '<p class="muted">Cargando…</p>';
-    else if (!P.plans.length) h += '<p class="muted">Aún no hay un plan. Sube el Excel de Cristian o la plantilla simple.</p>';
+    else if (!P.plans.length) h += window.HalterApp.empty('plan', 'Aún no hay un plan', 'Sube el Excel de Cristian o la plantilla simple.');
     else h += P.plans.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(p => {
       const on = P.active === p.id;
-      return `<div class="person"><div><b>${esc(p.name)}</b><small>${p.weeks || 0} semanas · ${p.stages || 0} etapas${on ? ' · <span class="badge">Activo</span>' : ''}</small></div><div class="row-end">` +
+      return `<div class="person"><div><b>${esc(p.name)}</b><small>${p.weeks || 0} semanas · ${p.stages || 0} etapas${on ? ' · <span class="badge gd">Activo</span>' : ''}</small></div><div class="row-end">` +
         (on ? '' : `<button class="btn sm" data-act="pl-activate" data-id="${esc(p.id)}">Activar</button>`) +
         `<button class="btn ghost sm" data-act="pl-delete" data-id="${esc(p.id)}">${P.confirm === 'del' + p.id ? 'Confirmar' : 'Eliminar'}</button></div></div>`;
     }).join('');
@@ -154,7 +154,7 @@
     if (P.preview) return h + previewHTML();
     h += `<div class="card sec"><span class="eyebrow">Cargar un plan</span>
       <p class="muted">Sube el Excel del año: la planilla de Cristian o la plantilla simple. Verás una revisión antes de publicar y nada cambia para los atletas hasta que actives el plan.</p>
-      <label class="btn" for="plFile" role="button">${P.busy || 'Elegir archivo Excel'}</label>
+      <label class="btn block" for="plFile" role="button">${P.busy || 'Elegir archivo Excel'}</label>
       <input id="plFile" data-pl="file" type="file" accept=".xlsx,.xlsm,.xls" hidden>
       <div class="stack"><button class="lnk" data-act="pl-template">Descargar plantilla simple (con la lista de ejercicios conocidos)</button></div></div>`;
     return h;

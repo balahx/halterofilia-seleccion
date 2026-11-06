@@ -492,3 +492,11 @@ dialog .actions > .lnk { margin: 0 auto; }
 .bw-head .eyebrow { margin-bottom: 2px; }
 .bw-head p.muted { margin: 0; }
 .bw-head .empty-ic { flex: none; width: 44px; height: 44px; }
+
+/* Equipo (entrenador) */
+.person { flex-wrap: wrap; }
+.person .who-row { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 200px; }
+.person .who-row > div { min-width: 0; }
+.person .who-row small { display: block; }
+.person small.asg { color: var(--gold-ink); font-weight: 600; }
+.av.sm { width: 38px; height: 38px; font-size: 16px; flex: none; }

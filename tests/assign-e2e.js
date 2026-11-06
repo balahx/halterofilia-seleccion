@@ -58,6 +58,7 @@ const WEEKS = {
 
   console.log('1. El entrenador asigna la semana 1 y ajusta un porcentaje');
   await login('cristian@correo.cl'); await tab('equipo');
+  await shot('00-equipo');
   ok(/Sin semana asignada/.test(await txt('#view')), 'en Equipo, Ana aparece sin semana');
   await page.click('[data-act="as-open"]'); await page.waitForSelector('#asWeek');
   ok(/Ana Rojas/.test(await txt('#view h1')), 'se abre el detalle de la atleta');

@@ -388,7 +388,9 @@
       (window.HalterPrivacy ? window.HalterPrivacy.html(false) : '');
   }
   const when = ms => ms ? new Date(ms).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }) : '';
-  function personRow(p, acts) { return `<div class="person"><div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}${p.createdAt || p.approvedAt ? ' · ' + when(p.createdAt || p.approvedAt) : ''}</small></div><div class="acts">${acts}</div></div>`; }
+  const ini = n => { const p = String(n || '').trim().split(/\s+/).filter(Boolean); return p.length ? (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() : '?'; };
+  const av = n => `<span class="av sm" aria-hidden="true">${esc(ini(n))}</span>`;
+  function personRow(p, acts) { return `<div class="person"><div class="who-row">${av(p.name)}<div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}${p.createdAt || p.approvedAt ? ' · ' + when(p.createdAt || p.approvedAt) : ''}</small></div></div><div class="acts">${acts}</div></div>`; }
   function teamView() {
     const pend = C.requests.filter(x => x.status !== 'rejected').sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     const rej = C.requests.filter(x => x.status === 'rejected');
@@ -402,7 +404,7 @@
     h += '</div>';
     h += `<div class="card sec"><span class="eyebrow">Atletas aprobados (${mem.length})</span>`;
     const HA = window.HalterAssign;
-    h += mem.length ? mem.map(p => `<div class="person"><div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}</small>${HA ? `<small>${esc(HA.summary(p.id))}</small>` : ''}</div><div class="acts">` +
+    h += mem.length ? mem.map(p => `<div class="person"><div class="who-row">${av(p.name)}<div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}</small>${HA ? `<small class="asg">${esc(HA.summary(p.id))}</small>` : ''}</div></div><div class="acts">` +
       (HA ? `<button class="btn sm" data-act="as-open" data-uid="${esc(p.id)}">Semana</button>` : '') + cf('eq-remove', p.id, 'Quitar acceso') + '</div></div>').join('') : window.HalterApp.empty('team', 'Aún no has aprobado atletas', 'Cuando alguien solicite acceso, aprueba su solicitud aquí arriba.');
     h += '</div>';
     if (rej.length) h += `<div class="card sec"><span class="eyebrow">Rechazadas (${rej.length})</span>` + rej.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-delreq', p.id, 'Borrar'))).join('') + '</div>';
