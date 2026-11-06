@@ -1281,7 +1281,7 @@ function pickList(q) {
   for (const c of CATS) {
     const list = S.exercises.filter(e => e.cat === c[0] && (!q || (e.name + ' ' + (e.en || EN_NAMES[e.id] || '')).toLowerCase().indexOf(q) >= 0));
     if (!list.length) continue;
-    h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(nm(e)) + nmSub(e) + '</span><small>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
+    h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(nm(e)) + nmSub(e) + '</span><small' + (e.max > 0 ? '' : ' class="nomax"') + '>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
   }
   return h || '<p class="muted">No hay coincidencias.</p>';
 }

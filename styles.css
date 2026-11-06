@@ -461,3 +461,14 @@ details > summary { cursor: pointer; }
 .badge.gd { background: var(--gold-bg); color: var(--gold-ink); }
 .card .actions .btn.block { margin-bottom: 0; }
 .btn .ic { width: 18px; height: 18px; }
+
+/* Máximos, hojas y resumen */
+.card.totalc { box-shadow: inset 0 3px 0 var(--gold); }
+.card.totalc .big { font-size: 54px; }
+.card.totalc .big small { color: var(--gold-ink); font-weight: 600; }
+dialog .actions { align-items: stretch; }
+dialog .actions > .btn:not(.ghost):not(.sm) { flex: 1 1 100%; }
+dialog .actions > .lnk { margin: 0 auto; }
+.stats b { letter-spacing: .01em; }
+.pick small { font: 700 17px var(--font-display); color: var(--ink); }
+.pick small.nomax { font: 500 13.5px var(--font-body); color: var(--muted); }
