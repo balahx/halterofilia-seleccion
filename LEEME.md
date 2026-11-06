@@ -28,6 +28,7 @@ El entrenador es quien figura en el documento `config/team` de Firestore. Ese do
 | `sync.js` | Sincronización de los datos propios (fase 2) |
 | `assign.js` | Semana asignada (fase 4): asignación y ajustes del entrenador, pestaña **Semana** del atleta, cumplimiento y avance semanal |
 | `privacy.js` | Aviso de privacidad (texto y versión). Se muestra al crear la cuenta (hay que marcarlo), en el ingreso y en Ajustes → Cuenta |
+| `compare.js` | Pestaña **Marcas** del entrenador (fase 6): marcas de arranque, dos tiempos y total por sexo y categoría de peso, con diferencia respecto del líder |
 | `backup.js` | Respaldo del equipo (solo entrenador): descarga un JSON con miembros, planes, semanas asignadas, ajustes, registros y sesiones cumplidas de todos |
 | `guard.js` | Si la app se muestra dentro de otra página, se oculta (antifraude de marcos) |
 | `report.js` | Informes del entrenador (fase 4b): planificado vs realizado y observaciones, por semana o por día |
@@ -122,6 +123,21 @@ En **Equipo → Semana** de cada atleta, la tarjeta **Informe del atleta** → �
 - **Clave de API de Firebase**: es pública por diseño (va en `firebase-config.js`); lo que protege los datos son las reglas. Conviene restringirla en Google Cloud → APIs y servicios → Credenciales → «Browser key» → Restricciones de aplicación → Sitios web → `https://balahx.github.io/*`.
 - **Lectura reducida**: la atleta y el entrenador solo piden las sesiones cumplidas de **la semana asignada** (no todo el historial); el informe de otra semana las pide una vez. Con ~17 atletas se espera usar una fracción de las 50 000 lecturas diarias del plan gratuito.
 - **Respaldo del equipo** (Equipo → «Descargar respaldo»): un clic baja `respaldo-equipo-AAAA-MM-DD.json`. Contiene datos personales y de salud: guardarlo en un lugar privado. Cada descarga cuesta una lectura por documento (cientos o pocos miles), así que se recomienda una vez por semana.
+
+## Indicadores y comparación (fase 6)
+
+**Atleta (todo en `app.js`, sin reglas nuevas: los datos van dentro de los registros que ya se sincronizan):**
+- **Serie fallada (✕):** botón por serie. Cuenta como intento, pero no suma tonelaje, repeticiones, 1RM ni récords. Se puede apagar en Ajustes. Alimenta la **efectividad** (general, por ejercicio y desde 90 %).
+- **Carga de sesión** = duración (min) × RPE de la sesión, en UA. El RPE es el anotado o el promedio de las series; la duración, la anotada o hasta la última serie. Gráfico semanal y aviso si la última semana completa subió más de 30 % (referencial).
+- **Progreso:** intensidad media (ponderada por repeticiones), repeticiones (NL), efectividad, tabla semanal y resumen mensual, y peso corporal.
+- **Máximos:** razones entre máximos (arranque/dos tiempos, sentadillas/dos tiempos, tirones) y total por kg de peso corporal. **Meta** por ejercicio (kg y fecha opcional): faltan X kg, semanas al ritmo actual y kg por semana necesarios para la fecha.
+- **Sexo obligatorio:** se elige al crear la cuenta (queda en el perfil al primer ingreso). Las cuentas anteriores sin sexo reciben una ventana que no se puede cerrar hasta elegir (el entrenador no la ve). Se puede cambiar en Ajustes, pero no dejar vacío.
+- **Perfil:** sexo, categoría de peso (automática según el peso, o elegida) y peso corporal semanal (la pantalla Hoy lo pide si pasó una semana). Categorías IWF vigentes: M 60, 65, 71, 79, 88, 94, 110, +110; F 48, 53, 58, 63, 69, 77, 86, +86 (`WEIGHT_CATS` en `app.js`; confirmar con el reglamento de cada torneo).
+- El CSV de historial incluye ahora `fallada`, `duracion_min`, `rpe_sesion` y `carga_sesion`.
+
+**Entrenador (pestaña Marcas, `compare.js`):** lee perfil, arranque y dos tiempos de cada atleta (3 lecturas por atleta al abrir o actualizar) y los agrupa por sexo y categoría, ordenados por total. Al tocar un atleta se ven todos sus máximos y metas. Los atletas de cuentas antiguas que aún no abrieron la app (sin sexo) aparecen aparte, de forma transitoria. Compara marcas registradas por los atletas, no resultados oficiales.
+
+Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/compare-e2e.js`, `tests/sex-e2e.js`. El aviso de privacidad pasó a la versión `2026-11-05.2` (sexo, categoría, peso semanal, RPE y duración).
 
 ## Lo que viene
 

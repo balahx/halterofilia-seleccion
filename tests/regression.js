@@ -29,7 +29,7 @@ const ok = (c, m) => console.log((c ? 'OK   ' : 'FAIL ') + m);
   await page.screenshot({ path: 'tests/shots/02-plan.png', fullPage: true });
   await page.click('#nav [data-tab="prog"]');
   await page.waitForSelector('.chart svg');
-  ok(await page.locator('.chart svg').count() === 2, 'progreso: 2 gráficos SVG');
+  ok(await page.locator('.chart svg').count() === 3, 'progreso: 3 gráficos SVG (1RM, tonelaje y carga)');
   ok(await page.locator('.proj-t').count() === 1, 'progreso: proyección de tendencia presente');
   ok(await page.locator('.hist').count() > 0, 'progreso: historial con sesiones');
   await page.screenshot({ path: 'tests/shots/03-progreso.png', fullPage: true });

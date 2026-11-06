@@ -3,14 +3,15 @@
    subir VERSION (así se vuelve a avisar a quien ya usa la app). No es asesoría legal: conviene que lo revise quien corresponda. */
 (function (root) {
   'use strict';
-  const VERSION = '2026-11-05';
+  const VERSION = '2026-11-05.2';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const SECTIONS = [
     ['Quién maneja tus datos', 'Esta app es del equipo de halterofilia. El entrenador (Cristian Mateluna) administra el equipo, aprueba quién entra y es quien ve tus datos de entrenamiento. Para cualquier consulta o solicitud sobre tus datos, habla con él.'],
     ['Qué se guarda', ['Tu nombre y tu correo (la contraseña la gestiona Google en su servicio de cuentas; la app no la ve).',
       'Tus sesiones: ejercicios, kilos, repeticiones, esfuerzo percibido (RPE), horas, tu peso corporal si lo anotas, y tus notas y observaciones. Esas notas pueden hablar de molestias o dolores: son datos de salud, así que escribe solo lo que quieras compartir con tu entrenador.',
-      'Tus máximos y tus ajustes.',
+      'Tus máximos, tus metas y tus ajustes.',
+      'Tu sexo, tu categoría de peso y tu peso corporal semanal: el entrenador los usa para comparar las marcas entre atletas de la misma categoría. También se guardan las series que marcas como falladas, el RPE y la duración de cada sesión.',
       'La semana del plan que el entrenador te asigna y qué sesiones cumpliste (con la hora del servidor).']],
     ['Para qué', 'Para registrar tu entrenamiento, calcular tus cargas según el plan y que tu entrenador vea tu avance y arme informes. No se usan para publicidad ni se venden.'],
     ['Quién los ve', 'Tú y el entrenador. Los otros atletas no ven tus datos. Los datos se guardan en tu dispositivo y en la base de datos en la nube del equipo (Google Firebase; la base de datos está en Santiago, Chile). La app carga además las tipografías desde Google Fonts, lo que le muestra tu dirección IP a Google.'],
@@ -28,7 +29,7 @@
       h += `<h4>${esc(s[0])}</h4>`;
       h += Array.isArray(s[1]) ? '<ul>' + s[1].map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : `<p>${esc(s[1])}</p>`;
     });
-    return h + `<p class="muted">Versión del ${esc(VERSION.split('-').reverse().join('-'))}.</p></div></details>`;
+    return h + `<p class="muted">Versión del ${esc(VERSION.slice(0, 10).split('-').reverse().join('-'))}.</p></div></details>`;
   }
   const text = () => SECTIONS.map(s => s[0] + '\n' + (Array.isArray(s[1]) ? s[1].map(x => '- ' + x).join('\n') : s[1])).join('\n\n');
 

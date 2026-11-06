@@ -28,7 +28,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500); };
   const signup = async (name, email, pass, pass2) => {
     await page.click('[data-g="mode"][data-v="signup"]');
-    await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.fill('#gPass2', pass2 == null ? pass : pass2); await page.check('#gPriv');
+    await page.selectOption('#gSex', 'F'); await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.fill('#gPass2', pass2 == null ? pass : pass2); await page.check('#gPriv');
     await page.click('#gForm button[type=submit]');
   };
   const login = async (email, pass) => { await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.click('#gForm button[type=submit]'); };

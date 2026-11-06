@@ -38,7 +38,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   page.on('pageerror', e => errors.push(e.message));
   await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
   await page.goto(URL); await page.waitForSelector('#gForm');
-  await page.click('[data-g="mode"][data-v="signup"]'); await page.fill('#gName', 'Cristian'); await page.fill('#gEmail', 'c@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.check('#gPriv');
+  await page.click('[data-g="mode"][data-v="signup"]'); await page.selectOption('#gSex', 'F'); await page.fill('#gName', 'Cristian'); await page.fill('#gEmail', 'c@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.check('#gPriv');
   await page.click('#gForm button[type=submit]'); await page.waitForTimeout(600);
   await page.evaluate(() => __fake.admin('config/team', { coachUid: __fake.uid('c@correo.cl') }));
   await page.waitForSelector('#appRoot:not([hidden])', { timeout: 8000 });

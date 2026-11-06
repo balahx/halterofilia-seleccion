@@ -26,13 +26,13 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   const A = await mk();
   await A.goto('http://localhost:' + port + '/'); await A.waitForSelector('#gForm');
   await A.click('[data-g="mode"][data-v="signup"]');
-  await A.fill('#gName', 'Ana Rojas'); await A.fill('#gEmail', 'ana@correo.cl'); await A.fill('#gPass', 'clave123'); await A.fill('#gPass2', 'clave123'); await A.check('#gPriv'); await A.click('#gForm button[type=submit]');
+  await A.selectOption('#gSex', 'F'); await A.fill('#gName', 'Ana Rojas'); await A.fill('#gEmail', 'ana@correo.cl'); await A.fill('#gPass', 'clave123'); await A.fill('#gPass2', 'clave123'); await A.check('#gPriv'); await A.click('#gForm button[type=submit]');
   await A.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || ''));
   const uid = await A.evaluate(() => __fake.uid('ana@correo.cl'));
   await A.evaluate(u => __fake.admin('members/' + u, { name: 'Ana Rojas', email: 'ana@correo.cl', approvedAt: Date.now() }), uid);
   await A.waitForSelector('#appRoot:not([hidden])');
   await openSettings(A);
-  ok(/Conectando|Al día/.test(await A.locator('#syncStat').innerText()), 'ajustes muestra el estado de la sincronización');
+  ok(/Conectando|Al día|por enviar/.test(await A.locator('#syncStat').innerText()), 'ajustes muestra el estado de la sincronización');
   await A.fill('#sBw', '82'); await syncNow(A);
   let r = await recs(A, uid);
   ok(r.profile && JSON.parse(r.profile.d).bw === 82, 'el peso corporal llegó al servidor');

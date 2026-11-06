@@ -33,7 +33,7 @@
 
   /* Series hechas → resumen: cantidad, repeticiones, tonelaje, esfuerzo medio y los kilos agrupados («2×(70 kg × 3)») */
   function doneSummary(sets) {
-    const d = (sets || []).filter(s => s && s.done), groups = [];
+    const all = (sets || []).filter(s => s && s.done), d = all.filter(s => !s.miss), groups = [], missed = all.length - d.length;
     let reps = 0, ton = 0, rs = 0, rn = 0;
     d.forEach(s => {
       const r = parseReps(s.reps), kg = num(s.kg); reps += r; ton += kg * r;
@@ -41,7 +41,7 @@
       const key = kg + '|' + (s.reps == null ? '' : s.reps), last = groups[groups.length - 1];
       if (last && last.key === key) last.n++; else groups.push({ key: key, kg: kg, reps: String(s.reps == null ? '' : s.reps), n: 1 });
     });
-    return { n: d.length, total: (sets || []).length, reps: reps, ton: ton, rpe: rn ? r1(rs / rn) : null,
+    return { n: d.length, missed: missed, total: (sets || []).length, reps: reps, ton: ton, rpe: rn ? r1(rs / rn) : null,
       text: groups.map(g => (g.n > 1 ? g.n + '×(' : '') + (g.kg > 0 ? fmt(g.kg) + ' kg × ' : '') + (g.reps || '–') + (g.n > 1 ? ')' : '')).join(', ') };
   }
   function plannedSummary(sets) {
@@ -65,7 +65,7 @@
     (planned || []).forEach(p => {
       seen[p.exId] = 1;
       const ps = plannedSummary(p.sets), ds = doneSummary(recItem(p.exId).sets);
-      const status = !rec ? 'pending' : ds.n === 0 ? 'omitted' : ds.n < ps.n ? 'partial' : 'ok';
+      const status = !rec ? 'pending' : (ds.n === 0 && !ds.missed) ? 'omitted' : ds.n < ps.n ? 'partial' : 'ok';
       items.push({ exId: p.exId, name: principal(p, lang), planned: ps, done: ds, status: status, note: noteOf(p.exId) });
     });
     (rec && rec.items || []).forEach(i => {
@@ -142,7 +142,7 @@
   const itemName = n => n.p + (n.s ? ' (' + n.s + ')' : '');
   function itemLine(it) {
     const plan = it.planned ? it.planned.n + ' serie' + (it.planned.n === 1 ? '' : 's') + (it.planned.text ? ' @ ' + it.planned.text : '') : '';
-    const done = it.done.n ? it.done.n + (it.planned ? ' de ' + it.planned.n : '') + ' hecha' + (it.done.n === 1 ? '' : 's') + ': ' + it.done.text + (it.done.rpe != null ? ' · RPE ' + fmt(it.done.rpe) : '') : 'sin series hechas';
+    const done = it.done.n ? it.done.n + (it.planned ? ' de ' + it.planned.n : '') + ' hecha' + (it.done.n === 1 ? '' : 's') + ': ' + it.done.text + (it.done.rpe != null ? ' · RPE ' + fmt(it.done.rpe) : '') + (it.done.missed ? ' · ' + it.done.missed + (it.done.missed === 1 ? ' fallada' : ' falladas') : '') : (it.done.missed ? it.done.missed + (it.done.missed === 1 ? ' serie fallada' : ' series falladas') : 'sin series hechas');
     return (plan ? 'Plan ' + plan + ' → ' : '') + done;
   }
   const completedText = ms => new Date(ms).toLocaleString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' });

@@ -21,6 +21,7 @@
   const K_LAST = 'halterofilia.lastAccess';       // último acceso aprobado en este dispositivo (para abrir sin conexión)
   const K_PRIV = 'halterofilia.privacySeen.';          // versión del aviso de privacidad que ya vio cada cuenta en este dispositivo
   const K_PRIVNEW = 'halterofilia.privacyNewAccount';  // cuenta recién creada: aceptó el aviso al crearla
+  const K_SEX = 'halterofilia.signupSex';          // sexo elegido al crear la cuenta, hasta la primera vez que entra a la app
   const K_NAME = 'halterofilia.signupName';       // nombre escrito al crear la cuenta, hasta enviar la solicitud
 
   /* ---------- Mensajes de error (mismos que en finanzas) ---------- */
@@ -181,6 +182,7 @@
     const t = { login: ['Iniciar sesión', 'Entra con tu correo y contraseña.', 'Entrar'], signup: ['Crear cuenta', 'Crea tu cuenta y pide acceso. El entrenador debe aprobarte para que puedas usar la app.', 'Crear cuenta y pedir acceso'], reset: ['Restablecer contraseña', 'Te enviaremos un correo con un enlace para elegir una contraseña nueva.', 'Enviar correo'] }[m];
     let f = '';
     if (m === 'signup') f += field('gName', 'Nombre y apellido', 'text', 'autocomplete="name" maxlength="60" required placeholder="Ej. Camila Soto"');
+    if (m === 'signup') f += '<label class="lab" for="gSex">Sexo (define tu categoría de peso)</label><select class="txt" id="gSex" name="gSex" required><option value="">Elige una opción</option><option value="F">Femenino</option><option value="M">Masculino</option></select>';
     f += field('gEmail', 'Correo electrónico', 'email', 'autocomplete="username" required placeholder="tu@correo.com" inputmode="email"');
     if (m !== 'reset') f += field('gPass', m === 'signup' ? 'Contraseña (mínimo 6 caracteres)' : 'Contraseña', 'password', `autocomplete="${m === 'signup' ? 'new-password' : 'current-password'}" required`);
     if (m === 'signup') f += field('gPass2', 'Repite la contraseña', 'password', 'autocomplete="new-password" required');
@@ -302,6 +304,10 @@
     if (!mine) setTimeout(() => toast('Publicamos el aviso de privacidad: lo encuentras en Ajustes → Cuenta.'), 1500);
   }
 
+  /* Sexo elegido al crear la cuenta: solo vale para esa misma cuenta (por correo) */
+  const sexMap = () => { try { const o = JSON.parse(LS.get(K_SEX) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
+  const sexSet = (email, v) => { const o = sexMap(), k = String(email || '').toLowerCase(); if (v) o[k] = v; else delete o[k]; if (Object.keys(o).length) LS.set(K_SEX, JSON.stringify(o)); else LS.del(K_SEX); };
+  function pendingSex() { const v = C.user ? sexMap()[String(C.user.email || '').toLowerCase()] : null; return v === 'F' || v === 'M' ? v : null; }
   /* ---------- Arranque de la app ---------- */
   function activate(role, name, offline) {
     const changed = !C.appRunning || C.role !== role;
@@ -309,15 +315,16 @@
     if (!offline) LS.set(K_LAST, JSON.stringify({ uid: C.user.uid, email: C.user.email, role: role, name: C.name }));
     if (!changed) { if (!offline) startLive(); window.HalterApp.render(); return; }
     noticePrivacy();
-    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI(); initBackupUI();
+    C.appRunning = true; LS.del(K_NAME); initPlanUI(); initAssignUI(); initBackupUI(); initCompareUI();
     hideGate();
     const fresh = window.HalterApp.start({
-      cloud: true, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
-      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : [])
+      cloud: true, requireSex: role !== 'coach', sex: role !== 'coach' ? pendingSex() : null, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
+      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : [])
         : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []),
       accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
       onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
     });
+    if (role !== 'coach' && pendingSex()) sexSet(C.user.email, null);
     startSync(fresh);
     if (offline) { if (window.HalterAssign && role !== 'coach') window.HalterAssign.startAthlete(C.user.uid, true); }   // solo la copia guardada de la semana
     else startLive();
@@ -341,13 +348,18 @@
     if (assignInit || !window.HalterAssign) return; assignInit = true;
     window.HalterAssign.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, members: () => C.members });
   }
+  let compareInit = false;
+  function initCompareUI() {
+    if (compareInit || !window.HalterCompare) return; compareInit = true;
+    window.HalterCompare.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, members: () => C.members });
+  }
   let backupInit = false;
   function initBackupUI() {
     if (backupInit || !window.HalterBackup) return; backupInit = true;
     window.HalterBackup.init({ remote: () => C.remote, toast: toast, render: () => window.HalterApp.render(), err: dataErr, who: () => (C.user && C.user.email) || '' });
   }
   function deactivate() {
-    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); if (window.HalterBackup) window.HalterBackup.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
+    stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); if (window.HalterBackup) window.HalterBackup.reset(); if (window.HalterCompare) window.HalterCompare.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
   }
 
   /* ---------- Contenido propio dentro de la app ---------- */
@@ -395,6 +407,7 @@
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
       case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
+      case 'cmp-sex': case 'cmp-cat': case 'cmp-refresh': case 'cmp-open': if (window.HalterCompare) window.HalterCompare.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }
       case 'eq-reject': if (twoStep('eq-reject')) guarded(() => C.remote.rejectRequest(uid), 'Solicitud rechazada'); break;
       case 'eq-delreq': if (twoStep('eq-delreq')) guarded(() => C.remote.deleteRequest(uid), 'Solicitud borrada'); break;
@@ -404,7 +417,7 @@
 
   /* ---------- Acciones de las pantallas de ingreso ---------- */
   async function doLogout() {
-    try { stopSync(); if (window.HalterPlan) window.HalterPlan.reset(); if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
+    try { stopSync(); if (window.HalterCompare) window.HalterCompare.reset(); if (window.HalterPlan) window.HalterPlan.reset(); if (C.appRunning) window.HalterApp.stop(); C.appRunning = false; LS.del(K_LAST); unwatch(); resetAccess(); C.mode = 'login'; C.err = ''; C.autoSent = false;
       if (C.remote) await C.remote.signOut(); } catch (e) { /* sin conexión: igual se cierra la sesión local */ }
     C.user = null; C.phase = 'signedout'; showGate(true);
   }
@@ -424,6 +437,7 @@
     else if (kind !== 'reset' && !pass) err = 'Escribe tu contraseña';
     else if (kind === 'signup') {
       if (name.length < 2) err = 'Escribe tu nombre y apellido';
+      else if (v('gSex') !== 'F' && v('gSex') !== 'M') err = 'Indica tu sexo: se usa para ubicarte en tu categoría de peso';
       else if (pass.length < 6) err = 'La contraseña debe tener al menos 6 caracteres';
       else if (pass !== v('gPass2')) err = 'Las contraseñas no coinciden';
       else if (window.HalterPrivacy && !(document.getElementById('gPriv') || {}).checked) err = 'Para crear la cuenta, marca que leíste el aviso de privacidad';
@@ -432,12 +446,12 @@
     setForm('', true, 'Un momento…');
     try {
       if (kind === 'login') await C.remote.signIn(email, pass);
-      else if (kind === 'signup') { LS.set(K_NAME, name); LS.set(K_PRIVNEW, '1'); await C.remote.signUp(email, pass); }
+      else if (kind === 'signup') { LS.set(K_NAME, name); LS.set(K_PRIVNEW, '1'); sexSet(email, v('gSex')); await C.remote.signUp(email, pass); }
       else { await C.remote.resetPassword(email); toast('Listo: revisa tu correo (y la carpeta de spam)'); C.mode = 'login'; C.busy = false; showGate(true); return; }
       /* con éxito, onAuth cambia la pantalla */
     } catch (e) {
       const msg = authErr(e), code = e && e.code ? ` [${e.code}]` : '';
-      if (kind === 'signup') { LS.del(K_NAME); LS.del(K_PRIVNEW); }
+      if (kind === 'signup') { LS.del(K_NAME); LS.del(K_PRIVNEW); sexSet(email, null); }
       setForm(msg + (msg.startsWith('No se pudo') ? '' : code), false, kind === 'login' ? 'Entrar' : kind === 'signup' ? 'Crear cuenta y pedir acceso' : 'Enviar correo');
     }
   }

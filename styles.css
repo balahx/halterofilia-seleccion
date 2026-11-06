@@ -374,3 +374,39 @@ details > summary { cursor: pointer; }
 .inote { width: 100%; min-height: 40px; font-size: 14px; }
 .inote-h { display: block; color: var(--muted); font-style: italic; margin-top: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* indicadores: series falladas, metas, razones, efectividad */
+.set.tm { grid-template-columns: 18px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 34px 44px; gap: 4px; }
+.set.tm.rpe { grid-template-columns: 18px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 46px 34px 44px; }
+.set.tm .num { font-size: 20px; padding: 0 2px; }
+.set.tm .tick { width: 44px; }
+.set.tm .set-n { font-size: 15px; }
+.missb { width: 34px; height: 48px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: transparent; color: var(--muted); font: 700 16px var(--font-body); cursor: pointer; padding: 0; }
+.missb[aria-pressed="true"] { background: var(--bad); border-color: var(--bad); color: #fff; }
+.set.is-miss .num { text-decoration: line-through; }
+.goal { flex: 1 1 100%; display: grid; gap: 4px; padding: 0 0 10px 14px; font-size: 12.5px; }
+.goalbar { display: block; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.goalbar i { display: block; height: 100%; background: var(--ok); }
+.ratios { display: grid; gap: 2px; }
+.ratio { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.ratio:last-child { border-bottom: 0; }
+.ratio b { font-variant-numeric: tabular-nums; }
+.etab { display: grid; gap: 0; margin-top: 8px; font-size: 13.5px; }
+.er { display: grid; grid-template-columns: minmax(0, 1.6fr) 64px 56px 74px; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: center; font-variant-numeric: tabular-nums; }
+.er.eh { font: 600 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.er > span:first-child { overflow-wrap: anywhere; }
+
+/* comparación entre atletas (entrenador) */
+.cmp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
+.cmp-grp { margin-top: 18px; }
+.cmp-tab { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.cmp-tab th, .cmp-tab td { text-align: right; padding: 7px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.cmp-tab th:first-child, .cmp-tab td:first-child { text-align: left; white-space: normal; overflow-wrap: break-word; min-width: 74px; max-width: 96px; }
+.cmp-tab .lnk { text-align: left; padding: 2px 0; text-decoration: none; }
+.cmp-tab th, .cmp-tab td { padding: 7px 3px; }
+.cmp-tab thead th { font-size: 10px; letter-spacing: .03em; }
+.cmp-tab thead th { font: 600 11px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cmp-tab tr.lead td:first-child b { color: var(--ok); }
+.cmp-tab .dim { color: var(--muted); }
+.cmp-scroll { overflow-x: auto; }
+.cmp-det { background: var(--surface2); border-radius: 10px; padding: 8px 12px; margin: 6px 0 10px; }
