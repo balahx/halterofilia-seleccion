@@ -24,7 +24,7 @@ const ok = (c, m) => console.log((c ? 'OK   ' : 'FAIL ') + m);
   await page.waitForSelector('#view h1');
   ok(await page.locator('.note').count() === 1, 'banner de datos de ejemplo visible');
   await page.screenshot({ path: 'tests/shots/01-hoy-demo.png', fullPage: true });
-  await page.click('#nav [data-tab="plan"]');
+  await page.click('#nav [data-tab="mas"]'); await page.click('.mrow[data-tab="plan"]');
   ok(await page.locator('.day').count() === 7, 'plan: 7 días');
   await page.screenshot({ path: 'tests/shots/02-plan.png', fullPage: true });
   await page.click('#nav [data-tab="prog"]');
@@ -50,7 +50,7 @@ const ok = (c, m) => console.log((c ? 'OK   ' : 'FAIL ') + m);
   await page.fill('#mxKg', '80');
   await page.click('[data-act="mx-save"]');
   ok((await page.textContent('.mrow >> nth=0')).includes('80'), 'máximo de Arranque guardado (80)');
-  await page.click('#nav [data-tab="plan"]');
+  await page.click('#nav [data-tab="mas"]'); await page.click('.mrow[data-tab="plan"]');
   await page.check('#don-0');
   await page.fill('#dn-0', 'Arranque técnico');
   await page.click('[data-act="plan-add"][data-d="0"]');
@@ -132,8 +132,9 @@ const ok = (c, m) => console.log((c ? 'OK   ' : 'FAIL ') + m);
   ok(!overflow, 'sin scroll horizontal en escritorio');
   page = await mk('light', 360, 740);
   await page.goto(URL); await bootLocal(page); await page.waitForSelector('#view h1');
-  for (const tab of ['hoy', 'plan', 'prog', 'max']) {
-    await page.click('#nav [data-tab="' + tab + '"]');
+  for (const tab of ['hoy', 'plan', 'prog', 'max', 'mas', 'hist']) {
+    if (tab === 'plan' || tab === 'hist') { await page.click('#nav [data-tab="mas"]'); await page.click('.mrow[data-tab="' + tab + '"]'); }
+    else await page.click('#nav [data-tab="' + tab + '"]');
     const of = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
     ok(!of, 'sin scroll horizontal a 360 px en ' + tab);
   }

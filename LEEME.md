@@ -139,6 +139,14 @@ En **Equipo → Semana** de cada atleta, la tarjeta **Informe del atleta** → �
 
 Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/compare-e2e.js`, `tests/sex-e2e.js`. El aviso de privacidad pasó a la versión `2026-11-05.2` (sexo, categoría, peso semanal, RPE y duración).
 
+## Diseño WL · Selección (fase 7)
+
+- **Marca:** «WL» con «SELECCIÓN» debajo; el logo es el caballito de mar dorado levantando una barra (`icons/wl-marca-claro.svg` y `icons/wl-marca-oscuro.svg`, la marca sola; los íconos de la app en `icons/icon-*.png` salen de `D:\proyecto halt\WL-iconos\pwa`). **El logo es un calco aproximado de una captura**: cuando llegue el vector original del entrenador hay que regenerar los archivos y confirmar el permiso de uso del escudo con él y la institución.
+- **Paleta** (en `styles.css`, claro y oscuro): azul de marca #274F83 (en oscuro #3F72B8 para botones), dorado #A07E34 (en oscuro #DDB962), fondo #F3F5F9 / #0E1A2E, superficie #FFFFFF / #16263F, texto #14233B / #EEF2F8. Las zonas de carga (blanco, verde, amarillo, azul, rojo) no cambian. Tipografía: Barlow Condensed 700 (títulos y números) y Barlow (texto).
+- **Menú inferior:** atleta = Hoy · Semana · Progreso · Máximos · Más. Entrenador = Equipo · Marcas · Planes · Mi sesión · Más.
+- **«Más»** agrupa: plan semanal libre, historial de sesiones, mis ejercicios, calculadora de discos, ajustes, aviso de privacidad y cerrar sesión; el entrenador además ve «Mi entrenamiento» (progreso, máximos, plan libre), el respaldo del equipo y las solicitudes de acceso.
+- Prueba: `node tests/design-e2e.js` (con `SHOTS=carpeta` guarda capturas en claro y oscuro).
+
 ## Lo que viene
 
 - Informe automático diario y semanal con aviso al entrenador (pide un servicio de envío fuera del plan gratuito; por ahora se abre a mano).

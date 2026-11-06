@@ -295,7 +295,7 @@ if (typeof module !== 'undefined') {
 
 /* ===== Estado, persistencia, datos de ejemplo, temporizador ===== */
 let KEY = 'halterofilia.v1.local';
-let APP = { requireSex: false, tabs: [], accountHTML: null, onAct: null, onSave: null, cloud: false }; // lo define cloud.js al iniciar
+let APP = { requireSex: false, tabs: [], nav: null, more: null, accountHTML: null, onAct: null, onSave: null, cloud: false }; // lo define cloud.js al iniciar
 const CATS = [['comp', 'Competencia'], ['cmplx', 'Complejos'], ['tec', 'Técnica'], ['tiron', 'Tirones'], ['fuerza', 'Fuerza'], ['acc', 'Accesorios']];
 const REST_OPTS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 const DEFAULT_PROFILE = { name: '', bw: 0, bar: 20, rounding: 1, rest: 120, timerEnabled: true, autoTimer: false, timerMode: 'down', sound: true, vibrate: true, keepAwake: true, showRpe: true, prefs: 2, exLang: 'en', sex: '', cat: '', trackMiss: true };
@@ -480,14 +480,20 @@ async function syncWake() {
 
 /* ===== Iconos, utilidades de interfaz y vistas ===== */
 const IC = {
-  hoy: '<path d="M2.5 9.5v5M5.5 7v10M18.5 7v10M21.5 9.5v5M5.5 12h13"/>',
+  hoy: '<path d="M3.5 11L12 4l8.5 7"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/>',
   plan: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   prog: '<path d="M3 18l5.5-6 4 3.5L21 6"/><path d="M15 6h6v6"/>',
-  max: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>',
-  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
+  max: '<path d="M2.5 9.5v5M5.5 7v10M18.5 7v10M21.5 9.5v5M5.5 12h13"/>',
+  gear: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   semana: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14.5l2.2 2.2 4.3-4.4"/>',
   team: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 5.3a3 3 0 010 5.4M18.5 14c1.6.7 2.8 2.3 2.8 4.5"/>',
+  file: '<path d="M6.5 3h7l4.5 4.5V21h-11.5z"/><path d="M13.5 3v4.5H18M9.5 12.5h5M9.5 16h5"/>',
+  more: '<circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/>',
+  chev: '<path d="M9 5.5l6.5 6.5L9 18.5"/>',
+  cloud: '<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/><path d="M9.5 13.5l2 2 3.5-3.5"/>',
+  out: '<path d="M10 4.5H6a1.5 1.5 0 00-1.5 1.5v12A1.5 1.5 0 006 19.5h4"/><path d="M15 8l4 4-4 4M19 12H9.5"/>',
+  timer: '<circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5M9.5 3h5"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   play: '<path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/>',
   pause: '<path d="M8 5.5v13M16 5.5v13" stroke-width="3"/>',
@@ -875,6 +881,42 @@ function viewProg() {
   return h;
 }
 
+/* ===== «Más» e Historial (diseño WL) ===== */
+const initials = n => { const p = String(n || '').trim().split(/\s+/).filter(Boolean); return p.length ? (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() : 'WL'; };
+function mrow(ico, title, sub, attrs, chip) {
+  return '<button class="mrow" ' + attrs + '>' + svg(ico) + '<span class="mt"><b>' + esc(title) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' + (chip ? '<span class="chip gd">' + esc(chip) + '</span>' : svg('chev', 'go')) + '</button>';
+}
+function viewMas() {
+  const m = APP.more ? APP.more() : {}, coach = !!m.coach, p = S.profile;
+  const cat = categoryOf(p.sex, p.bw, p.cat);
+  const sub = m.sub != null ? m.sub : [SEX_LABEL[p.sex] || '', p.bw > 0 ? fmtNum(p.bw, 1) + ' kg' : '', cat ? 'categoría ' + catText(cat) : ''].filter(Boolean).join(' · ');
+  const nSess = endedSessions().length;
+  let h = '<h1>Más</h1><div class="card more-head"><span class="av" aria-hidden="true">' + esc(initials(m.name || p.name)) + '</span><div class="who"><b>' + esc(m.name || p.name || 'Mi cuenta') + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' + (m.chip ? '<span class="chip gd">' + esc(m.chip) + '</span>' : '') + '</div>';
+  if (m.sync) h += '<div class="card sync-card">' + svg('cloud') + '<div><b>Datos en la nube</b><small data-sync>' + esc(m.sync()) + '</small></div></div>';
+  h += '<p class="eyebrow">' + (coach ? 'Mi entrenamiento' : 'Entrenamiento') + '</p><div class="mlist">';
+  if (coach) {
+    h += mrow('prog', 'Progreso', 'Mis cargas y marcas', 'data-act="tab" data-tab="prog"') + mrow('max', 'Máximos', 'Mis máximos y calculadora', 'data-act="tab" data-tab="max"') + mrow('plan', 'Plan semanal libre', 'Mis días y ejercicios', 'data-act="tab" data-tab="plan"');
+  } else {
+    h += mrow('plan', 'Plan semanal libre', 'Tus días y ejercicios propios', 'data-act="tab" data-tab="plan"') +
+      mrow('prog', 'Historial de sesiones', nSess + (nSess === 1 ? ' sesión' : ' sesiones') + ' · ver, abrir o borrar', 'data-act="tab" data-tab="hist"') +
+      mrow('max', 'Mis ejercicios', S.exercises.length + ' ejercicios · crear o editar', 'data-act="tab" data-tab="max"') +
+      mrow('timer', 'Calculadora de discos', 'Cómo cargar la barra', 'data-act="open-plates"');
+  }
+  h += '</div>';
+  if (m.team && m.team.length) h += '<p class="eyebrow">Equipo</p><div class="mlist">' + m.team.map(r => mrow(r.ico, r.t, r.s, r.tab ? 'data-act="tab" data-tab="' + esc(r.tab) + '"' : 'data-act="' + esc(r.act) + '"', r.chip)).join('') + '</div>';
+  h += '<p class="eyebrow">Cuenta</p><div class="mlist">' + mrow('gear', 'Ajustes', 'Apariencia, nombres, temporizador', 'data-act="settings"') +
+    mrow('file', 'Aviso de privacidad', window.HalterPrivacy ? 'Versión ' + window.HalterPrivacy.VERSION : '', 'data-act="privacy"') +
+    (m.logout ? mrow('out', 'Cerrar sesión', '', 'data-act="cl-logout"') : '') + '</div>';
+  return h;
+}
+function viewHist() {
+  const list = endedSessions().sort((a, b) => b.endedAt - a.endedAt);
+  return '<section class="sec"><h1>Historial</h1><p class="muted">' + list.length + (list.length === 1 ? ' sesión' : ' sesiones') + ' registradas.</p>' +
+    (list.length ? '<div class="hlist">' + list.slice(0, ui.histN).map(histRow).join('') + '</div>' : '<p class="muted">Cuando termines una sesión aparecerá aquí.</p>') +
+    (list.length > ui.histN ? '<div class="row-end"><button class="btn ghost sm" data-act="hist-more">Ver más</button></div>' : '') +
+    '<div class="row-end"><button class="lnk" data-act="tab" data-tab="mas">Volver a «Más»</button></div></section>';
+}
+
 /* ===== Render, gráficos, temporizador, hojas, eventos ===== */
 function renderBanner() {
   const el = $('#banner');
@@ -883,15 +925,22 @@ function renderBanner() {
   if (!storageOK) h += '<div class="note warn">Este navegador no permite guardar datos. Usa Ajustes → Exportar respaldo para no perder tus registros.</div>';
   el.innerHTML = h;
 }
+const BUILTIN_TABS = ['hoy', 'plan', 'prog', 'hist', 'max', 'mas'];
+const NAV_LABEL = { hoy: 'Hoy', prog: 'Progreso', max: 'Máximos', mas: 'Más' };
+function navItems() {
+  const list = APP.nav || [['hoy'], ['prog'], ['max'], ['mas']];
+  return list.map(a => { const id = a[0], ct = APP.tabs.find(t => t.id === id); return [id, a[1] || (ct ? ct.label : NAV_LABEL[id] || id), ct ? ct.icon : id === 'mas' ? 'more' : id]; });
+}
 function buildChrome() {
-  $('#nav').innerHTML = [['hoy', 'Hoy'], ['plan', 'Plan'], ['prog', 'Progreso'], ['max', 'Máximos']].concat(APP.tabs.map(t => [t.id, t.label, t.icon])).map(a => '<button data-act="tab" data-tab="' + a[0] + '">' + svg(a[2] || a[0]) + '<span>' + a[1] + '</span></button>').join('');
+  $('#nav').innerHTML = navItems().map(a => '<button data-act="tab" data-tab="' + a[0] + '">' + svg(a[2] || a[0]) + '<span>' + esc(a[1]) + '</span></button>').join('');
   $('#gear').innerHTML = svg('gear');
 }
 function render() {
   const v = $('#view'), a = document.activeElement, keep = (a && a.id && v.contains(a)) ? a.id : null;
   const ct = APP.tabs.find(t => t.id === ui.tab);
-  v.innerHTML = ct ? ct.render() : ui.tab === 'hoy' ? viewHoy() : ui.tab === 'plan' ? viewPlan() : ui.tab === 'prog' ? viewProg() : viewMax();
-  $$('#nav button').forEach(b => { if (b.dataset.tab === ui.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  v.innerHTML = ct ? ct.render() : ui.tab === 'hoy' ? viewHoy() : ui.tab === 'plan' ? viewPlan() : ui.tab === 'prog' ? viewProg() : ui.tab === 'hist' ? viewHist() : ui.tab === 'mas' ? viewMas() : viewMax();
+  const inNav = navItems().some(a => a[0] === ui.tab), cur = inNav ? ui.tab : 'mas';   // las pantallas que viven dentro de «Más» marcan «Más»
+  $$('#nav button').forEach(b => { if (b.dataset.tab === cur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderBanner(); renderDock(); drawCharts(); syncWake();
   if (ui.sheet && ui.sheet.kind === 'sex' && S && S.profile.sex) closeSheet();
   else if (APP.requireSex && S && !S.demo && !S.profile.sex && !(ui.sheet && ui.sheet.kind === 'sex')) openSheet('sex');
@@ -1293,6 +1342,7 @@ function renderSheet() {
   let title = '', body = '';
   switch (sh.kind) {
     case 'settings': title = 'Ajustes'; body = settingsHTML(); break;
+    case 'privacy': title = 'Aviso de privacidad'; body = window.HalterPrivacy ? window.HalterPrivacy.html(true) : ''; break;
     case 'pick': title = 'Elegir ejercicio'; body = '<input class="txt" id="pickQ" data-f="pickQ" type="search" placeholder="Buscar ejercicio" autocomplete="off" aria-label="Buscar ejercicio"><div id="pickList">' + pickList(sh.q || '') + '</div><div class="row-end"><button class="btn ghost sm" data-act="ex-new">+ Crear ejercicio</button></div>'; break;
     case 'ex': title = sh.id ? 'Editar ejercicio' : 'Nuevo ejercicio'; body = exSheetHTML(sh.id); break;
     case 'max': title = 'Máximo · ' + nm(ex(sh.exId)); body = maxSheetHTML(sh.exId); break;
@@ -1459,6 +1509,8 @@ document.addEventListener('click', e => {
     case 'plan-rm': S.plan.days[+t.dataset.d].items.splice(+t.dataset.k, 1); save(); render(); break;
     case 'pick': { const cb = ui.sheet && ui.sheet.cb; closeSheet(); if (cb) cb(t.dataset.ex); break; }
     case 'plates-toggle': ui.platesOpen = !ui.platesOpen; render(); break;
+    case 'open-plates': ui.platesOpen = true; ui.tab = 'max'; render(); window.scrollTo(0, 0); break;
+    case 'privacy': openSheet('privacy'); break;
     case 'ex-new-sess': openSheet('ex', { id: null, cb: addExerciseToSession }); break;
     case 'ex-new': openSheet('ex', { id: null, cb: ui.sheet && ui.sheet.kind === 'pick' ? ui.sheet.cb : null }); break;
     case 'ex-edit': openSheet('ex', { id: t.dataset.ex }); break;
@@ -1522,14 +1574,14 @@ let started = false, tickId = null;
 function start(opts) {
   opts = opts || {};
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, cloud: !!opts.cloud };
+  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);
   else if (opts.demo) { S = demoState(); save(true); }
   else { S = freshState(); if (opts.name) S.profile.name = opts.name; save(true); }
   if (opts.sex && (opts.sex === 'F' || opts.sex === 'M') && !S.profile.sex) { S.profile.sex = opts.sex; S.profile.cat = ''; save(true); }
-  if (!ui.tab || (ui.tab !== 'hoy' && ui.tab !== 'plan' && ui.tab !== 'prog' && ui.tab !== 'max' && !APP.tabs.some(t => t.id === ui.tab))) ui.tab = 'hoy';
+  if (!ui.tab || (!BUILTIN_TABS.includes(ui.tab) && !APP.tabs.some(t => t.id === ui.tab))) ui.tab = 'hoy';
   T.mode = S.profile.timerMode; T.target = S.profile.rest;
   buildChrome(); render();
   if (!started) {

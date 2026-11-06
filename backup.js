@@ -102,7 +102,7 @@
       S.last = 'Último respaldo: ' + new Date().toLocaleString('es-CL') + ' · ' + summary(file.counts) + ' · ' + got.reads + ' lecturas.';
       H.toast('Respaldo descargado.');
     } catch (e) {
-      S.err = 'No se pudo completar el respaldo: ' + (H.err ? H.err(e) : (e && e.message) || e) + ' No se descargó nada.';
+      S.err = 'No se pudo completar el respaldo: ' + (H.err ? H.err(e) : (e && e.message) || e) + ' No se descargó nada.'; H.toast(S.err);
     }
     S.busy = false; H.render();
   }

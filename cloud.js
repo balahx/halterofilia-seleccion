@@ -164,7 +164,7 @@
       default: return 'Conectando…';
     }
   }
-  function paintSync(s) { const el = document.getElementById('syncStat'); if (el) el.textContent = syncText(s || (C.sync && C.sync.current)); }
+  function paintSync(s) { const t = syncText(s || (C.sync && C.sync.current)); document.querySelectorAll('#syncStat, [data-sync]').forEach(el => { el.textContent = t; }); }
   function startSync(fresh) {
     stopSync();
     if (!C.remote || typeof C.remote.watchRecords !== 'function' || !window.HalterSync || !C.user) return;
@@ -175,7 +175,7 @@
 
   /* ---------- Pantallas de ingreso ---------- */
   const gate = () => $('#gate');
-  const brand = '<div class="brand"><span class="brand-plate" aria-hidden="true"></span><span class="brand-name">Halterofilia</span></div>';
+  const brand = '<div class="hero"><i class="mk" role="img" aria-label="Logo WL"></i><div class="wl">WL</div><div class="sl">SELECCIÓN</div><div class="mt">La fuerza de la disciplina</div></div>';
   function field(id, label, type, extra) { return `<label class="lab" for="${id}">${label}</label><input class="txt" id="${id}" name="${id}" type="${type}" ${extra || ''}>`; }
   function authForm() {
     const m = C.mode;
@@ -321,6 +321,8 @@
       cloud: true, requireSex: role !== 'coach', sex: role !== 'coach' ? pendingSex() : null, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
       tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : [])
         : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []),
+      nav: role === 'coach' ? [['equipo'], ['marcas'], ['planual'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
+      more: moreInfo,
       accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
       onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
     });
@@ -360,6 +362,21 @@
   }
   function deactivate() {
     stopSync(); if (window.HalterAssign) window.HalterAssign.reset(); if (window.HalterBackup) window.HalterBackup.reset(); if (window.HalterCompare) window.HalterCompare.reset(); window.HalterApp.stop(); C.appRunning = false; C.role = null; LS.del(K_LAST);
+  }
+
+  /* Datos de la pantalla «Más» (el resto lo arma app.js) */
+  function moreInfo() {
+    const coach = C.role === 'coach';
+    const o = { coach: coach, logout: true, sync: () => syncText(C.sync && C.sync.current) };
+    if (coach) {
+      const pend = C.requests.filter(x => x.status !== 'rejected').length;
+      o.name = C.name || (C.user && C.user.email) || 'Entrenador';
+      o.sub = 'Entrenador · ' + C.members.length + (C.members.length === 1 ? ' atleta aprobado' : ' atletas aprobados');
+      o.chip = 'Entrenador';
+      o.team = [{ ico: 'cloud', t: 'Descargar respaldo del equipo', s: 'Archivo con todos los datos · guárdalo en un lugar privado', act: 'bk-run' },
+        { ico: 'team', t: 'Solicitudes de acceso', s: pend ? pend + (pend === 1 ? ' nueva' : ' nuevas') : 'Sin solicitudes nuevas', tab: 'equipo', chip: pend ? String(pend) : '' }];
+    }
+    return o;
   }
 
   /* ---------- Contenido propio dentro de la app ---------- */
