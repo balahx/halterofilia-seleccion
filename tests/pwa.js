@@ -15,12 +15,12 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await page.reload(); await page.waitForSelector('#gForm'); // ya controlado por el service worker
   const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
   ok(m.display === 'standalone' && m.start_url && m.icons.length >= 3, 'manifest: standalone, start_url e íconos');
-  for (const i of m.icons) ok(fs.existsSync(path.join(ROOT, i.src)), 'ícono existe: ' + i.src);
+  for (const i of m.icons) ok(fs.existsSync(path.join(ROOT, i.src.split('?')[0])), 'ícono existe: ' + i.src);
   ok(!!(await page.evaluate(() => navigator.serviceWorker.controller)), 'service worker controla la página');
   await ctx.setOffline(true);
   await page.reload(); await page.waitForSelector('#gForm');
   ok(true, 'sin conexión la app abre desde la caché');
-  const cached = await page.evaluate(async () => (await (await caches.open('halterofilia-v1')).keys()).map(r => new URL(r.url).pathname));
+  const cached = await page.evaluate(async () => (await (await caches.open('halterofilia-v2')).keys()).map(r => new URL(r.url).pathname));
   ok(['/index.html', '/app.js', '/cloud.js', '/styles.css', '/firebase-config.js', '/plan-import.js', '/plan-ui.js', '/assign.js', '/report.js', '/privacy.js'].every(p => cached.includes(p)), 'archivos en caché: ' + cached.length);
   await br.close(); srv.close(); console.log(fails ? fails + ' FALLAS' : 'TODO OK'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

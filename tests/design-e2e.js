@@ -36,7 +36,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   ok((await page.title()) === 'WL · Selección de Halterofilia', 'título de la página');
   const mf = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
   ok(mf.short_name === 'WL Selección' && mf.theme_color === '#274F83' && mf.background_color === '#0E1A2E', 'manifest: nombre y colores de la marca');
-  for (const i of mf.icons) ok(fs.existsSync(path.join(ROOT, i.src)), 'existe ' + i.src);
+  for (const i of mf.icons) ok(fs.existsSync(path.join(ROOT, i.src.split('?')[0])), 'existe ' + i.src);
   await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(150);
   ok((await css('body', 'backgroundColor')) === 'rgb(14, 26, 46)' && /wl-marca-oscuro\.svg/.test(await css('#gate .hero .mk', 'backgroundImage')), 'modo oscuro: fondo #0E1A2E y logo dorado claro');
   await shot('02-ingreso-oscuro');

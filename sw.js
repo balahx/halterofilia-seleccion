@@ -1,6 +1,6 @@
 /* Service worker: permite abrir la app sin conexión.
    Estrategia: red primero (así se ven las actualizaciones), con respaldo en caché. */
-const CACHE = 'halterofilia-v1';
+const CACHE = 'halterofilia-v2';  // se cambia al renovar iconos o estructura: borra lo guardado antes
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './sync.js', './plan-import.js', './plan-ui.js', './privacy.js', './assign.js', './report.js', './guard.js', './backup.js', './compare.js', './firebase-config.js', './manifest.webmanifest',
   './icons/icon.svg', './icons/wl-marca-claro.svg', './icons/wl-marca-oscuro.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
@@ -21,6 +21,6 @@ self.addEventListener('fetch', e => {
     fetch(req, { cache: 'no-cache' }).then(res => {
       if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
-    }).catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))
   );
 });

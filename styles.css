@@ -9,7 +9,7 @@
   --warn-bg: #FFF1CC; --warn-ink: #5E4200;
   --p-white: #B4BEC9; --p-green: #1E9E57; --p-yellow: #E5B100; --p-blue: #2158D4; --p-red: #D6302F;
   --on-white: #14233B; --on-green: #FFFFFF; --on-yellow: #14233B; --on-blue: #FFFFFF; --on-red: #FFFFFF;
-  --mark: url(icons/wl-marca-claro.svg);
+  --mark: url(icons/wl-marca-claro.svg?v=2);
   --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
   --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
@@ -22,7 +22,7 @@
     --warn-bg: #3A2D08; --warn-ink: #F3D58A;
     --p-white: #E7ECF2; --p-green: #2BBF70; --p-yellow: #F5C800; --p-blue: #5B8CFF; --p-red: #F2514F;
     --on-white: #11151B; --on-green: #06210F; --on-yellow: #1A1400; --on-blue: #041030; --on-red: #1A0605;
-    --mark: url(icons/wl-marca-oscuro.svg);
+    --mark: url(icons/wl-marca-oscuro.svg?v=2);
     color-scheme: dark;
   }
 }
@@ -34,7 +34,7 @@
   --warn-bg: #3A2D08; --warn-ink: #F3D58A;
   --p-white: #E7ECF2; --p-green: #2BBF70; --p-yellow: #F5C800; --p-blue: #5B8CFF; --p-red: #F2514F;
   --on-white: #11151B; --on-green: #06210F; --on-yellow: #1A1400; --on-blue: #041030; --on-red: #1A0605;
-  --mark: url(icons/wl-marca-oscuro.svg);
+  --mark: url(icons/wl-marca-oscuro.svg?v=2);
   color-scheme: dark;
 }
 
