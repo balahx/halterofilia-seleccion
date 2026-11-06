@@ -3,7 +3,7 @@
    subir VERSION (así se vuelve a avisar a quien ya usa la app). No es asesoría legal: conviene que lo revise quien corresponda. */
 (function (root) {
   'use strict';
-  const VERSION = '2026-11-05.2';
+  const VERSION = '2026-11-06.1';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const SECTIONS = [
@@ -11,10 +11,10 @@
     ['Qué se guarda', ['Tu nombre y tu correo (la contraseña la gestiona Google en su servicio de cuentas; la app no la ve).',
       'Tus sesiones: ejercicios, kilos, repeticiones, esfuerzo percibido (RPE), horas, tu peso corporal si lo anotas, y tus notas y observaciones. Esas notas pueden hablar de molestias o dolores: son datos de salud, así que escribe solo lo que quieras compartir con tu entrenador.',
       'Tus máximos, tus metas y tus ajustes.',
-      'Tu sexo, tu categoría de peso y tu peso corporal semanal: el entrenador los usa para comparar las marcas entre atletas de la misma categoría. También se guardan las series que marcas como falladas, el RPE y la duración de cada sesión.',
+      'Tu sexo, tu categoría de peso y tu peso corporal semanal: el entrenador los usa para comparar las marcas entre atletas de la misma categoría. También se guardan el RPE y la duración de cada sesión.',
       'La semana del plan que el entrenador te asigna y qué sesiones cumpliste (con la hora del servidor).']],
     ['Para qué', 'Para registrar tu entrenamiento, calcular tus cargas según el plan y que tu entrenador vea tu avance y arme informes. No se usan para publicidad ni se venden.'],
-    ['Quién los ve', 'Tú y el entrenador. Los otros atletas no ven tus datos. Los datos se guardan en tu dispositivo y en la base de datos en la nube del equipo (Google Firebase; la base de datos está en Santiago, Chile). La app carga además las tipografías desde Google Fonts, lo que le muestra tu dirección IP a Google.'],
+    ['Quién los ve', 'Tú y el entrenador. Los otros atletas no ven tus datos. Los datos se guardan en tu dispositivo y en la base de datos en la nube del equipo (Google Firebase; la base de datos está en Santiago, Chile). Las tipografías van incluidas en la app: no se piden a ningún sitio externo.'],
     ['Cuánto tiempo', 'Mientras sigas en el equipo, o hasta que pidas borrarlos.'],
     ['Tus derechos', ['Puedes ver, corregir y llevarte tus datos: en Ajustes hay un respaldo (JSON y CSV).',
       'En Ajustes, «Borrar todos mis datos» vacía tus sesiones, máximos y perfil en tu dispositivo y en la nube. Quedan tu nombre y correo (tu cuenta) y el registro de qué sesiones cumpliste (fecha y semana).',
