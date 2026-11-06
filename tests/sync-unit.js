@@ -131,5 +131,13 @@ const sess = (id, t, extra) => Object.assign({ id, date: '2026-11-05', startedAt
   ok(!X.S.sessions.some(s => s.id === 'sy'), 'A no recibe lo de B');
   X.eng.stop(); Y.eng.stop();
 
-  console.log(fails ? fails + ' FALLAS' : 'TODO OK'); process.exit(fails ? 1 : 0);
+  console.log('Reloj del dispositivo (D3)');
+const SY = require('../sync.js');
+const T0 = Date.parse('2026-11-06T18:00:10Z');
+ok(Math.abs(SY.clockSkew('Fri, 06 Nov 2026 18:00:10 GMT', T0, T0 + 200) - 400) < 1, 'skew = hora del servidor (+0,5 s por el truncado) − punto medio de la consulta');
+ok(SY.clockSkew('basura', T0, T0) === null && SY.clockSkew(null, T0, T0) === null, 'una cabecera ilegible no da medición');
+ok(SY.usableSkew(5000) === 0 && SY.usableSkew(-59000) === 0, 'un desvío menor a 1 minuto es ruido: no se corrige');
+ok(SY.usableSkew(3 * 3600000) === 3 * 3600000 && SY.usableSkew(-7200000) === -7200000, 'un reloj 3 h adelantado o 2 h atrasado se corrige');
+ok(SY.usableSkew(40 * 86400000) === 0 && SY.usableSkew(null) === 0 && SY.usableSkew(NaN) === 0, 'desvíos de más de 30 días o inválidos se ignoran');
+console.log(fails ? fails + ' FALLAS' : 'TODO OK'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

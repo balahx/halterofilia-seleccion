@@ -54,10 +54,13 @@
       this.auth = auth.getAuth(this.app);
       this.db = fs.getFirestore(this.app);
     }
-    onAuth(cb) { return this.m.auth.onAuthStateChanged(this.auth, u => cb(u ? { uid: u.uid, email: u.email } : null)); }
+    onAuth(cb) { return this.m.auth.onAuthStateChanged(this.auth, u => cb(u ? { uid: u.uid, email: u.email, verified: !!u.emailVerified } : null)); }
     signIn(email, password) { return this.m.auth.signInWithEmailAndPassword(this.auth, email, password); }
     signUp(email, password) { return this.m.auth.createUserWithEmailAndPassword(this.auth, email, password); }
     resetPassword(email) { return this.m.auth.sendPasswordResetEmail(this.auth, email); }
+    /* Verificación del correo (S2): se envía el enlace; luego se vuelve a leer la cuenta y a renovar el token para que las reglas vean email_verified */
+    sendVerification() { return this.m.auth.sendEmailVerification(this.auth.currentUser); }
+    async refreshUser() { const u = this.auth.currentUser; await u.reload(); if (u.emailVerified) await u.getIdToken(true); return !!u.emailVerified; }
     signOut() { return this.m.auth.signOut(this.auth); }
     _doc(path) { return this.m.fs.doc(this.db, ...path.split('/')); }
     _plain(d) { // Timestamp → milisegundos
@@ -143,6 +146,7 @@
   /* ---------- Estado ---------- */
   const C = {
     remote: null, user: null,
+    skew: 0,              // desvío del reloj del dispositivo respecto del servidor (ms; 0 = sin corrección)
     phase: 'loading',     // loading | nocfg | failed | signedout | resolving | norequest | pending | rejected | noteam | active
     mode: 'login',        // login | signup | reset (pantalla de ingreso)
     role: null,           // coach | athlete
@@ -185,11 +189,20 @@
     el.innerHTML = '<span class="netbar-ic">' + window.HalterApp.icon('warn') + '</span><div><b>' + esc(b[0]) + '</b><span>' + esc(b[1]) + '</span></div>' + (b[2] ? '<button class="lnk" data-act="sync-now">Reintentar</button>' : '');
   }
   function paintSync(s) { const t = syncText(s || (C.sync && C.sync.current)); document.querySelectorAll('#syncStat, [data-sync]').forEach(el => { el.textContent = t; }); paintNet(s); }
+  /* D3 · Corrección del reloj: se mide contra la cabecera Date del servidor de la app (la misma de version.js); sin conexión o sin cabecera, no se corrige */
+  async function measureSkew() {
+    try {
+      const t0 = Date.now(), r = await fetch('version.js?t=' + t0 + '&clock=1', { method: 'HEAD', cache: 'no-store' }), t1 = Date.now(), d = r.headers.get('Date');
+      if (r.ok && d && window.HalterSync) C.skew = window.HalterSync.usableSkew(window.HalterSync.clockSkew(d, t0, t1));
+    } catch (e) { /* sin conexión: se mantiene la última medición */ }
+  }
+  window.addEventListener('online', () => { if (C.sync) measureSkew(); });
   function startSync(fresh) {
     stopSync();
     if (!C.remote || typeof C.remote.watchRecords !== 'function' || !window.HalterSync || !C.user) return;
-    C.sync = new window.HalterSync.Engine({ remote: C.remote, uid: C.user.uid, app: window.HalterApp, store: LS, onStatus: paintSync });
-    C.sync.start({ fresh: fresh });
+    C.sync = new window.HalterSync.Engine({ remote: C.remote, uid: C.user.uid, app: window.HalterApp, store: LS, onStatus: paintSync, now: () => Date.now() + (C.skew || 0) });
+    const eng = C.sync;   // el motor arranca después de medir el reloj (máx. 2,5 s) para que los primeros cambios ya lleven la hora corregida
+    Promise.race([measureSkew(), new Promise(r => setTimeout(r, 2500))]).then(() => { if (C.sync === eng) eng.start({ fresh: fresh }); });
   }
   function stopSync() { if (C.sync) { C.sync.stop(); C.sync = null; } const nb = document.getElementById('netBar'); if (nb) { nb.hidden = true; nb.innerHTML = ''; } }
 
@@ -226,6 +239,8 @@
       case 'failed': return msgView('warn', 'Sin conexión', `<p class="lead">No se pudo cargar el servicio de cuentas (${esc(C.err || 'sin conexión')}). Revisa tu internet.</p>`, '<button class="btn" data-g="retry">Reintentar</button>');
       case 'signedout': return authForm();
       case 'resolving': return msgView('cloud', 'Comprobando tu acceso…', accountLine() + (C.err ? `<div class="note warn">${esc(C.err)}</div>` : ''), (C.err ? '<button class="btn" data-g="rewatch">Reintentar</button>' : '') + outBtn);
+      case 'verify': return msgView('user', 'Verifica tu correo', `<p class="lead">Te enviamos un enlace a <b>${esc(C.user ? C.user.email : '')}</b>. Ábrelo (revisa también el spam) y vuelve aquí. Así comprobamos que el correo es tuyo antes de pedir acceso al equipo.</p>${C.err ? `<div class="note warn">${esc(C.err)}</div>` : ''}${C.info ? `<p class="muted" role="status">${esc(C.info)}</p>` : ''}`,
+        `<button class="btn" data-g="verified"${C.busy ? ' disabled' : ''}>${C.busy ? 'Comprobando…' : 'Ya verifiqué mi correo'}</button><button class="btn ghost" data-g="resend"${C.busy ? ' disabled' : ''}>Reenviar el correo</button>` + outBtn);
       case 'norequest': return `<h1>Pide acceso al equipo</h1><p class="lead">Tu cuenta está creada. Para usar la app, el entrenador debe aprobarte.</p>${accountLine()}<form id="gForm" data-g-form="request" novalidate>${field('gName', 'Nombre y apellido', 'text', `autocomplete="name" maxlength="60" required value="${esc(LS.get(K_NAME) || C.prefill || '')}" placeholder="Ej. Camila Soto"`)}<p id="gErr" class="form-error" role="alert">${esc(C.err)}</p><div class="stack"><button class="btn" type="submit"${C.busy ? ' disabled' : ''}>${C.busy ? 'Enviando…' : 'Enviar solicitud'}</button></div></form><div class="alt">${outBtn}</div>`;
       case 'pending': return msgView('clock', 'Solicitud enviada', `<p class="lead">Tu entrenador debe aprobar tu acceso. Esta pantalla se actualiza sola cuando lo haga; puedes cerrarla y volver más tarde.</p>${accountLine()}`, outBtn) + (C.team === null && C.defin.team ? '<div class="note" style="margin-top:14px">El entrenador aún no está registrado como administrador del equipo en el sistema. Avísale a quien configuró la app.</div>' : '');
       case 'rejected': return msgView('ban', 'Solicitud no aprobada', `<p class="lead">El entrenador no aprobó tu solicitud. Si fue un error, habla con él y vuelve a pedir acceso.</p>${accountLine()}`, '<button class="btn" data-g="rerequest">Volver a pedir acceso</button>' + outBtn);
@@ -235,7 +250,7 @@
   }
   let lastKey = '';
   function showGate(force) {
-    const g = gate(), key = C.phase + '|' + C.mode + '|' + C.err + '|' + C.busy + '|' + (C.team === null && C.defin.team);
+    const g = gate(), key = C.phase + '|' + C.mode + '|' + C.err + '|' + (C.info || '') + '|' + C.busy + '|' + (C.team === null && C.defin.team);
     document.getElementById('appRoot').hidden = true;
     g.hidden = false;
     if (!force && key === lastKey) return;
@@ -288,6 +303,7 @@
     // Respuestas negativas solo valen si vienen del servidor (no de una caché vacía sin conexión)
     if (!C.defin.team || !C.defin.member || !C.defin.request) return { wait: true };
     if (C.request) return { phase: C.request.status === 'rejected' ? 'rejected' : 'pending' };
+    if (!C.user.verified) return { phase: 'verify' };
     return { phase: 'norequest' };
   }
   function evaluate(errored) {
@@ -489,7 +505,7 @@
     setForm('', true, 'Un momento…');
     try {
       if (kind === 'login') await C.remote.signIn(email, pass);
-      else if (kind === 'signup') { LS.set(K_NAME, name); LS.set(K_PRIVNEW, '1'); sexSet(email, v('gSex')); await C.remote.signUp(email, pass); }
+      else if (kind === 'signup') { LS.set(K_NAME, name); LS.set(K_PRIVNEW, '1'); sexSet(email, v('gSex')); await C.remote.signUp(email, pass); try { await C.remote.sendVerification(); C.resendAt = Date.now() + 60000; C.resendFor = email; } catch (e) { /* el botón «Reenviar» queda disponible */ } }
       else { await C.remote.resetPassword(email); toast('Listo: revisa tu correo (y la carpeta de spam)'); C.mode = 'login'; C.busy = false; showGate(true); return; }
       /* con éxito, onAuth cambia la pantalla */
     } catch (e) {
@@ -499,6 +515,26 @@
     }
   }
 
+  /* S2: comprobar si ya verificó (a mano con el botón, o solo al volver a la pestaña) y reenviar el enlace */
+  async function checkVerified(silent) {
+    if (!C.user || C.phase !== 'verify' || C.busy) return;
+    C.busy = true; C.err = ''; C.info = ''; if (!silent) showGate(true);
+    try {
+      const ok = await C.remote.refreshUser();
+      C.busy = false;
+      if (ok) { C.user.verified = true; C.info = ''; evaluate(); return; }
+      if (!silent) C.err = 'Todavía no aparece verificado. Abre el enlace del correo y vuelve a intentarlo.';
+    } catch (e) { C.busy = false; if (!silent) C.err = dataErr(e); }
+    if (C.phase === 'verify') showGate(true);
+  }
+  async function resendVerification() {
+    if (!C.user || C.busy) return;
+    if (Date.now() < (C.resendAt || 0) && C.resendFor === C.user.email) { C.err = ''; C.info = 'Espera un momento antes de pedir otro correo.'; showGate(true); return; }
+    C.busy = true; C.err = ''; C.info = ''; showGate(true);
+    try { await C.remote.sendVerification(); C.resendAt = Date.now() + 60000; C.resendFor = C.user.email; C.info = 'Listo: reenviamos el correo. Revisa también el spam.'; } catch (e) { C.err = e && e.code === 'auth/too-many-requests' ? 'Demasiados intentos. Espera unos minutos.' : dataErr(e); }
+    C.busy = false; if (C.phase === 'verify') showGate(true);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && C.phase === 'verify') checkVerified(true); });
   function bindGate() {
     const g = gate();
     g.addEventListener('submit', e => { const f = e.target.closest('[data-g-form]'); if (!f) return; e.preventDefault(); if (!C.busy) submitForm(f.dataset.gForm); });
@@ -510,6 +546,8 @@
         case 'retry': boot(); break;
         case 'rerequest': C.autoSent = true; C.prefill = C.request ? C.request.name : ''; guarded(() => C.remote.deleteRequest(C.user.uid)); break;
         case 'rewatch': C.err = ''; watchAccess(C.user); showGate(true); break;
+        case 'verified': checkVerified(false); break;
+        case 'resend': resendVerification(); break;
       }
     });
   }

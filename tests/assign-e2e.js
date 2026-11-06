@@ -112,12 +112,12 @@ const WEEKS = {
   await page.keyboard.press('Escape'); await tab('semana');
   ok(/Cumplida/.test(await txt('#view')), 'la semana marca la sesión como cumplida');
   ok(await page.locator('[data-act="as-advance"]').isDisabled(), 'todavía no puede pasar de semana');
-  ok(/Falta cumplir la última sesión/.test(await txt('#view')), 'explica por qué: falta la última sesión');
+  ok(/Falta cumplir una sesión de la semana|Faltan \d+ sesiones/.test(await txt('#view')), 'explica por qué: faltan sesiones');
   await shot('04-atleta-cumplida');
 
   console.log('3. Las reglas impiden saltarse la semana o falsear el cumplimiento');
   let r = await remoteTry(`await r.advanceAssignment('${auid}', { weekId: 'e1_2', week: 2, stageId: 'e1', weekEndsAt: ${a.weekEndsAt + 604800000} })`);
-  ok(r === 'permission-denied', 'no puede pasar de semana antes del corte ni sin la última sesión (' + r + ')');
+  ok(r === 'permission-denied', 'no puede pasar de semana antes del corte ni sin todas las sesiones (' + r + ')');
   r = await remoteTry(`await r.setCompletion('${auid}', 'p1_e1_2_0', { planId: 'p1', weekId: 'e1_2', sessionIdx: 0 })`);
   ok(r === 'permission-denied', 'no puede registrar una sesión de una semana que no tiene asignada (' + r + ')');
   r = await remoteTry(`await r.setCompletion('${auid}', 'p1_e1_1_0', { planId: 'p1', weekId: 'e1_1', sessionIdx: 0 })`);
@@ -127,7 +127,7 @@ const WEEKS = {
   r = await remoteTry(`await r.setAdjust('${auid}_p1_e1_1', { s0_i0_k1: 80 })`);
   ok(r === 'permission-denied', 'no puede cambiar sus propios ajustes (' + r + ')');
 
-  console.log('4. Pasado el corte y con la última sesión cumplida, pasa a la semana 2');
+  console.log('4. Pasado el corte y con todas las sesiones cumplidas, pasa a la semana 2');
   const past = await page.evaluate(() => HalterAssign.pure.cutoffFor(Date.now() - 8 * 86400000));
   await page.evaluate(({ u, past }) => { const s = __fake.srv(), x = s.docs['assignments/' + u]; __fake.admin('assignments/' + u, Object.assign({}, x, { weekEndsAt: past })); }, { u: auid, past });
   await page.waitForTimeout(400);

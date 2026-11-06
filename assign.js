@@ -163,8 +163,13 @@
   function advanceState(asg, week, done, now) {
     if (!asg || !week) return { ok: false, why: '' };
     if (!week.next) return { ok: false, why: 'Es la última semana del plan.' };
-    const n = (week.sessions || []).length, needLast = week.kind !== 'transition' && n > 0;
-    if (needLast && !done[n - 1]) return { ok: false, why: 'Falta cumplir la última sesión de la semana (' + ((week.sessions[n - 1] || {}).name || 'sesión ' + n) + ').' };
+    const n = (week.sessions || []).length, need = week.kind !== 'transition' && n > 0;
+    if (need) {
+      // Se exigen todas las sesiones (con más de 7, las reglas exigen las 5 primeras y la última: ver firestore.rules)
+      const must = []; for (let k = 0; k < n; k++) if (n <= 7 || k < 5 || k === n - 1) must.push(k);
+      const miss = must.filter(k => !done[k]);
+      if (miss.length) return { ok: false, why: miss.length === 1 ? 'Falta cumplir una sesión de la semana (' + ((week.sessions[miss[0]] || {}).name || 'sesión ' + (miss[0] + 1)) + ').' : 'Faltan ' + miss.length + ' sesiones por cumplir esta semana.' };
+    }
     if (now < asg.weekEndsAt) return { ok: false, why: 'Se habilita el ' + fmtCut(asg.weekEndsAt) + '.' };
     return { ok: true, why: '' };
   }

@@ -63,13 +63,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Solicitudes de acceso. Cada persona crea la suya (con su propio correo y la hora del servidor).
+    // Solicitudes de acceso. Cada persona crea la suya (con su propio correo ya verificado y la hora del servidor).
+    // Las cuentas y solicitudes que ya existían no se tocan: la verificación solo se exige al crear la solicitud.
     match /requests/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isCoach());
       allow list: if isCoach();
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['name', 'email', 'status', 'createdAt'])
         && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 60
+        && request.auth.token.email_verified == true
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time;
@@ -148,18 +150,38 @@ service cloud.firestore {
 
     function weekOf(planId, weekId) { return get(/databases/$(database)/documents/plans/$(planId)/weeks/$(weekId)).data; }
 
-    // La última sesión planificada de la semana debe estar cumplida (una semana de transición no la exige)
-    function lastDone(uid, a) {
+    // Todas las sesiones planificadas de la semana deben estar cumplidas (una semana de transición no las exige).
+    // Límite de Firestore: 10 lecturas de documentos por escritura. Al avanzar se leen: la ficha de miembro (1), la semana actual (1),
+    // la siguiente (1) y las sesiones cumplidas. Con hasta 7 sesiones se exigen todas (7 + 3 = 10); con más de 7 (no es lo habitual)
+    // se exigen las 5 primeras y la última (6 + 3 = 9).
+    function doneAt(uid, a, k) { return exists(/databases/$(database)/documents/users/$(uid)/completions/$(a.planId + '_' + a.weekId + '_' + string(k))); }
+    function allDone(uid, a) {
       let w = weekOf(a.planId, a.weekId);
-      return w.kind == 'transition' || w.sessions.size() == 0
-        || exists(/databases/$(database)/documents/users/$(uid)/completions/$(a.planId + '_' + a.weekId + '_' + string(w.sessions.size() - 1)));
+      let n = w.sessions.size();
+      return w.kind == 'transition' || n == 0
+        || (n <= 7
+          ? (doneAt(uid, a, 0) && (n < 2 || doneAt(uid, a, 1)) && (n < 3 || doneAt(uid, a, 2)) && (n < 4 || doneAt(uid, a, 3))
+              && (n < 5 || doneAt(uid, a, 4)) && (n < 6 || doneAt(uid, a, 5)) && (n < 7 || doneAt(uid, a, 6)))
+          : (doneAt(uid, a, 0) && doneAt(uid, a, 1) && doneAt(uid, a, 2) && doneAt(uid, a, 3) && doneAt(uid, a, 4) && doneAt(uid, a, n - 1)));
     }
 
     // Semana que el entrenador le asigna a cada atleta. El atleta solo puede pasar a la semana siguiente:
-    // después del corte (viernes 23:59 hora de Chile, calculado por la app) y con la última sesión cumplida.
+    // después del corte (viernes 23:59 hora de Chile, calculado por la app) y con todas las sesiones de la semana cumplidas.
     match /assignments/{uid} {
       allow get: if signedIn() && ((request.auth.uid == uid && isMemberOf(uid)) || isCoach());
       allow list: if isCoach();
+      // Va primero para que, al avanzar, no se gasten lecturas en comprobar si es el entrenador (límite de 10 por escritura).
+      allow update: if signedIn() && request.auth.uid == uid && isTrainee(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['weekId', 'week', 'stageId', 'weekEndsAt', 'at'])
+        && request.resource.data.at == request.time
+        && request.time.toMillis() >= resource.data.weekEndsAt
+        && weekOf(resource.data.planId, resource.data.weekId).next != ''
+        && request.resource.data.weekId == weekOf(resource.data.planId, resource.data.weekId).next
+        && request.resource.data.week == weekOf(resource.data.planId, request.resource.data.weekId).week
+        && request.resource.data.stageId == weekOf(resource.data.planId, request.resource.data.weekId).stageId
+        && request.resource.data.weekEndsAt >= resource.data.weekEndsAt + 597600000
+        && request.resource.data.weekEndsAt <= resource.data.weekEndsAt + 612000000
+        && allDone(uid, resource.data);
       allow create, update: if isCoach()
         && request.resource.data.keys().hasOnly(['planId', 'weekId', 'week', 'stageId', 'weekEndsAt', 'setBy', 'at'])
         && request.resource.data.keys().hasAll(['planId', 'weekId', 'week', 'stageId', 'weekEndsAt', 'setBy', 'at'])
@@ -172,17 +194,6 @@ service cloud.firestore {
         && isTrainee(uid)
         && weekOf(request.resource.data.planId, request.resource.data.weekId).stageId == request.resource.data.stageId
         && weekOf(request.resource.data.planId, request.resource.data.weekId).week == request.resource.data.week;
-      allow update: if signedIn() && request.auth.uid == uid && isTrainee(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['weekId', 'week', 'stageId', 'weekEndsAt', 'at'])
-        && request.resource.data.at == request.time
-        && request.time.toMillis() >= resource.data.weekEndsAt
-        && weekOf(resource.data.planId, resource.data.weekId).next != ''
-        && request.resource.data.weekId == weekOf(resource.data.planId, resource.data.weekId).next
-        && request.resource.data.week == weekOf(resource.data.planId, request.resource.data.weekId).week
-        && request.resource.data.stageId == weekOf(resource.data.planId, request.resource.data.weekId).stageId
-        && request.resource.data.weekEndsAt >= resource.data.weekEndsAt + 597600000
-        && request.resource.data.weekEndsAt <= resource.data.weekEndsAt + 612000000
-        && lastDone(uid, resource.data);
       allow delete: if isCoach();
     }
 

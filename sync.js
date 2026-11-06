@@ -23,6 +23,11 @@
     h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   }
+  /* D3 · Reloj del dispositivo: la hora de cada cambio (u) decide quién gana entre dispositivos y las reglas rechazan una hora más de 10 min adelantada.
+     La cabecera Date del servidor (resolución de 1 s, truncada) permite estimar cuánto se desvía el reloj: skew = hora del servidor − hora del dispositivo. */
+  function clockSkew(dateHeader, t0, t1) { const s = Date.parse(dateHeader); return isFinite(s) ? (s + 500) - (t0 + t1) / 2 : null; }
+  /* Solo se corrige si el reloj está desviado 1 min o más (menos es ruido de la medición) y hasta 30 días (más es dato dudoso) */
+  function usableSkew(skew) { return skew != null && isFinite(skew) && Math.abs(skew) >= 60000 && Math.abs(skew) <= 30 * 86400000 ? Math.round(skew) : 0; }
   const typeOf = key => key === 'profile' ? 'profile' : key === 'plan' ? 'plan' : key.charAt(0) === 'e' ? 'exercise' : 'session';
 
   /* Estado → { clave: texto JSON } */
@@ -119,7 +124,7 @@
           let u = 0;
           if (!isDefault(key, cur[key], this.freshJ)) {
             u = t;
-            if (key.charAt(0) === 's') { try { const s = JSON.parse(cur[key]); u = s.endedAt || s.startedAt || t; } catch (e) { u = t; } }
+            if (key.charAt(0) === 's') { try { const s = JSON.parse(cur[key]); u = Math.min(s.endedAt || s.startedAt || t, t); } catch (e) { u = t; } }   // nunca posterior a «ahora» (con el reloj corregido)
           }
           m.rec[key] = { u: u, h: h };
           if (u > 0) { m.dirty[key] = 1; changed = true; }
@@ -232,7 +237,7 @@
     }
   }
 
-  const api = { Engine: Engine, hash: hash, toRecords: toRecords, isDefault: isDefault, applyRecord: applyRecord, removeRecord: removeRecord, validRecord: validRecord, typeOf: typeOf };
+  const api = { Engine: Engine, hash: hash, toRecords: toRecords, isDefault: isDefault, applyRecord: applyRecord, removeRecord: removeRecord, validRecord: validRecord, typeOf: typeOf, clockSkew: clockSkew, usableSkew: usableSkew };
   if (typeof module !== 'undefined') module.exports = api;
   root.HalterSync = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -42,7 +42,8 @@
       if (op === 'update' && u.uid === id && trainee) {   // el atleta solo avanza a la semana siguiente
         const cur = prev, cw = wkDoc(cur.planId, cur.weekId), nw = cw && cw.next ? wkDoc(cur.planId, cw.next) : null;
         const merged = Object.assign({}, cur, d), changed = Object.keys(merged).filter(k => JSON.stringify(cur[k]) !== JSON.stringify(merged[k]));
-        const last = cw && (cw.kind === 'transition' || cw.sessions.length === 0 || !!s.docs['users/' + id + '/completions/' + cur.planId + '_' + cur.weekId + '_' + (cw.sessions.length - 1)]);
+        const n = cw ? cw.sessions.length : 0, doneK = k => !!s.docs['users/' + id + '/completions/' + cur.planId + '_' + cur.weekId + '_' + k];
+        const last = cw && (cw.kind === 'transition' || n === 0 || (n <= 7 ? Array.from({ length: n }, (_, k) => k).every(doneK) : [0, 1, 2, 3, 4, n - 1].every(doneK)));   // todas las sesiones (con más de 7: las 5 primeras y la última)
         return changed.every(k => ['weekId', 'week', 'stageId', 'weekEndsAt', 'at'].includes(k)) && !!nw && d.weekId === cw.next && d.week === nw.week && d.stageId === nw.stageId
           && Date.now() >= cur.weekEndsAt && d.weekEndsAt >= cur.weekEndsAt + 597600000 && d.weekEndsAt <= cur.weekEndsAt + 612000000 && !!last;
       }
@@ -101,7 +102,7 @@
     if (col === 'requests') {
       if (op === 'get') return u.uid === id || coach;
       if (op === 'list') return coach;
-      if (op === 'create') return u.uid === id && keysOnly(data, ['name', 'email', 'status', 'createdAt']) && Object.keys(data).length === 4 && typeof data.name === 'string' && data.name.length >= 2 && data.name.length <= 60 && data.email === u.email && data.status === 'pending';
+      if (op === 'create') return u.uid === id && (rd().users[u.email] || {}).verified !== false && keysOnly(data, ['name', 'email', 'status', 'createdAt']) && Object.keys(data).length === 4 && typeof data.name === 'string' && data.name.length >= 2 && data.name.length <= 60 && data.email === u.email && data.status === 'pending';
       if (op === 'update') return coach && data.status === 'rejected' && Object.keys(data).every(k => k === 'status' || prev[k] === data[k]);
       if (op === 'delete') return u.uid === id || coach;
     }
@@ -136,16 +137,18 @@
     if (op === 'delete') delete s.docs[path]; else s.docs[path] = Object.assign({}, op === 'update' ? prev : {}, data);
     wr(s); later(emit);
   }
-  function setUser(u) { if (u) L.setItem('fake.cur', JSON.stringify(u)); else L.removeItem('fake.cur'); later(() => authCbs.forEach(cb => cb(u))); }
+  function setUser(u, silent) { if (u) L.setItem('fake.cur', JSON.stringify(u)); else L.removeItem('fake.cur'); if (!silent) later(() => authCbs.forEach(cb => cb(u))); }
 
   class FakeRemote {
     async init() { if (L.getItem('fake.sdkfail') === '1') throw err('sdk', 'no se pudo cargar el SDK'); }
     onAuth(cb) { authCbs.push(cb); later(() => cb(curUser())); return () => {}; }
-    async signIn(email, pass) { const s = rd(), x = s.users[email]; if (!x || x.pass !== pass) throw err('auth/invalid-credential'); setUser({ uid: x.uid, email }); }
+    async signIn(email, pass) { const s = rd(), x = s.users[email]; if (!x || x.pass !== pass) throw err('auth/invalid-credential'); setUser({ uid: x.uid, email, verified: x.verified !== false }); }
     async signUp(email, pass) {
       const s = rd(); if (pass.length < 6) throw err('auth/weak-password'); if (s.users[email]) throw err('auth/email-already-in-use');
-      s.n++; const uid = 'uid' + s.n; s.users[email] = { uid, pass }; wr(s); setUser({ uid, email });
+      s.n++; const uid = 'uid' + s.n; const verified = L.getItem('fake.noverify') !== '1'; s.users[email] = { uid, pass, verified }; wr(s); setUser({ uid, email, verified });   // por defecto la cuenta nace verificada (las pruebas no lo necesitan); fake.noverify = 1 simula el correo sin verificar
     }
+    async sendVerification() { const u = curUser(); if (L.getItem('fake.sendfail') === '1') throw err('auth/too-many-requests'); window.__fake.verifs.push(u.email); }
+    async refreshUser() { const u = curUser(), x = rd().users[u.email]; if (x && x.verified !== false) { setUser(Object.assign({}, u, { verified: true }), true); return true; } return false; }
     async resetPassword(email) { window.__fake.resets.push(email); }
     async signOut() { setUser(null); }
     watchDoc(path, cb, onErr) { const w = { path, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
@@ -191,11 +194,12 @@
   }
   window.HALTER_REMOTE_FACTORY = () => new FakeRemote();
   window.__fake = {
-    resets: [], writes: [], completions: [], delivered: {},
+    resets: [], verifs: [], writes: [], completions: [], delivered: {},
     srv: rd,
     load(srv) { wr(srv); later(emit); }, // reemplaza el estado del servidor (para simular otro dispositivo que ve lo mismo)
     uid: email => rd().users[email] && rd().users[email].uid,
     admin(path, data) { const s = rd(); if (data === null) delete s.docs[path]; else s.docs[path] = data; wr(s); later(emit); }, // salta las reglas (como la consola de Firebase)
+    verify(email) { const s = rd(); if (s.users[email]) { s.users[email].verified = true; wr(s); } },   // simula abrir el enlace del correo
     setOffline(v) { L.setItem('fake.offline', v ? '1' : '0'); later(emit); },
     sdkFail(v) { L.setItem('fake.sdkfail', v ? '1' : '0'); }
   };

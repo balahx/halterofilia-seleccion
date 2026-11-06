@@ -24,13 +24,20 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
     await db.doc('plans/p1').set({ name: 'Plan', createdAt: new Date() });
     await db.doc('plans/p1/weeks/e1_1').set(WEEK);
     await db.doc('plans/p1/weeks/e1_2').set(Object.assign({}, WEEK, { week: 2, next: '' }));
+    await db.doc('members/gus').set({ name: 'Gus', email: 'gus@x.cl', approvedAt: new Date() });
+    const W7 = Object.assign({}, WEEK, { week: 3, sessions: [1, 2, 3, 4, 5, 6, 7].map(d => ({ day: d })), next: 'e1_2' });
+    await db.doc('plans/p1/weeks/e1_7').set(W7);
+    await db.doc('assignments/gus').set({ planId: 'p1', weekId: 'e1_7', week: 3, stageId: 'e1', weekEndsAt: NOW - 86400000, setBy: 'coach', at: new Date() });
+    for (let k = 0; k < 6; k++) await db.doc('users/gus/completions/p1_e1_7_' + k).set({ planId: 'p1', weekId: 'e1_7', sessionIdx: k, completedAt: new Date() });
     await db.doc('assignments/ana').set({ planId: 'p1', weekId: 'e1_1', week: 1, stageId: 'e1', weekEndsAt: NOW + 86400000, setBy: 'coach', at: new Date() });
   });
   const anon = env.unauthenticatedContext().firestore();
   const coach = env.authenticatedContext('coach', { email: 'cristian@x.cl' }).firestore();
-  const ana = env.authenticatedContext('ana', { email: 'ana@x.cl' }).firestore();
-  const beto = env.authenticatedContext('beto', { email: 'beto@x.cl' }).firestore();
-  const carla = env.authenticatedContext('carla', { email: 'carla@x.cl' }).firestore();
+  const ana = env.authenticatedContext('ana', { email: 'ana@x.cl', email_verified: true }).firestore();
+  const beto = env.authenticatedContext('beto', { email: 'beto@x.cl', email_verified: true }).firestore();
+  const carla = env.authenticatedContext('carla', { email: 'carla@x.cl', email_verified: true }).firestore();
+  const gus = env.authenticatedContext('gus', { email: 'gus@x.cl', email_verified: true }).firestore();
+  const dani = env.authenticatedContext('dani', { email: 'dani@x.cl', email_verified: false }).firestore();
 
   console.log('1. Acceso y cuentas');
   await denied(anon.doc('config/team').get(), 'sin iniciar sesión no se lee nada');
@@ -39,6 +46,7 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
   await succeeds(coach.doc('members/beto').get(), 'el entrenador lee la de cualquiera');
   await denied(ana.doc('members/ana').set({ name: 'Ana', email: 'ana@x.cl', approvedAt: TS() }), 'una atleta no se aprueba a sí misma');
   await succeeds(carla.doc('requests/carla').set({ name: 'Carla Soto', email: 'carla@x.cl', status: 'pending', createdAt: TS() }), 'una persona pide acceso con su propio correo');
+  await denied(dani.doc('requests/dani').set({ name: 'Dani Soto', email: 'dani@x.cl', status: 'pending', createdAt: TS() }), 'con el correo sin verificar no se pide acceso');
   await denied(beto.doc('requests/beto').set({ name: 'Beto Soto', email: 'otro@x.cl', status: 'pending', createdAt: TS() }), 'no se puede pedir acceso con el correo de otra persona');
   await denied(carla.doc('requests/beto').set({ name: 'Beto Soto', email: 'carla@x.cl', status: 'pending', createdAt: TS() }), 'no se puede crear la solicitud de otra persona');
 
@@ -60,6 +68,12 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
   await succeeds(ana.doc('users/ana/completions/p1_e1_1_0').set({ planId: 'p1', weekId: 'e1_1', sessionIdx: 0, completedAt: TS() }), 'registra una sesión de su semana asignada');
   await denied(ana.doc('users/ana/completions/p1_e1_1_0').set({ planId: 'p1', weekId: 'e1_1', sessionIdx: 0, completedAt: TS() }), 'no se reescribe una sesión ya cumplida');
   await denied(ana.doc('users/ana/completions/p1_e1_2_0').set({ planId: 'p1', weekId: 'e1_2', sessionIdx: 0, completedAt: TS() }), 'no registra sesiones de una semana que no tiene asignada');
+
+  console.log('3b. Pasar de semana exige todas las sesiones (S5), también con 7 sesiones (límite de lecturas de las reglas)');
+  const adv = { weekId: 'e1_2', week: 2, stageId: 'e1', weekEndsAt: NOW + 604800000 - 86400000 + 10000, at: TS() };
+  await denied(gus.doc('assignments/gus').update(adv), 'con 6 de 7 sesiones cumplidas no avanza');
+  await env.withSecurityRulesDisabled(async ctx => { await ctx.firestore().doc('users/gus/completions/p1_e1_7_6').set({ planId: 'p1', weekId: 'e1_7', sessionIdx: 6, completedAt: new Date() }); });
+  await succeeds(gus.doc('assignments/gus').update(adv), 'con las 7 cumplidas avanza (sin pasar el límite de 10 lecturas)');
 
   console.log('4. Rutinas');
   const rt = d => Object.assign({ uid: 'ana', name: 'Rehab', mode: 'extra', sessions: [{ name: 'a', day: 1, items: [] }], setBy: 'coach', at: TS() }, d || {});
