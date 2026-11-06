@@ -12,7 +12,7 @@ for (const f of files) {
   const out = (r.stdout || '') + (r.stderr || ''), bad = (out.match(/✗/g) || []).length;
   const good = r.status === 0 && bad === 0;
   console.log((good ? 'OK    ' : 'FALLA ') + f + '  (' + ((Date.now() - t) / 1000).toFixed(1) + ' s' + (bad ? ', ' + bad + ' verificaciones' : '') + ')');
-  if (!good) { failed.push(f); console.log(out.split('\n').filter(l => /✗|Error|error:/.test(l)).slice(0, 12).join('\n')); }
+  if (!good) { failed.push(f); const L = out.split('\n'); console.log(L.filter(l => /✗|Error|error:|waiting for|tests[\/\\]/.test(l)).slice(0, 14).join('\n')); console.log('--- últimas líneas ---\n' + L.filter(l => l.trim()).slice(-8).join('\n')); }
 }
 console.log('\n' + files.length + ' pruebas en ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s · ' + (failed.length ? 'FALLAN: ' + failed.join(', ') : 'todas bien'));
 process.exit(failed.length ? 1 : 0);
