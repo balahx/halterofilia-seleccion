@@ -271,6 +271,7 @@ const WEEKS = {
   await tab('equipo');
   if (await page.locator('[data-act="as-back"]').count()) { await page.click('[data-act="as-back"]'); await page.waitForTimeout(300); }
   ok(/respaldo del equipo/i.test(await txt('#view')) && /datos personales/i.test(await txt('#view')), 'aparece la tarjeta con el aviso de que contiene datos personales');
+  ok(/Aún no hay ningún respaldo registrado/.test(await txt('#view')) && (await page.locator('#view .note.warn', { hasText: 'Aún no hay ningún respaldo' }).count()) === 1, 'sin respaldos previos, la tarjeta avisa que conviene descargar el primero');
   const dl = page.waitForEvent('download', { timeout: 8000 });
   await page.click('[data-act="bk-run"]');
   const bkDl = await dl; const bkPath = path.join(SHOTS, 'respaldo-prueba.json'); await bkDl.saveAs(bkPath);
@@ -282,8 +283,19 @@ const WEEKS = {
   ok(bat && bat.records.some(r => r.id === 's_inf1') && bat.completions.length >= 1, 'incluye los registros y sesiones cumplidas de la atleta');
   ok(bk.assignments.some(a => a.id === auid) && bk.adjustments.length >= 1, 'incluye la semana asignada y los ajustes');
   await page.waitForTimeout(300);
-  ok(/Último respaldo/.test(await txt('#view')), 'queda a la vista cuándo se hizo el último respaldo');
+  ok(/Último respaldo/.test(await txt('#view')) && /\(hoy\)/.test(await txt('#view')), 'queda a la vista cuándo se hizo el último respaldo (hoy)');
+  const stamp = (await docs())['config/backup'];
+  ok(stamp && stamp.by === cuid && stamp.counts && stamp.counts.members >= 1 && !(await page.locator('#view .note.warn', { hasText: 'respaldo' }).count()), 'la fecha del respaldo queda guardada en la nube (config/backup) y desaparece el aviso');
   fs.unlinkSync(bkPath);
+
+  console.log('12. Globo de solicitudes pendientes en «Equipo»');
+  const base = await page.locator('#nav button[data-tab="equipo"] .nbadge').count() ? +(await page.locator('#nav button[data-tab="equipo"] .nbadge').innerText()) : 0;
+  await page.evaluate(() => __fake.admin('requests/zzz', { name: 'Zoe Pérez', email: 'zoe@correo.cl', status: 'pending', createdAt: Date.now() }));
+  await page.waitForTimeout(500);
+  ok((await page.locator('#nav button[data-tab="equipo"] .nbadge').innerText()) === String(base + 1) && new RegExp((base + 1) + ' pendientes?').test(await page.locator('#nav button[data-tab="equipo"]').getAttribute('aria-label')), 'la pestaña Equipo suma la solicitud nueva al globo (' + base + ' → ' + (base + 1) + ')');
+  await page.evaluate(() => __fake.admin('requests/zzz', null));
+  await page.waitForTimeout(500);
+  ok((await page.locator('#nav button[data-tab="equipo"] .nbadge').count() ? +(await page.locator('#nav button[data-tab="equipo"] .nbadge').innerText()) : 0) === base, 'al quitarla, el globo vuelve a ' + base);
 
 
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));

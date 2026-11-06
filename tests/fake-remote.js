@@ -76,6 +76,10 @@
       if (op === 'delete') return coach;
       return coach && keysOnly(data, ['activePlanId', 'at']) && typeof data.activePlanId === 'string' && data.activePlanId.length > 0;
     }
+    if (col === 'config' && id === 'backup') {
+      if (op === 'get' || op === 'list' || op === 'delete') return coach;
+      return coach && keysOnly(data, ['at', 'by', 'counts', 'reads']) && ['at', 'by'].every(k => k in data) && data.by === u.uid && (!('counts' in data) || (data.counts && typeof data.counts === 'object')) && (!('reads' in data) || Number.isInteger(data.reads));
+    }
     if (col === 'config') return op === 'get' || op === 'list';
     if (col === 'exercises' || col === 'plans') {
       if (op === 'get' || op === 'list') return coach || member;
@@ -169,6 +173,7 @@
       p.exercises.forEach(x => mutate('create', 'exercises/' + x.id, x.data));
       mutate('create', base, Object.assign({}, p.meta, { createdAt: Date.now() }));
     }
+    async setBackupStamp(counts, reads) { mutate('create', 'config/backup', { at: Date.now(), by: curUser().uid, counts: counts || {}, reads: reads || 0 }); }
     async setActivePlan(id) { mutate('create', 'config/plan', { activePlanId: id, at: Date.now() }); }
     async getDoc(path) { if (offline()) throw err('unavailable'); if (!allowed('get', path)) throw err('permission-denied'); const d = rd().docs[path]; return d ? Object.assign({}, d) : null; }
     async setAssignment(uid, d) { mutate('create', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }

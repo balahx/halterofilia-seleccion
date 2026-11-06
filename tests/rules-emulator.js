@@ -70,6 +70,15 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
   await succeeds(ana.collection('routines').where('uid', '==', 'ana').get(), 'la atleta lee las suyas');
   await denied(beto.doc('routines/r1').get(), 'otro atleta no las lee');
 
+  console.log('5. Fecha del último respaldo');
+  await succeeds(coach.doc('config/backup').set({ at: TS(), by: 'coach', counts: { members: 2 }, reads: 40 }), 'el entrenador guarda la fecha del respaldo');
+  await succeeds(coach.doc('config/backup').get(), 'el entrenador la lee');
+  await denied(ana.doc('config/backup').get(), 'una atleta no la lee');
+  await denied(ana.doc('config/backup').set({ at: TS(), by: 'ana' }), 'una atleta no la escribe');
+  await denied(coach.doc('config/backup').set({ at: NOW - 86400000, by: 'coach' }), 'la fecha la pone el servidor');
+  await denied(coach.doc('config/backup').set({ at: TS(), by: 'ana' }), 'queda a nombre de quien la guarda');
+  await denied(coach.doc('config/backup').set({ at: TS(), by: 'coach', extra: 1 }), 'sin campos de más');
+
   await env.cleanup();
   console.log(fails ? 'FALLAS: ' + fails : 'Todo bien'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

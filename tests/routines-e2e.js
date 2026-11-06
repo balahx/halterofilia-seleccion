@@ -68,7 +68,7 @@ const WEEKS = {
   ok(/no tiene ejercicios/.test(await txt('#toast')), 'no deja guardar una sesión sin ejercicios');
   await page.fill('#dn-0', 'Movilidad y técnica');
   ok((await page.locator('input[name="rtmode"]:checked').getAttribute('value')) === 'extra' && /Complementa el plan semanal/.test(await txt('#view')) && /Reemplaza el plan semanal/.test(await txt('#view')), 'el entrenador elige si complementa o reemplaza el plan: por defecto complementa');
-  await page.selectOption('#dd-0', '3');
+  await page.check('#dd-0-3'); await page.check('#dd-0-5');
   await page.click('[data-act="rt-add"][data-d="0"]'); await page.waitForSelector('.pick');
   await page.click('.pick[data-ex="snatch"]'); await page.waitForSelector('.prow');
   ok((await page.locator('.prow').count()) === 1 && (await page.locator('#pd-0-0').getAttribute('data-f')) === 'prest' && (await page.locator('#pz-0-0').getAttribute('data-f')) === 'ppause' && /Descanso/i.test(await txt('.prow')) && /Pausa \(s\)/i.test(await txt('.prow')), 'mismo editor de la app: Descanso (como siempre) y además «Pausa (s)» en el movimiento');
@@ -87,10 +87,15 @@ const WEEKS = {
   let d = await docs(), rid = Object.keys(d).find(k => k.startsWith('routines/')), r = d[rid];
   ok(r && r.uid === auid && r.name === 'Rehabilitación de hombro' && r.setBy === cuid && r.sessions.length === 2 && r.note.startsWith('Sin dolor'), 'la rutina quedó guardada para Ana');
   ok(r.sessions[0].name === 'Movilidad y técnica' && r.sessions[0].items.length === 2 && r.sessions[0].items[0].sets === 4 && r.sessions[0].items[0].reps === '2' && r.sessions[0].items[0].pct === 65 && r.sessions[0].items[0].rest === 45 && r.sessions[0].items[0].pause === 1 && r.sessions[0].items[1].rest === 90 && r.sessions[0].items[1].pause === 2, 'con series, repeticiones, %, descanso y pausa (segundos) de cada ejercicio'); 
-  ok(r.sessions[0].items[1].kg === 80 && !(r.sessions[0].items[0].kg > 0) && r.sessions[0].day === 3 && !(r.sessions[1].day > 0) && r.mode === 'extra', 'guarda los kilos fijos, el día de cada sesión y el modo (complementa)');
+  ok(r.sessions[0].items[1].kg === 80 && !(r.sessions[0].items[0].kg > 0) && r.sessions[0].day === 3 && JSON.stringify(r.sessions[0].days) === '[3,5]' && !(r.sessions[1].day > 0) && !(r.sessions[1].days || []).length && r.mode === 'extra', 'guarda los kilos fijos, el día de cada sesión y el modo (complementa)');
   ok(/Rehabilitación de hombro/.test(await txt('#view')) && /2 sesiones · 3 ejercicios/.test(await txt('#view')), 'aparece en la lista del atleta');
 
   console.log('2. Editar y volver a guardar');
+  await page.click('[data-act="rt-view"]'); await page.waitForSelector('[data-act="rt-view-close"]');
+  const pv = await txt('#view');
+  ok(/Así la ve/.test(pv) && /Ana/.test(pv) && /Rehabilitación de hombro/.test(pv) && /Movilidad y técnica/.test(pv) && /Mié.*Vie|Miércoles · Viernes/.test(pv) && /4×2/.test(pv) && /65 % del máximo/.test(pv) && /80 kg/.test(pv) && /pausa de 2 s/.test(pv), '«Ver como atleta»: la rutina con series, %, kilos fijos, días y pausas');
+  ok(!(await page.locator('[data-act="rt-start"]').count()), 'la vista previa no permite iniciar ni registra nada');
+  await page.click('[data-act="rt-view-close"]'); await page.waitForSelector('[data-act="rt-edit"]');
   await page.click('[data-act="rt-edit"]'); await page.waitForSelector('#rtName');
   ok(/Editar rutina/.test(await txt('#view h1')) && (await page.inputValue('#pd-0-0')) === '45' && (await page.inputValue('#pz-0-0')) === '1' && (await page.inputValue('#rtName')) === 'Rehabilitación de hombro', 'el editor abre con los datos guardados');
   await page.selectOption('#pd-0-0', '60'); await page.fill('#pz-0-0', '3'); await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
@@ -102,7 +107,7 @@ const WEEKS = {
   await logout(); await login('ana@correo.cl'); await tab('semana');
   await page.waitForSelector('[data-act="rt-start"]');
   const vt = await txt('#view');
-  ok(/Rutina complementaria/i.test(vt) && /Miércoles · 2 ejercicios/.test(vt) && /Rehabilitación de hombro/.test(vt) && /Movilidad y técnica/.test(vt) && /Tirones/.test(vt) && /Sin dolor/.test(vt), 've la rutina, sus sesiones y la nota');
+  ok(/Rutina complementaria/i.test(vt) && /Mié · Vie( \(hoy\))? · 2 ejercicios/.test(vt) && /Rehabilitación de hombro/.test(vt) && /Movilidad y técnica/.test(vt) && /Tirones/.test(vt) && /Sin dolor/.test(vt), 've la rutina, sus sesiones y la nota');
   ok(/mientras tanto, entrena con la rutina/.test(vt), 'aunque no tenga semana del plan, no queda vacío');
   await page.evaluate(() => HalterApp.commit(S => { S.exercises.find(e => e.id === 'snatch').max = 80; }));
   if (process.env.SHOTS) await page.screenshot({ path: path.join(SHOTS, 'rutina-atleta.png') });
@@ -134,10 +139,11 @@ const WEEKS = {
   ok(/Rutina complementaria/i.test(v3) && /Rehabilitación de hombro/.test(v3) && /Semana 1/i.test(v3) && (await page.locator('[data-act="as-start"]').count()) === 2 && /Cambiar de semana/i.test(v3), 'complementaria: Ana ve la rutina y también las sesiones de su semana del plan');
   await logout(); await login('cristian@correo.cl'); await tab('equipo');
   await page.locator('.person', { hasText: 'Ana Rojas' }).locator('[data-act="as-open"]').click(); await page.waitForSelector('[data-act="rt-edit"]');
-  ok(/complementa el plan semanal/.test(await txt('#view')) && /Mié/.test(await txt('#view')), 'el entrenador ve en la lista si complementa o reemplaza, y los días');
+  ok(/complementa el plan semanal/.test(await txt('#view')) && /Mié · Vie/.test(await txt('#view')), 'el entrenador ve en la lista si complementa o reemplaza, y los días (Mié · Vie)');
   await page.click('[data-act="rt-edit"]'); await page.waitForSelector('#rtName');
-  ok((await page.locator('input[name="rtmode"]:checked').getAttribute('value')) === 'extra' && (await page.inputValue('#dd-0')) === '3' && (await page.inputValue('#pk-0-1')) === '80', 'al editar vuelven el modo, el día y los kilos');
+  ok((await page.locator('input[name="rtmode"]:checked').getAttribute('value')) === 'extra' && (await page.isChecked('#dd-0-3')) && (await page.isChecked('#dd-0-5')) && !(await page.isChecked('#dd-0-1')) && (await page.inputValue('#pk-0-1')) === '80', 'al editar vuelven el modo, el día y los kilos');
   await page.check('input[name="rtmode"][value="replace"]'); await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
+  await page.waitForFunction(() => /reemplaza el plan semanal/.test(document.getElementById('view').innerText), null, { timeout: 15000 }).catch(() => {});
   d = await docs(); ok(d[rid].mode === 'replace' && /reemplaza el plan semanal/.test(await txt('#view')), 'el entrenador la deja como reemplazo del plan semanal');
   await logout(); await login('ana@correo.cl'); await tab('semana'); await page.waitForSelector('[data-act="rt-start"]'); await page.waitForTimeout(400);
   v3 = await txt('#view');
@@ -148,7 +154,7 @@ const WEEKS = {
   const todayNo = await page.evaluate(() => ((new Date().getDay() + 6) % 7) + 1);
   const setToday = async mode => {
     await page.evaluate(({ id, mode, n, W, a }) => {
-      const d = JSON.parse(JSON.stringify(__fake.srv().docs[id])); d.mode = mode; d.sessions[0].day = n; __fake.admin(id, d);
+      const d = JSON.parse(JSON.stringify(__fake.srv().docs[id])); d.mode = mode; d.sessions[0].day = n % 7 + 1; d.sessions[0].days = [n % 7 + 1, n]; __fake.admin(id, d);
       const w = JSON.parse(JSON.stringify(W.e1_1)); w.sessions[0].day = n; __fake.admin('plans/p1/weeks/e1_1', w);
     }, { id: rid, mode: mode, n: todayNo, W: WEEKS, a: auid });
   };

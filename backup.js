@@ -75,13 +75,26 @@
   function isBackup(o) { return !!o && o.format === FORMAT && o.v === VERSION && Array.isArray(o.members) && Array.isArray(o.athletes); }
 
   /* ---------- Pantalla (solo en el navegador) ---------- */
-  const S = { busy: false, msg: '', last: '', err: '' };
+  const S = { busy: false, msg: '', last: '', err: '', stamp: undefined };
+  const STALE_DAYS = 14;
+  /* Días desde el último respaldo (null si nunca o no se sabe) */
+  function daysSince(stamp, now) { return stamp && stamp.at ? Math.max(0, Math.floor(((now || Date.now()) - stamp.at) / 86400000)) : null; }
+  /* Texto sobre el último respaldo guardado en la nube (undefined = aún no se sabe) */
+  function stampText(stamp, now) {
+    if (stamp === undefined) return '';
+    if (!stamp || !stamp.at) return 'Aún no hay ningún respaldo registrado. Descarga el primero.';
+    const d = daysSince(stamp, now);
+    return 'Último respaldo: ' + new Date(stamp.at).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Santiago' }) + (d === 0 ? ' (hoy)' : d === 1 ? ' (ayer)' : ' (hace ' + d + ' días)') + (stamp.counts && stamp.counts.members != null ? ' · ' + summary(stamp.counts) : '') + '.';
+  }
+  const isStale = (stamp, now) => stamp !== undefined && (!stamp || !stamp.at || daysSince(stamp, now) >= STALE_DAYS);
+  function setStamp(d) { S.stamp = d || null; }
   let H = null; // { remote(), toast, render, err, who() }
   function init(helpers) { H = helpers; }
   function card() {
     let h = '<div class="card sec"><span class="eyebrow">Respaldo del equipo</span>';
     h += '<p class="muted">Descarga un archivo con los datos de todo el equipo (atletas, planes, semanas asignadas, registros y sesiones cumplidas). Guárdalo en un lugar privado: <b>contiene datos personales y de salud</b>. Cada descarga usa lecturas de la cuota diaria gratuita (una por documento), así que úsala, por ejemplo, una vez por semana.</p>';
     if (S.err) h += window.HalterApp.errorBox(S.err, { title: 'Respaldo no completado' });
+    if (S.stamp !== undefined) h += '<p class="' + (isStale(S.stamp) ? 'note warn' : 'muted') + '">' + esc(stampText(S.stamp)) + (isStale(S.stamp) && S.stamp ? ' Conviene descargar uno nuevo.' : '') + '</p>';
     if (S.busy) h += '<p class="muted" role="status">' + esc(S.msg || 'Preparando…') + '</p>';
     else if (S.last) h += '<p class="muted">' + esc(S.last) + '</p>';
     h += '<div class="row-end"><button class="btn sm" data-act="bk-run"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Descargando…' : 'Descargar respaldo') + '</button></div></div>';
@@ -99,17 +112,18 @@
       const got = await collect(H.remote(), t => { S.msg = t; H.render(); });
       const file = build(got.data, { by: H.who ? H.who() : '', reads: got.reads });
       download(fileName(), JSON.stringify(file, null, 1));
-      S.last = 'Último respaldo: ' + new Date().toLocaleString('es-CL') + ' · ' + summary(file.counts) + ' · ' + got.reads + ' lecturas.';
+      S.last = 'Esta descarga: ' + new Date().toLocaleString('es-CL') + ' · ' + summary(file.counts) + ' · ' + got.reads + ' lecturas.';
+      try { await H.remote().setBackupStamp(file.counts, got.reads); } catch (e) { /* la fecha en la nube es un recordatorio: si falla, el respaldo ya está descargado */ }
       H.toast('Respaldo descargado.');
     } catch (e) {
       S.err = 'No se pudo completar el respaldo: ' + (H.err ? H.err(e) : (e && e.message) || e) + ' No se descargó nada.'; H.toast(S.err);
     }
     S.busy = false; H.render();
   }
-  function reset() { S.busy = false; S.msg = ''; S.last = ''; S.err = ''; }
+  function reset() { S.busy = false; S.msg = ''; S.last = ''; S.err = ''; S.stamp = undefined; }
   function onAct(act) { if (act === 'bk-run') run(); }
 
-  const api = { FORMAT: FORMAT, VERSION: VERSION, collect: collect, build: build, counts: counts, fileName: fileName, summary: summary, isBackup: isBackup, init: init, reset: reset, card: card, onAct: onAct, state: S };
+  const api = { FORMAT: FORMAT, VERSION: VERSION, collect: collect, build: build, counts: counts, fileName: fileName, summary: summary, isBackup: isBackup, daysSince: daysSince, stampText: stampText, isStale: isStale, setStamp: setStamp, init: init, reset: reset, card: card, onAct: onAct, state: S };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.HalterBackup = api;
 })(typeof window !== 'undefined' ? window : globalThis);

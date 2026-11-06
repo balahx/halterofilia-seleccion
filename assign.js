@@ -185,7 +185,7 @@
     uid: null, role: null, active: null, names: {}, plans: [],
     weeks: [], stages: [], asg: {}, sel: null, selDone: {}, selAdj: null, selAdjKey: '', selDoneKey: '', draft: null, pick: '', ready: false, busy: '', err: '', selfPick: '',
     me: { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0, routines: [] },
-    routines: [], rt: null, rtDel: ''   // rutinas especiales: todas (entrenador) · borrador en edición · confirmación de borrado
+    routines: [], rt: null, rtDel: '', rtPrev: ''   // rutinas especiales: todas (entrenador) · borrador en edición · confirmación de borrado
   };
   let H = null, unsub = [], weekUnsub = [], meUnsub = [], selUnsub = [], adjUnsub = [];   // weekUnsub: semanas del plan activo (entrenador) · meUnsub: mi propia semana
   const cacheKey = () => 'halterofilia.v1.' + A.uid + '.week';
@@ -378,11 +378,11 @@
     const S = window.HalterApp.state(), done = {};
     (S && S.sessions || []).forEach(x => { if (x.routine && x.endedAt) { const k = x.routine.id + ':' + x.routine.idx; if (!done[k] || x.date > done[k]) done[k] = x.date; } });
     return list.map(r => {
-      const rows = (r.sessions || []).map((x, i) => ({ x: x, i: i })).filter(o => !todayOnly || o.x.day === todayNo);
+      const rows = (r.sessions || []).map((x, i) => ({ x: x, i: i })).filter(o => !todayOnly || daysOf(o.x).indexOf(todayNo) >= 0);
       if (!rows.length) return '';
       return `<div class="card sec rt-card${todayOnly ? ' today' : ''}"><span class="eyebrow gd">${todayOnly ? 'Hoy · ' : ''}${r.mode === 'replace' ? 'Rutina en lugar del plan semanal' : 'Rutina complementaria'}</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') +
         '<ul class="plain">' + rows.map(o => {
-          const x = o.x, i = o.i, d = done[r.id + ':' + i], n = (x.items || []).length, dl = x.day > 0 ? dayLabel(x.day) : '', today = x.day === todayNo;
+          const x = o.x, i = o.i, d = done[r.id + ':' + i], n = (x.items || []).length, ds = daysOf(x), dl = ds.map(k => dayLabel(k).slice(0, 3)).join(' · '), today = ds.indexOf(todayNo) >= 0;
           return `<li><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${dl ? esc(dl) + (today ? ' (hoy)' : '') + ' · ' : ''}${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm${today ? '' : ' ghost'}" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></li>`;
         }).join('') + '</ul></div>';
     }).join('');
@@ -424,7 +424,7 @@
   const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; return 'Semana ' + a.week + (stageName(a.stageId) ? ' · ' + stageName(a.stageId) : '') + (isStale(uid) ? ' · ya no existe en el plan' : ''); };
   function select(uid) {
     if (root.HalterReport) root.HalterReport.reset();
-    unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.selDone = {}; A.selDoneKey = ''; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
+    unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.rtPrev = ''; A.selDone = {}; A.selDoneKey = ''; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
     if (!uid) { rerender(); return; }
     watchAdj(); watchDone(); rerender();
   }
@@ -479,6 +479,7 @@
   }
   function detailHTML() {
     if (A.rt) return rtEditorHTML();
+    if (A.rtPrev) { const h = rtPreviewHTML(A.rtPrev); if (h) return h; A.rtPrev = ''; }
     const uid = A.sel, a = A.asg[uid];
     let h = `<p><button class="lnk" data-act="as-back">← Equipo</button></p><h1>${esc(memberName(uid))}</h1>`;
     if (A.err) h += window.HalterApp.errorBox(A.err, { retry: 'sync-now' });
@@ -506,14 +507,35 @@
 
   /* ---------- Rutinas especiales (el entrenador las arma con el mismo editor de la app; los kilos los calcula cada atleta) ---------- */
   const nEx = r => (r.sessions || []).reduce((n, x) => n + (x.items || []).length, 0);
-  const rtDays = r => (r.sessions || []).filter(x => x.day > 0).map(x => dayLabel(x.day).slice(0, 3)).join(' · ');
+  /* Días de una sesión de rutina: `days` (varios) o el antiguo `day` (uno) */
+  const daysOf = x => Array.isArray(x.days) && x.days.length ? x.days.filter(d => d >= 1 && d <= 7) : (x.day >= 1 && x.day <= 7 ? [x.day] : []);
+  const rtDays = r => { const all = []; (r.sessions || []).forEach(x => daysOf(x).forEach(d => { if (all.indexOf(d) < 0) all.push(d); })); return all.sort((a, b) => a - b).map(d => dayLabel(d).slice(0, 3)).join(' · '); };
   function rtListHTML(uid) {
     const list = A.routines.filter(x => x.uid === uid);
     let h = '<div class="card sec"><span class="eyebrow">Rutinas especiales</span>';
     h += list.length ? list.map(r => `<div class="person"><div class="who-row"><div><b>${esc(r.name)}</b><small>${(r.sessions || []).length} ${(r.sessions || []).length === 1 ? 'sesión' : 'sesiones'} · ${nEx(r)} ejercicios · ${r.mode === 'replace' ? 'reemplaza el plan semanal' : 'complementa el plan semanal'}${rtDays(r) ? ' · ' + rtDays(r) : ''}</small></div></div><div class="acts">` +
-      `<button class="btn sm" data-act="rt-edit" data-id="${esc(r.id)}">Editar</button><button class="btn ghost sm" data-act="rt-del" data-id="${esc(r.id)}">${A.rtDel === r.id ? 'Confirmar' : 'Quitar'}</button></div></div>`).join('')
+      `<button class="btn sm" data-act="rt-edit" data-id="${esc(r.id)}">Editar</button><button class="btn ghost sm" data-act="rt-view" data-id="${esc(r.id)}">Ver como atleta</button><button class="btn ghost sm" data-act="rt-del" data-id="${esc(r.id)}">${A.rtDel === r.id ? 'Confirmar' : 'Quitar'}</button></div></div>`).join('')
       : '<p class="muted">Sin rutinas especiales. Crea una cuando necesites algo distinto a la semana del plan: el atleta la ve en «Semana».</p>';
     return h + `<div class="stack"><button class="btn${list.length ? ' ghost' : ''}" data-act="rt-new" data-uid="${esc(uid)}">+ Crear rutina</button></div></div>`;
+  }
+  /* «Ver como atleta»: la rutina como la lee quien la entrena (los kilos salen del máximo de cada atleta, aquí se ven series, % y pausas) */
+  function rtPreviewHTML(id) {
+    const r = A.routines.find(x => x.id === id); if (!r) return '';
+    const nm = memberName(r.uid);
+    let h = `<p><button class="lnk" data-act="rt-view-close">← ${esc(nm)}</button></p><div class="note">Así la ve <b>${esc(nm)}</b>. Es solo una vista previa: no registra nada.</div>` +
+      `<div class="card sec rt-card"><span class="eyebrow gd">${r.mode === 'replace' ? 'Rutina en lugar del plan semanal' : 'Rutina complementaria'}</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') + '</div>';
+    (r.sessions || []).forEach((x, i) => {
+      const ds = daysOf(x), items = x.items || [];
+      h += `<div class="card sec"><div class="person"><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${ds.length ? esc(ds.map(k => dayLabel(k)).join(' · ')) + ' · ' : 'Cualquier día · '}${items.length} ${items.length === 1 ? 'ejercicio' : 'ejercicios'}</small></div></div><ul class="plain">`;
+      items.forEach(p => {
+        const parts = [(p.sets || 1) + '×' + (p.reps || '?')];
+        if (p.pct > 0) parts.push(String(p.pct).replace('.', ',') + ' % del máximo'); if (p.kg > 0) parts.push(String(p.kg).replace('.', ',') + ' kg');
+        if (p.pause > 0) parts.push('pausa de ' + p.pause + ' s'); if (p.rest > 0) parts.push('descanso ' + Math.floor(p.rest / 60) + ':' + String(p.rest % 60).padStart(2, '0'));
+        h += `<li><div><b>${esc(p.name || p.exId)}</b><small>${esc(parts.join(' · '))}</small></div></li>`;
+      });
+      h += '</ul></div>';
+    });
+    return h + '<div class="stack"><button class="btn ghost" data-act="rt-view-close">Volver</button></div>';
   }
   const clone = o => JSON.parse(JSON.stringify(o));
   function rtOpen(rt) { A.rt = rt; root.HalterApp.rt.bind(A.rt.sessions, redraw => { A.rt.dirty = true; if (redraw) rerender(); }); rerender(); window.scrollTo(0, 0); }
@@ -540,7 +562,7 @@
     for (let i = 0; i < R.sessions.length; i++) {
       const d = R.sessions[i], items = (d.items || []).filter(p => p.exId);
       if (!items.length) { H.toast('La sesión ' + (i + 1) + ' no tiene ejercicios: agrégalos o quítala.'); return; }
-      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), day: d.day >= 1 && d.day <= 7 ? d.day : 0, items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), kg: Math.min(Math.max(Math.round((+p.kg || 0) * 10) / 10, 0), 600), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) })) });
+      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), day: daysOf(d)[0] || 0, days: daysOf(d).slice().sort((a, b) => a - b), items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), kg: Math.min(Math.max(Math.round((+p.kg || 0) * 10) / 10, 0), 600), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) })) });
     }
     const data = { uid: R.uid, name: name.slice(0, 80), mode: R.mode === 'replace' ? 'replace' : 'extra', sessions: sessions, setBy: A.uid }, note = (R.note || '').trim().slice(0, 400); if (note) data.note = note;
     const id = R.id || (R.uid.slice(0, 12) + '_' + Date.now().toString(36));
@@ -550,6 +572,8 @@
     switch (act) {
       case 'rt-new': rtOpen({ id: null, uid: el.dataset.uid || A.sel, name: '', note: '', mode: 'extra', sessions: [{ name: 'Sesión 1', items: [] }], dirty: false }); return true;
       case 'rt-edit': { const r = A.routines.find(x => x.id === el.dataset.id); if (r) rtOpen({ id: r.id, uid: r.uid, name: r.name, note: r.note || '', mode: r.mode === 'replace' ? 'replace' : 'extra', sessions: clone(r.sessions || []), dirty: false }); return true; }
+      case 'rt-view': A.rtPrev = el.dataset.id; rerender(); window.scrollTo(0, 0); return true;
+      case 'rt-view-close': A.rtPrev = ''; rerender(); return true;
       case 'rt-cancel': A.rt = null; A.err = ''; rerender(); return true;
       case 'rt-ses-add': if (A.rt && A.rt.sessions.length < 14) { A.rt.sessions.push({ name: 'Sesión ' + (A.rt.sessions.length + 1), items: [] }); A.rt.dirty = true; rerender(); } return true;
       case 'rt-ses-rm': if (A.rt && A.rt.sessions.length > 1) { A.rt.sessions.splice(+el.dataset.d, 1); A.rt.dirty = true; rerender(); } else H.toast('Una rutina necesita al menos una sesión.'); return true;
@@ -578,7 +602,7 @@
       case 'as-start': startSession(+el.dataset.i); return true;
       case 'as-self': assignSelf(); return true;
       case 'as-advance': advance(); return true;
-      case 'rt-new': case 'rt-edit': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': return rtAct(act, el);
+      case 'rt-new': case 'rt-edit': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': return rtAct(act, el);
       case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': return !!root.HalterReport && root.HalterReport.onAct(act, el, reportCtx());
       case 'as-adj-save': {
         const a = A.asg[A.sel]; if (!a) return true;

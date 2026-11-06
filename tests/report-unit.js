@@ -40,7 +40,8 @@ ok(s0.items[2].status === 'extra' && s0.items[2].name.p === 'Press', 'ejercicio 
 ok(s1.items[0].status === 'omitted', 'sentadilla con todas las series sin marcar = omitido');
 ok(s2.registered === false && s2.items[0].status === 'pending', 'el viernes no se registró: sin registrar');
 ok(wr.totals.plannedSets === 5 + 3 + 3 && wr.totals.doneSets === 3 + 1 + 1, 'series planificadas 11 y hechas 5 (incluye el extra)');
-ok(wr.notes.length === 1 && /hombro/.test(wr.notes[0].text), 'la observación del atleta pasa al informe');
+ok(wr.notes.some(n => /hombro/.test(n.text)) && wr.notes.some(n => /Movilidad/.test(n.text)), 'las observaciones del atleta (sesión del plan y libre) pasan al informe');
+ok(wr.others.length === 1 && wr.others[0].plan === 'Sesión libre' && wr.others[0].kind === 'free', 'la sesión libre de esa semana aparece en «otras sesiones»');
 ok(s0.completedAt === 1793900000000, 'conserva la hora de cumplimiento del servidor');
 const txt = R.toText(wr);
 ok(/INFORME · Ana Rojas/.test(txt) && /Sesiones: 2 de 3/.test(txt) && /SIN REGISTRAR/.test(txt) && /Observaciones: Dolor leve/.test(txt) && /\[Parcial\]/.test(txt) && /\[Omitido\]/.test(txt), 'el texto resume sesiones, estados y observaciones');
@@ -73,4 +74,21 @@ ok(dr.sessions[1].items[0].status === 'free' && dr.sessions[1].items[0].planned 
 ok(dr.notes.length === 2 && dr.totals.doneSessions === 2, 'observaciones de ambas sesiones');
 ok(/Sin sesiones registradas ese día/.test(R.toText(R.dayReport({ athlete: 'Ana', date: '2026-11-09', sessions, names, exNames, weeks: [week], lang: 'en' }))), 'un día sin sesiones lo dice');
 ok(R.dateEs('2026-11-02') === 'lunes, 2 de noviembre' || /lunes/.test(R.dateEs('2026-11-02')), 'fecha en español: ' + R.dateEs('2026-11-02'));
+console.log('7. Sesiones de rutina y libres con lo planificado (C1)');
+const rt = { id: 'rr', date: '2026-11-03', name: 'Pierna', startedAt: 7000, endedAt: 8000, notes: '', routine: { id: 'x1', idx: 0, name: 'Rutina pierna' },
+  items: [{ exId: 'bsq', p: 3, sets: [Object.assign(st(100, '5'), { pr: '5', pct: 80 }), Object.assign(st(100, '5'), { pr: '5', pct: 80 })] }, { exId: 'press', p: 2, sets: [st(40, '5'), st(40, '5')] }],
+  skip: [{ exId: 'snpull', p: 2 }] };
+const nm2 = Object.assign({ bsq: { en: 'Back Squat', es: 'Sentadilla' }, snpull: { en: 'Snatch Pull', es: 'Tirón' } }, exNames);
+const rd = R.dayReport({ athlete: 'Ana', date: '2026-11-03', sessions: [rt], names, exNames: nm2, weeks: [week], lang: 'en' });
+const rs = rd.sessions[0];
+ok(rs.kind === 'routine' && rs.plan === 'Rutina «Rutina pierna»', 'etiqueta de rutina: ' + rs.plan);
+ok(rs.items[0].planned.n === 3 && rs.items[0].done.n === 2 && rs.items[0].status === 'partial', 'sentadilla de rutina: 2 de 3 series (parcial)');
+ok(rs.items[1].status === 'ok', 'press completo');
+ok(rs.items[2] && rs.items[2].status === 'omitted' && rs.items[2].planned.n === 2 && rs.items[2].name.p === 'Snatch Pull', 'ejercicio previsto sin hacer queda como omitido, con su nombre');
+ok(rd.totals.plannedSets === 7 && rd.totals.doneSets === 4, 'totales: 4 de 7 series');
+ok(/Rutina «Rutina pierna»/.test(R.toText(rd)) && /\[Omitido\]/.test(R.toText(rd)), 'el texto indica la rutina y lo omitido');
+const sp = R.weekSpan('2026-11-04');
+ok(sp.from === '2026-11-02' && sp.to === '2026-11-08', 'weekSpan: lunes a domingo (' + sp.from + ' – ' + sp.to + ')');
+const wk3 = R.weekReport({ athlete: 'Ana', week, planId: 'p1', stage: '', names, exNames: nm2, sessions: sessions.concat([rt]), adj: {}, lang: 'en', done: {} });
+ok(wk3.others.length === 2 && /OTRAS SESIONES DE LA SEMANA/.test(R.toText(wk3)), 'semana: rutina y libre en «otras sesiones»');
 console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

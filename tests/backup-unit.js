@@ -51,5 +51,11 @@ const remote = {
   let err = null; try { await B.collect(remote); } catch (e) { err = e; }
   ok(err && err.code === 'permission-denied', 'el error se propaga (no se descarga un archivo incompleto)');
 
+  console.log('4. Fecha del último respaldo (D2)');
+  const now = Date.UTC(2026, 10, 20, 15), st1 = { at: Date.UTC(2026, 10, 5, 15), counts: { members: 2, plans: 1, records: 5, completions: 3 } };
+  ok(B.daysSince(st1, now) === 15 && B.daysSince(null, now) === null, 'días desde el último respaldo');
+  ok(B.isStale(st1, now) && !B.isStale({ at: now - 3 * 86400000 }, now) && B.isStale(null, now) && !B.isStale(undefined, now), 'aviso a partir de 14 días, o si nunca hubo; sin aviso mientras no se sabe');
+  ok(/hace 15 días/.test(B.stampText(st1, now)) && /2 atletas/.test(B.stampText(st1, now)) && /Aún no hay ningún respaldo/.test(B.stampText(null, now)) && B.stampText(undefined, now) === '', 'textos del último respaldo');
+  ok(/\(hoy\)/.test(B.stampText({ at: now }, now)) && /\(ayer\)/.test(B.stampText({ at: now - 86400000 }, now)), 'hoy y ayer');
   console.log(fails ? '\n' + fails + ' fallo(s)' : '\nTodo bien'); process.exit(fails ? 1 : 0);
 })();

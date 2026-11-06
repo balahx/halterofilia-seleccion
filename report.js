@@ -57,13 +57,34 @@
     return lang === 'es' ? { p: es, s: en } : { p: en, s: es };
   };
 
+  /* Sesiones de rutina o libres: lo planificado queda anotado en la propia sesión (p = series previstas por ejercicio, skip = ejercicios previstos sin hacer) */
+  function selfPlanned(rec) {
+    if (!rec) return null;
+    const map = {}, order = [];
+    (rec.items || []).forEach(i => {
+      if (!(i.p > 0)) return;
+      if (!map[i.exId]) { map[i.exId] = { exId: i.exId, sets: [] }; order.push(i.exId); }
+      const ss = i.sets || [];
+      for (let k = 0; k < i.p; k++) { const x = ss[k] || ss[0] || {}; map[i.exId].sets.push({ pct: num(x.pct), reps: x.pr || '', max: false }); }
+    });
+    (rec.skip || []).forEach(k => {
+      if (!(k.p > 0)) return;
+      if (!map[k.exId]) { map[k.exId] = { exId: k.exId, sets: [] }; order.push(k.exId); }
+      for (let j = 0; j < k.p; j++) map[k.exId].sets.push({ pct: 0, reps: '', max: false });
+    });
+    return order.length ? order.map(id => map[id]) : null;
+  }
+  const sessionKind = rec => rec && rec.plan ? 'plan' : rec && rec.routine ? 'routine' : 'free';
+
   /* Informe de una sesión. rec = sesión registrada por el atleta (o null); planned = salida de plannedByEx (o null si fue libre). */
   function sessionReport(rec, planned, ctx) {
     const lang = ctx.lang || 'en', exNames = ctx.exNames || {}, items = [], seen = {};
+    if (!planned) planned = selfPlanned(rec);
     const noteOf = id => (rec && rec.items || []).filter(i => i.exId === id && i.note && String(i.note).trim()).map(i => String(i.note).trim()).filter((n, k, a) => a.indexOf(n) === k).join(' · ');
     const recItem = id => (rec && rec.items || []).filter(i => i.exId === id).reduce((a, i) => ({ exId: id, sets: a.sets.concat(i.sets || []) }), { exId: id, sets: [] });
     (planned || []).forEach(p => {
       seen[p.exId] = 1;
+      if (!p.en && !p.es && !p.name) { const nm = exNames[p.exId]; if (nm) { p.en = nm.en; p.es = nm.es; p.name = nm.name; } }
       const ps = plannedSummary(p.sets), ds = doneSummary(recItem(p.exId).sets);
       const status = !rec ? 'pending' : (ds.n === 0 && !ds.missed) ? 'omitted' : ds.n < ps.n ? 'partial' : 'ok';
       items.push({ exId: p.exId, name: principal(p, lang), planned: ps, done: ds, status: status, note: noteOf(p.exId) });
@@ -80,7 +101,7 @@
       t.doneSets += it.done.n; t.reps += it.done.reps; t.ton += it.done.ton;
       if (it.done.rpe != null) { t.rpeSum += it.done.rpe; t.rpeN++; }
     });
-    return { registered: !!rec, date: rec ? rec.date : '', name: rec ? rec.name : '', durationMin: rec && rec.endedAt && rec.startedAt ? Math.round((rec.endedAt - rec.startedAt) / 60000) : 0,
+    return { kind: sessionKind(rec), registered: !!rec, date: rec ? rec.date : '', name: rec ? rec.name : '', durationMin: rec && rec.endedAt && rec.startedAt ? Math.round((rec.endedAt - rec.startedAt) / 60000) : 0,
       bw: rec && rec.bw ? rec.bw : null, notes: rec && rec.notes ? String(rec.notes).trim() : '', items: items,
       totals: { plannedSets: t.plannedSets, doneSets: t.doneSets, reps: t.reps, ton: Math.round(t.ton), rpe: t.rpeN ? r1(t.rpeSum / t.rpeN) : null } };
   }
@@ -92,6 +113,12 @@
     return c.length ? c[c.length - 1] : null;
   }
 
+  /* Lunes a domingo de la semana que contiene la fecha dada (AAAA-MM-DD) */
+  function weekSpan(ymd) {
+    const [y, m, d] = ymd.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, d, 12)), dow = (t.getUTCDay() + 6) % 7;
+    const f = x => new Date(t.getTime() + x * 86400000).toISOString().slice(0, 10);
+    return { from: f(-dow), to: f(6 - dow) };
+  }
   const DAYS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
   const dayName = d => DAYS[d] || '';
   const dateEs = ymd => { if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || '')) return ymd || ''; const [y, m, d] = ymd.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }); };
@@ -113,7 +140,17 @@
       if (rep.notes) notes.push({ label: rep.label + (rep.date ? ' (' + dateEs(rep.date) + ')' : ''), text: rep.notes });
       rep.items.forEach(it => { if (it.note) notes.push({ label: rep.label + ' · ' + itemName(it.name) + (rep.date ? ' (' + dateEs(rep.date) + ')' : ''), text: it.note }); });
     });
-    return { kind: 'week', athlete: a.athlete, title: 'Semana ' + week.week + (a.stage ? ' · ' + a.stage : '') + (week.kind === 'transition' ? ' · transición' : ''), transition: week.kind === 'transition',
+    /* Sesiones de rutina y libres de esa semana calendario (lunes a domingo de la primera sesión del plan registrada) */
+    const others = [];
+    const own = (a.sessions || []).filter(x => x.plan && x.plan.planId === a.planId && x.plan.weekId === week.id && x.endedAt && x.date).map(x => x.date).sort();
+    const rng = a.range || (own.length ? weekSpan(own[0]) : null);
+    if (rng) (a.sessions || []).filter(x => x.endedAt && !x.plan && x.date >= rng.from && x.date <= rng.to).sort((x, y) => x.startedAt - y.startedAt).forEach(rec => {
+      const rep = sessionReport(rec, null, a); rep.label = rec.name || 'Sesión'; rep.plan = rec.routine ? 'Rutina «' + (rec.routine.name || rec.name || '') + '»' : 'Sesión libre'; rep.status = 'done'; others.push(rep);
+      sum.reps += rep.totals.reps; sum.ton += rep.totals.ton;
+      if (rep.notes) notes.push({ label: rep.label + (rep.date ? ' (' + dateEs(rep.date) + ')' : ''), text: rep.notes });
+      rep.items.forEach(it => { if (it.note) notes.push({ label: rep.label + ' · ' + itemName(it.name) + (rep.date ? ' (' + dateEs(rep.date) + ')' : ''), text: it.note }); });
+    });
+    return { kind: 'week', athlete: a.athlete, others: others, title: 'Semana ' + week.week + (a.stage ? ' · ' + a.stage : '') + (week.kind === 'transition' ? ' · transición' : ''), transition: week.kind === 'transition',
       sessions: sessions, notes: notes,
       totals: { plannedSessions: sum.plannedSessions, doneSessions: sum.doneSessions, plannedSets: sum.plannedSets, doneSets: sum.doneSets, reps: sum.reps, ton: Math.round(sum.ton), rpe: sum.rpeN ? r1(sum.rpeSum / sum.rpeN) : null } };
   }
@@ -128,6 +165,7 @@
         const wk = (a.weeks || []).find(w => w.id === rec.plan.weekId);
         if (wk) { planned = plannedByEx(wk, rec.plan.idx, a.names, (a.adjFor && a.adjFor(rec.plan.planId, rec.plan.weekId)) || {}); extra = 'Semana ' + wk.week + ' · ' + dayName(((wk.sessions || [])[rec.plan.idx] || {}).day); }
       }
+      if (!extra) extra = rec.routine ? 'Rutina «' + (rec.routine.name || rec.name || '') + '»' : 'Sesión libre';
       const rep = sessionReport(rec, planned, a); rep.label = rec.name || 'Sesión'; rep.plan = extra; rep.status = 'done'; out.push(rep);
       sum.doneSets += rep.totals.doneSets; sum.plannedSets += rep.totals.plannedSets; sum.reps += rep.totals.reps; sum.ton += rep.totals.ton;
       if (rep.totals.rpe != null) { sum.rpeSum += rep.totals.rpe; sum.rpeN++; }
@@ -163,12 +201,20 @@
       s.items.forEach(it => { L.push('  • ' + itemName(it.name) + (STATUS[it.status] ? ' [' + STATUS[it.status] + ']' : '') + ': ' + itemLine(it)); if (it.note) L.push('      Obs.: ' + it.note); });
       if (s.notes) L.push('  Observaciones: ' + s.notes);
     });
+    if (r.others && r.others.length) {
+      L.push(''); L.push('OTRAS SESIONES DE LA SEMANA (rutinas y libres)');
+      r.others.forEach(s => {
+        L.push((s.label || 'Sesión') + ' [' + s.plan + '] — registrada' + (s.date ? ' el ' + dateEs(s.date) : '') + (s.durationMin ? ' (' + s.durationMin + ' min)' : ''));
+        s.items.forEach(it => { L.push('  • ' + itemName(it.name) + (STATUS[it.status] ? ' [' + STATUS[it.status] + ']' : '') + ': ' + itemLine(it)); if (it.note) L.push('      Obs.: ' + it.note); });
+        if (s.notes) L.push('  Observaciones: ' + s.notes);
+      });
+    }
     if (r.notes.length) { L.push(''); L.push('OBSERVACIONES DEL ATLETA'); r.notes.forEach(n => L.push('  - ' + n.label + ': ' + n.text)); }
     else if (r.sessions.some(s => s.registered)) { L.push(''); L.push('Sin observaciones del atleta.'); }
     return L.join('\n');
   }
 
-  const pure = { parseReps, plannedByEx, doneSummary, plannedSummary, sessionReport, findRecord, weekReport, dayReport, toText, dateEs };
+  const pure = { weekSpan, selfPlanned, parseReps, plannedByEx, doneSummary, plannedSummary, sessionReport, findRecord, weekReport, dayReport, toText, dateEs };
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
   if (!root.document) { root.HalterReportPure = pure; return; }
 
@@ -234,16 +280,18 @@
     else h += '<div class="rp-stats">' + (r.kind === 'week' ? stat(t.doneSessions + ' / ' + t.plannedSessions, 'sesiones') + stat(t.doneSets + ' / ' + t.plannedSets, 'series') : stat(t.doneSessions, 'sesiones') + stat(t.doneSets, 'series')) +
       stat(t.reps, 'repeticiones') + stat(t.ton + ' kg', 'tonelaje') + (t.rpe != null ? stat(fmt(t.rpe), 'RPE medio') : '') + '</div>';
     if (!r.sessions.length && r.kind === 'day') h += '<p class="muted">No hay sesiones registradas ese día.</p>';
-    r.sessions.forEach(s => {
-      h += `<div class="rp-ses"><div class="person"><div><b>${esc(s.label || 'Sesión')}</b><small>${s.registered ? 'Registrada' + (s.date ? ' el ' + esc(dateEs(s.date)) : '') + (s.durationMin ? ' · ' + s.durationMin + ' min' : '') : 'Sin registrar'}${s.plan ? ' · ' + esc(s.plan) : ''}${s.completedAt ? ' · cumplida ' + esc(completedText(s.completedAt)) : ''}</small></div>` +
-        (r.kind === 'week' ? (s.registered ? '<span class="badge ok">Registrada</span>' : '<span class="badge bad">Sin registrar</span>') : '') + '</div><ul class="plain">';
+    const sesHTML = s => {
+      let h = `<div class="rp-ses"><div class="person"><div><b>${esc(s.label || 'Sesión')}</b><small>${s.registered ? 'Registrada' + (s.date ? ' el ' + esc(dateEs(s.date)) : '') + (s.durationMin ? ' · ' + s.durationMin + ' min' : '') : 'Sin registrar'}${s.plan ? ' · ' + esc(s.plan) : ''}${s.completedAt ? ' · cumplida ' + esc(completedText(s.completedAt)) : ''}</small></div>` +
+        (r.kind === 'week' && s.kind !== undefined && !s.isOther ? (s.registered ? '<span class="badge ok">Registrada</span>' : '<span class="badge bad">Sin registrar</span>') : '') + '</div><ul class="plain">';
       s.items.forEach(it => {
         const b = BADGE[it.status] || ['', ''];
         h += `<li><b>${esc(it.name.p)}</b>${it.name.s ? `<small class="exsub">${esc(it.name.s)}</small>` : ''}<small>${esc(itemLine(it))}</small>${it.note ? `<small class="inote-h">“${esc(it.note)}”</small>` : ''}${b[1] ? `<span class="badge ${b[0]}">${b[1]}</span>` : ''}</li>`;
       });
       if (!s.items.length) h += '<li><small>Sin ejercicios registrados.</small></li>';
-      h += '</ul>' + (s.notes ? `<p class="notes">“${esc(s.notes)}”</p>` : '') + '</div>';
-    });
+      return h + '</ul>' + (s.notes ? `<p class="notes">“${esc(s.notes)}”</p>` : '') + '</div>';
+    };
+    r.sessions.forEach(s => { h += sesHTML(s); });
+    if (r.others && r.others.length) { h += '<h3>Otras sesiones de la semana</h3><p class="muted">Rutinas especiales y entrenamientos libres del atleta.</p>'; r.others.forEach(s => { s.isOther = true; h += sesHTML(s); }); }
     h += '<h3>Observaciones del atleta</h3>' + (r.notes.length ? '<ul class="plain">' + r.notes.map(n => `<li><b>${esc(n.label)}</b><small>${esc(n.text)}</small></li>`).join('') + '</ul>' : '<p class="muted">Sin observaciones.</p>');
     return h;
   }

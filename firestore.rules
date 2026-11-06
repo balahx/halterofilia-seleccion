@@ -93,6 +93,20 @@ service cloud.firestore {
       allow delete: if isCoach();
     }
 
+    // Fecha del último respaldo del equipo descargado por el entrenador (para recordárselo desde cualquier dispositivo).
+    // Solo el entrenador la lee y la escribe; no contiene datos de atletas, solo la fecha y los totales.
+    match /config/backup {
+      allow read: if isCoach();
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['at', 'by', 'counts', 'reads'])
+        && request.resource.data.keys().hasAll(['at', 'by'])
+        && request.resource.data.at == request.time
+        && request.resource.data.by == request.auth.uid
+        && (!('counts' in request.resource.data) || request.resource.data.counts is map)
+        && (!('reads' in request.resource.data) || request.resource.data.reads is int);
+      allow delete: if isCoach();
+    }
+
     // Catálogo de ejercicios (inglés, español y los textos con que aparece en las planillas)
     match /exercises/{exId} {
       allow read: if canReadPlan();

@@ -119,6 +119,7 @@
       await this._commit(ops);
       await this._commit([{ ref: this._doc(base), data: Object.assign({}, p.meta, { createdAt: this.m.fs.serverTimestamp() }) }]);
     }
+    setBackupStamp(counts, reads) { return this.m.fs.setDoc(this._doc('config/backup'), { at: this.m.fs.serverTimestamp(), by: this.auth.currentUser.uid, counts: counts || {}, reads: reads || 0 }); }
     setActivePlan(id) { return this.m.fs.setDoc(this._doc('config/plan'), { activePlanId: id, at: this.m.fs.serverTimestamp() }); }
     /* Semana asignada (fase 4) */
     async getDoc(path) { const snap = await this.m.fs.getDoc(this._doc(path)); return snap.exists() ? this._plain(snap.data()) : null; }
@@ -265,6 +266,7 @@
   }
   function watchCoachLists() {
     const r = C.remote;
+    C.unsub.push(r.watchDoc('config/backup', (d, m) => { if (window.HalterBackup && !(m.fromCache && d === null)) { window.HalterBackup.setStamp(d); window.HalterApp.render(); } }, () => { /* sin permiso o sin datos: no se muestra la fecha */ }));
     C.unsub.push(r.watchCol('requests', (list) => {
       const prev = C.requests.filter(x => x.status !== 'rejected').length, fresh = list.filter(x => x.status !== 'rejected');
       const grew = C.colReady && fresh.length > prev;
@@ -338,7 +340,7 @@
     hideGate();
     const fresh = window.HalterApp.start({
       cloud: true, requireSex: role !== 'coach', sex: role !== 'coach' ? pendingSex() : null, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
-      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []).concat(window.HalterAssign ? [{ id: 'semana', label: 'Mi semana', icon: 'semana', render: window.HalterAssign.athleteView }] : [])
+      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView, badge: () => C.requests.filter(x => x.status !== 'rejected').length }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []).concat(window.HalterAssign ? [{ id: 'semana', label: 'Mi semana', icon: 'semana', render: window.HalterAssign.athleteView }] : [])
         : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []),
       nav: role === 'coach' ? [['equipo'], ['planual'], ['semana', 'Mi semana'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
       more: moreInfo, hoyHTML: () => window.HalterAssign ? window.HalterAssign.todayHTML() : '',
@@ -446,7 +448,7 @@
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
-      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rt-new': case 'rt-edit': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
+      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rt-new': case 'rt-edit': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
       case 'cmp-sex': case 'cmp-cat': case 'cmp-refresh': case 'cmp-open': if (window.HalterCompare) window.HalterCompare.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }

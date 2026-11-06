@@ -721,11 +721,13 @@ function dayCard(d, i) {
 const RT = { days: null, onChange: null };
 const rtEx = p => S.exercises.find(e => e.id === p.exId) || { id: p.exId, name: p.name || 'Ejercicio', cat: p.cat || 'acc', rest: 0, max: 0 };
 function rtBind(days, onChange) { RT.days = days; RT.onChange = onChange || null; }
+/* Días de una sesión de rutina: `days` (varios) o el antiguo `day` (uno) */
+function rtDaysOf(d) { return Array.isArray(d.days) && d.days.length ? d.days.filter(x => x >= 1 && x <= 7) : (d.day >= 1 && d.day <= 7 ? [d.day] : []); }
 function rtCard(d, i) {
   let h = '<article class="card day on" data-rt="1" data-d="' + i + '"><header class="day-h"><div class="day-t"><p class="eyebrow">Sesión ' + (i + 1) + '</p>' +
     '<input class="txt" id="dn-' + i + '" data-f="dname" maxlength="40" value="' + esc(d.name) + '" placeholder="Nombre de la sesión" aria-label="Nombre de la sesión ' + (i + 1) + '">' +
-    '<label class="rt-day"><span>Día de entrenamiento</span><select class="sel" id="dd-' + i + '" data-f="dday" aria-label="Día de entrenamiento de la sesión ' + (i + 1) + '"><option value="0"' + (d.day > 0 ? '' : ' selected') + '>Cualquier día</option>' +
-    DAYS_LONG.map((n, k) => '<option value="' + (k + 1) + '"' + (d.day === k + 1 ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label></div>' +
+    '<fieldset class="rt-day"><legend>Días de entrenamiento <small>(ninguno = cualquier día)</small></legend><div class="rt-dchips">' +
+    DAYS_LONG.map((n, k) => '<label class="rt-dchip"><input type="checkbox" id="dd-' + i + '-' + (k + 1) + '" data-f="dday" value="' + (k + 1) + '"' + (rtDaysOf(d).indexOf(k + 1) >= 0 ? ' checked' : '') + ' aria-label="' + n + ', sesión ' + (i + 1) + '"><span>' + n.slice(0, 3) + '</span></label>').join('') + '</div></fieldset></div>' +
     '<button class="icon-btn sm" data-act="rt-ses-rm" data-d="' + i + '" aria-label="Quitar la sesión ' + (i + 1) + '">' + svg('close') + '</button></header>';
   h += d.items.map((p, k) => planRow(d, i, p, k, true)).join('');
   return h + '<button class="btn ghost sm" data-act="rt-add" data-d="' + i + '">+ Ejercicio</button></article>';
@@ -1017,7 +1019,13 @@ function render() {
   v.dataset.tab = ui.tab;
   v.innerHTML = ct ? ct.render() : ui.tab === 'hoy' ? viewHoy() : ui.tab === 'plan' ? viewPlan() : ui.tab === 'prog' ? viewProg() : ui.tab === 'hist' ? viewHist() : ui.tab === 'mas' ? viewMas() : viewMax();
   const inNav = navItems().some(a => a[0] === ui.tab), cur = inNav ? ui.tab : 'mas';   // las pantallas que viven dentro de «Más» marcan «Más»
-  $$('#nav button').forEach(b => { if (b.dataset.tab === cur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  $$('#nav button').forEach(b => {
+    if (b.dataset.tab === cur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    const tb = APP.tabs.find(t => t.id === b.dataset.tab), n = tb && tb.badge ? tb.badge() : 0;   // globo con un número (p. ej. solicitudes pendientes)
+    let bd = b.querySelector('.nbadge');
+    if (n > 0) { if (!bd) { bd = document.createElement('i'); bd.className = 'nbadge'; b.appendChild(bd); } bd.textContent = n > 9 ? '9+' : String(n); b.setAttribute('aria-label', (tb.label || '') + ', ' + n + (n === 1 ? ' pendiente' : ' pendientes')); }
+    else { if (bd) bd.remove(); b.removeAttribute('aria-label'); }
+  });
   renderBanner(); renderDock(); drawCharts(); syncWake();
   if (ui.sheet && ui.sheet.kind === 'sex' && S && S.profile.sex) closeSheet();
   else if (APP.requireSex && S && !S.demo && !S.profile.sex && !(ui.sheet && ui.sheet.kind === 'sex')) openSheet('sex');
@@ -1472,7 +1480,7 @@ function onField(t) {
     case 'zoom': lsSet(ZOOM_KEY, t.checked ? '1' : '0'); applyZoom(); toast(t.checked ? 'Zoom permitido en este dispositivo.' : 'Pantalla fija otra vez.'); break;
     case 'inote': if (s) { const it = s.items[+t.closest('.exc').dataset.i]; if (it) { it.note = t.value.slice(0, 200); save(); } } break;
     case 'dname': { const c = t.closest('.day'); if (c.dataset.rt) { RT.days[+c.dataset.d].name = t.value; if (RT.onChange) RT.onChange(); } else { S.plan.days[+c.dataset.d].name = t.value; save(); } break; }
-    case 'dday': { const c = t.closest('.day'); if (c && c.dataset.rt) { const v = parseInt(t.value, 10); RT.days[+c.dataset.d].day = v >= 1 && v <= 7 ? v : 0; if (RT.onChange) RT.onChange(); } break; }
+    case 'dday': { const c = t.closest('.day'); if (c && c.dataset.rt) { const v = parseInt(t.value, 10), d = RT.days[+c.dataset.d], cur = rtDaysOf(d).filter(x => x !== v); if (t.checked && v >= 1 && v <= 7) cur.push(v); cur.sort((x, y) => x - y); d.days = cur; d.day = cur[0] || 0; if (RT.onChange) RT.onChange(); } break; }
     case 'don': { const d = S.plan.days[+t.closest('.day').dataset.d]; d.on = t.checked; save(); render(); break; }
     case 'psets': case 'preps': case 'ppct': case 'prest': case 'ppause': case 'pkg': {
       const row = t.closest('.prow'), isRt = !!t.closest('[data-rt]'), p = (isRt ? RT.days : S.plan.days)[+row.dataset.d].items[+row.dataset.k], e = ex(p.exId);
