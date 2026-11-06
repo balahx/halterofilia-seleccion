@@ -9,16 +9,17 @@
 
   /* Lee { n, v, date } del texto de version.js (sin ejecutarlo) */
   function parseVersion(text) {
-    const v = /v:\s*'([^']+)'/.exec(text || ''), d = /date:\s*'([^']+)'/.exec(text || ''), n = /\bn:\s*(\d+)/.exec(text || '');
-    return v ? { n: n ? Number(n[1]) : null, v: v[1], date: d ? d[1] : '' } : null;
+    const v = /v:\s*'([^']+)'/.exec(text || ''), d = /date:\s*'([^']+)'/.exec(text || ''), n = /\bn:\s*(?:'(\d+(?:\.\d+)*)'|(\d+))/.exec(text || '');
+    return v ? { n: n ? (n[1] || n[2]) : null, v: v[1], date: d ? d[1] : '' } : null;
   }
-  /* ¿La versión publicada es más nueva? Por número («Versión 4»); si alguna no lo trae, por el texto AAAA.MM.DD.n */
+  /* ¿La versión publicada es más nueva? Por número («Versión 4.1.1», compara cada parte como número: 4.10.0 > 4.9.0); si alguna no lo trae, por el texto AAAA.MM.DD.n */
+  const hasN = x => x && x.n != null && /^\d+(\.\d+)*$/.test(String(x.n));
   function isNewer(remote, local) {
     if (!remote || !local) return false;
-    if (typeof remote.n === 'number' && typeof local.n === 'number') return remote.n > local.n;
+    if (hasN(remote) && hasN(local)) return newer(remote.n, local.n);
     return newer(remote.v, local.v);
   }
-  /* ¿`remote` es distinta (más nueva) que `local`? Compara cada número: 2026.11.05.2 > 2026.11.05.1 */
+  /* ¿`remote` es más nueva que `local`? Compara cada parte como número: 2026.11.05.2 > 2026.11.05.1; 4.1.2 > 4.1.1 */
   function newer(remote, local) {
     if (!remote || !local) return false;
     const a = String(remote).split('.').map(Number), b = String(local).split('.').map(Number);
@@ -30,7 +31,7 @@
     return Number(m[3]) + ' ' + MESES[Number(m[2]) - 1] + ' ' + m[1];
   }
   const current = () => root.HALTER_VERSION || { n: null, v: '?', date: '' };
-  const label = x => x && typeof x.n === 'number' ? String(x.n) : (x && x.v) || '?';
+  const label = x => hasN(x) ? String(x.n) : (x && x.v) || '?';
   const versionText = () => 'Versión ' + label(current());
 
   /* ---------- Estado y acciones (solo navegador) ---------- */

@@ -53,6 +53,15 @@
       if (op === 'delete') return coach;
       return coach && keysOnly(data, ['pcts', 'at']) && data.pcts && typeof data.pcts === 'object' && Object.keys(data.pcts).length <= 400;
     }
+    if (col === 'routines') {   // el atleta solo lee las suyas (la consulta pide uid == el suyo)
+      if (op === 'get') return coach || (member && prev && prev.uid === u.uid);
+      if (op === 'list') return coach || member;
+      if (op === 'delete') return coach;
+      const d = data || {};
+      return coach && keysOnly(d, ['uid', 'name', 'note', 'sessions', 'setBy', 'at']) && ['uid', 'name', 'sessions', 'setBy', 'at'].every(k => k in d)
+        && typeof d.uid === 'string' && !!s.docs['members/' + d.uid] && typeof d.name === 'string' && d.name.length > 0 && d.name.length <= 80
+        && (!('note' in d) || (typeof d.note === 'string' && d.note.length <= 400)) && Array.isArray(d.sessions) && d.sessions.length >= 1 && d.sessions.length <= 14 && d.setBy === u.uid;
+    }
     if (col === 'users') { // users/{uid}/records/{clave}
       const owner = u.uid === id;
       if (op === 'get' || op === 'list') return coach || (owner && member);
@@ -104,6 +113,7 @@
         w.cb(Object.keys(s.docs).filter(k => k.startsWith(pre) && s.docs[k].at >= w.since).map(k => Object.assign({ id: k.slice(pre.length) }, s.docs[k])), { fromCache: false });
       } else if (w.col) {
         if (!allowed('list', w.path + '/x', null)) { w.err && w.err(err('permission-denied')); return; }
+        if (w.path === 'routines' && !isCoach(s, curUser().uid) && !(w.filters && w.filters.uid === curUser().uid)) { w.err && w.err(err('permission-denied')); return; }   // Firestore exige que la consulta pida solo lo suyo
         const got = Object.keys(s.docs).filter(k => k.startsWith(w.path + '/') && k.split('/').length === w.path.split('/').length + 1 && matches(s.docs[k], w.filters)).map(k => Object.assign({ id: k.split('/').pop() }, s.docs[k]));
         window.__fake.delivered[w.path] = got.map(x => x.id);   // qué documentos llegaron a esa lectura (para comprobar cuántas lecturas se piden)
         w.cb(got, { fromCache: false });
@@ -165,6 +175,8 @@
     async advanceAssignment(uid, d) { mutate('update', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }
     async setCompletion(uid, id, d) { window.__fake.completions.push(id); mutate('create', 'users/' + uid + '/completions/' + id, Object.assign({}, d, { completedAt: Date.now() })); }
     async setAdjust(id, pcts) { mutate('create', 'adjustments/' + id, { pcts, at: Date.now() }); }
+    async setRoutine(id, d) { mutate('create', 'routines/' + id, Object.assign({}, d, { at: Date.now() })); }
+    async deleteRoutine(id) { mutate('delete', 'routines/' + id); }
     async deleteAdjust(id) { mutate('delete', 'adjustments/' + id); }
     async deletePlan(id, wasActive) {
       Object.keys(rd().docs).filter(k => k.startsWith('plans/' + id + '/')).forEach(k => mutate('delete', k));

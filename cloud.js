@@ -127,6 +127,9 @@
     setCompletion(uid, id, d) { return this.m.fs.setDoc(this._doc('users/' + uid + '/completions/' + id), Object.assign({}, d, { completedAt: this.m.fs.serverTimestamp() })); }
     setAdjust(id, pcts) { return this.m.fs.setDoc(this._doc('adjustments/' + id), { pcts: pcts, at: this.m.fs.serverTimestamp() }); }
     deleteAdjust(id) { return this.m.fs.deleteDoc(this._doc('adjustments/' + id)); }
+    /* Rutinas especiales del entrenador para un atleta */
+    setRoutine(id, d) { return this.m.fs.setDoc(this._doc('routines/' + id), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
+    deleteRoutine(id) { return this.m.fs.deleteDoc(this._doc('routines/' + id)); }
     async deletePlan(id, wasActive) {
       const { getDocs, collection } = this.m.fs, ops = [];
       for (const sub of ['weeks', 'stages']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
@@ -443,7 +446,7 @@
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
-      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
+      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rt-new': case 'rt-edit': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
       case 'cmp-sex': case 'cmp-cat': case 'cmp-refresh': case 'cmp-open': if (window.HalterCompare) window.HalterCompare.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }

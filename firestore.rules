@@ -199,5 +199,22 @@ service cloud.firestore {
         && request.resource.data.at == request.time;
       allow delete: if isCoach();
     }
+
+    // Rutinas especiales: el entrenador arma una rutina propia (fuera del plan anual) para un atleta inscrito.
+    // Cada sesión lista ejercicios con series, repeticiones, % del máximo y pausa en segundos.
+    // La escribe solo el entrenador; el atleta lee únicamente las suyas (la consulta debe pedir uid == el suyo).
+    match /routines/{rid} {
+      allow read: if signedIn() && (isCoach() || (resource.data.uid == request.auth.uid && isMemberOf(request.auth.uid)));
+      allow create, update: if isCoach()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'note', 'sessions', 'setBy', 'at'])
+        && request.resource.data.keys().hasAll(['uid', 'name', 'sessions', 'setBy', 'at'])
+        && request.resource.data.uid is string && isMemberOf(request.resource.data.uid)
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 400))
+        && request.resource.data.sessions is list && request.resource.data.sessions.size() >= 1 && request.resource.data.sessions.size() <= 14
+        && request.resource.data.setBy == request.auth.uid
+        && request.resource.data.at == request.time;
+      allow delete: if isCoach();
+    }
   }
 }

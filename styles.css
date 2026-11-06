@@ -569,3 +569,9 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
 
 /* Repeticiones planificadas: van sombreadas dentro del campo; desaparecen al escribir las que realmente hace */
 .set input[data-f="reps"]::placeholder { color: var(--muted); opacity: .7; font-weight: 600; }
+
+/* Rutinas especiales del entrenador: cada sesión en una fila con su botón «Iniciar» */
+.rt-card h2 { margin: 2px 0 6px; }
+.rt-card .plain li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rt-card .plain li > div { min-width: 0; }
+.rt-card .plain li small { display: block; color: var(--muted); }

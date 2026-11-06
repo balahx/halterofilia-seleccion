@@ -542,9 +542,10 @@ function legendHTML() {
   const t = ['< 70', '70–79', '80–89', '90–94', '≥ 95'];
   return '<div class="legend" aria-label="Color según % del máximo">' + ZONES.map((z, i) => '<span>' + plateDot(z.key) + t[i] + '</span>').join('') + '<span class="legend-t">% del máximo</span></div>';
 }
-function planPreview(p, e) {
+function planPreview(p, e, rt) {
   const parts = [p.sets + '×' + (p.reps || '?')];
-  if (p.pct > 0 && e.max > 0) parts.push('≈ ' + fmtNum(roundTo(e.max * p.pct / 100, S.profile.rounding), 1) + ' kg');
+  if (rt) { if (p.pct > 0) parts.push(fmtNum(p.pct, 1) + ' %'); if (p.rest > 0) parts.push('pausa ' + fmtTime(p.rest)); }   // los kilos los calcula cada atleta con su máximo
+  else if (p.pct > 0 && e.max > 0) parts.push('≈ ' + fmtNum(roundTo(e.max * p.pct / 100, S.profile.rounding), 1) + ' kg');
   else if (p.pct > 0) parts.push('sin máximo');
   return parts.join(' · ');
 }
@@ -652,14 +653,15 @@ function viewLogger(s) {
 }
 
 /* ----- PLAN ----- */
-function planRow(d, i, p, k) {
-  const e = ex(p.exId), id = i + '-' + k;
-  return '<div class="prow" data-d="' + i + '" data-k="' + k + '"><div class="prow-h"><span class="pn">' + plateDot(zoneOf(p.pct)) + esc(nm(e)) + '</span><span class="pv" id="pv-' + id + '">' + esc(planPreview(p, e)) + '</span>' +
+function planRow(d, i, p, k, rt) {
+  const e = rt ? rtEx(p) : ex(p.exId), id = i + '-' + k;
+  return '<div class="prow" data-d="' + i + '" data-k="' + k + '"><div class="prow-h"><span class="pn">' + plateDot(zoneOf(p.pct)) + esc(nm(e)) + '</span><span class="pv" id="pv-' + id + '">' + esc(planPreview(p, e, rt)) + '</span>' +
     '<button class="icon-btn sm" data-act="plan-rm" data-d="' + i + '" data-k="' + k + '" aria-label="Quitar ' + esc(nm(e)) + ' del plan">' + svg('close') + '</button></div>' +
     '<div class="prow-f"><label><span>Series</span><input class="num sm" id="ps-' + id + '" data-f="psets" inputmode="numeric" value="' + p.sets + '"></label>' +
     '<label><span>Reps</span><input class="num sm" id="pr-' + id + '" data-f="preps" inputmode="text" value="' + esc(p.reps) + '"></label>' +
     '<label><span>% máx.</span><input class="num sm" id="pp-' + id + '" data-f="ppct" inputmode="decimal" value="' + (p.pct > 0 ? fmtNum(p.pct, 1) : '') + '"></label>' +
-    '<label><span>Descanso</span>' + restSelect(p.rest, 'id="pd-' + id + '" data-f="prest"', true) + '</label></div></div>';
+    (rt ? '<label><span>Pausa (s)</span><input class="num sm" id="pd-' + id + '" data-f="prest" inputmode="numeric" placeholder="auto" aria-label="Pausa entre series, en segundos" value="' + (p.rest > 0 ? p.rest : '') + '"></label>'
+        : '<label><span>Descanso</span>' + restSelect(p.rest, 'id="pd-' + id + '" data-f="prest"', true) + '</label>') + '</div></div>';
 }
 function dayCard(d, i) {
   const isToday = weekdayIdx(new Date()) === i;
@@ -671,6 +673,17 @@ function dayCard(d, i) {
     h += '<button class="btn ghost sm" data-act="plan-add" data-d="' + i + '">+ Ejercicio</button>';
   }
   return h + '</article>';
+}
+/* ----- Rutinas especiales (el entrenador las arma para un atleta con este mismo editor; la pantalla la dibuja assign.js) ----- */
+const RT = { days: null, onChange: null };
+const rtEx = p => S.exercises.find(e => e.id === p.exId) || { id: p.exId, name: p.name || 'Ejercicio', cat: p.cat || 'acc', rest: 0, max: 0 };
+function rtBind(days, onChange) { RT.days = days; RT.onChange = onChange || null; }
+function rtCard(d, i) {
+  let h = '<article class="card day on" data-rt="1" data-d="' + i + '"><header class="day-h"><div class="day-t"><p class="eyebrow">Sesión ' + (i + 1) + '</p>' +
+    '<input class="txt" id="dn-' + i + '" data-f="dname" maxlength="40" value="' + esc(d.name) + '" placeholder="Nombre de la sesión" aria-label="Nombre de la sesión ' + (i + 1) + '"></div>' +
+    '<button class="icon-btn sm" data-act="rt-ses-rm" data-d="' + i + '" aria-label="Quitar la sesión ' + (i + 1) + '">' + svg('close') + '</button></header>';
+  h += d.items.map((p, k) => planRow(d, i, p, k, true)).join('');
+  return h + '<button class="btn ghost sm" data-act="rt-add" data-d="' + i + '">+ Ejercicio</button></article>';
 }
 function viewPlan() {
   let h = '<section class="sec"><h1>Plan semanal</h1><p class="muted">Marca los días que entrenas y arma cada sesión. Los kilos salen de tu máximo y del porcentaje.</p>' + legendHTML() + '</section>';
@@ -1418,15 +1431,15 @@ function onField(t) {
     case 'durMin': if (s) { const v = parseInt(t.value, 10); if (v >= 1 && v <= 600) s.durMin = v; else delete s.durMin; save(); } break;
     case 'bwq': break;
     case 'inote': if (s) { const it = s.items[+t.closest('.exc').dataset.i]; if (it) { it.note = t.value.slice(0, 200); save(); } } break;
-    case 'dname': S.plan.days[+t.closest('.day').dataset.d].name = t.value; save(); break;
+    case 'dname': { const c = t.closest('.day'); if (c.dataset.rt) { RT.days[+c.dataset.d].name = t.value; if (RT.onChange) RT.onChange(); } else { S.plan.days[+c.dataset.d].name = t.value; save(); } break; }
     case 'don': { const d = S.plan.days[+t.closest('.day').dataset.d]; d.on = t.checked; save(); render(); break; }
     case 'psets': case 'preps': case 'ppct': case 'prest': {
-      const row = t.closest('.prow'), p = S.plan.days[+row.dataset.d].items[+row.dataset.k], e = ex(p.exId);
+      const row = t.closest('.prow'), isRt = !!t.closest('[data-rt]'), p = (isRt ? RT.days : S.plan.days)[+row.dataset.d].items[+row.dataset.k], e = ex(p.exId);
       if (f === 'psets') { const n = parseInt(t.value, 10); if (n >= 1 && n <= 30) p.sets = n; }
       else if (f === 'preps') { const c = t.value.replace(/[^\d+]/g, ''); if (c !== t.value) t.value = c; p.reps = c; }
       else if (f === 'ppct') { const v = parseNum(t.value); p.pct = isNaN(v) || v < 0 ? 0 : v; setDot(row.querySelector('.pn .pl'), zoneOf(p.pct)); }
-      else p.rest = parseNum(t.value) || 0;
-      setText(document.getElementById('pv-' + row.dataset.d + '-' + row.dataset.k), planPreview(p, e)); save(); break;
+      else { const r = parseNum(t.value) || 0; p.rest = isRt ? Math.min(Math.max(Math.round(r), 0), 900) : r; }
+      setText(document.getElementById('pv-' + row.dataset.d + '-' + row.dataset.k), planPreview(p, e, isRt)); if (isRt) { if (RT.onChange) RT.onChange(); } else save(); break;
     }
     case 'autoTimer': S.profile.autoTimer = t.checked; save(); break;
     case 'set': onSetting(t); break;
@@ -1529,7 +1542,11 @@ document.addEventListener('click', e => {
       const di = +t.dataset.d;
       openSheet('pick', { cb: id => { S.plan.days[di].items.push({ exId: id, sets: 3, reps: '3', pct: 70, rest: 0 }); save(); render(); } }); break;
     }
-    case 'plan-rm': S.plan.days[+t.dataset.d].items.splice(+t.dataset.k, 1); save(); render(); break;
+    case 'plan-rm': { const rt = !!t.closest('[data-rt]'); (rt ? RT.days : S.plan.days)[+t.dataset.d].items.splice(+t.dataset.k, 1); if (rt) { if (RT.onChange) RT.onChange(true); } else { save(); render(); } break; }
+    case 'rt-add': {
+      const di = +t.dataset.d;
+      openSheet('pick', { cb: id => { const e = ex(id); RT.days[di].items.push({ exId: id, name: e.name, cat: e.cat, sets: 3, reps: '3', pct: 70, rest: 0 }); if (RT.onChange) RT.onChange(true); } }); break;
+    }
     case 'pick': { const cb = ui.sheet && ui.sheet.cb; closeSheet(); if (cb) cb(t.dataset.ex); break; }
     case 'plates-toggle': ui.platesOpen = !ui.platesOpen; render(); break;
     case 'open-plates': ui.platesOpen = true; ui.tab = 'max'; render(); window.scrollTo(0, 0); break;
@@ -1638,7 +1655,7 @@ let refreshLater = false;
 function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
 function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
 document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
-window.HalterApp = { icon: svg, empty: emptyHTML, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
+window.HalterApp = { icon: svg, empty: emptyHTML, rt: { bind: rtBind, card: rtCard, ex: rtEx }, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
   /* cálculos compartidos con la vista del entrenador (compare.js) */
   pure: { categoryOf: categoryOf, catText: catText, catOptions: catOptions, catSortKey: catSortKey, fmtNum: fmtNum, SEX_LABEL: SEX_LABEL, shortDate: shortDate, parseYmd: parseYmd, ymd: ymd } };
 })();
