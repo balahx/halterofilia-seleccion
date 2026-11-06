@@ -17,11 +17,12 @@ ok(st.sets === 1 && st.missed === 1 && st.pending === 1 && st.ton === 90, 'sessi
 ok(A.topSingle([{ endedAt: 1, items: [{ exId: 'snatch', sets: [set(90, 1), set(100, 1, { miss: true })] }] }], 'snatch') === 90, 'una fallada no es récord');
 
 console.log('2. Categorías de peso');
-ok(A.categoryOf('M', 80) === '88' && A.categoryOf('M', 88) === '88' && A.categoryOf('M', 88.1) === '94' && A.categoryOf('M', 130) === '+110', 'masculino: límites y categoría abierta');
-ok(A.categoryOf('F', 48) === '48' && A.categoryOf('F', 62) === '63' && A.categoryOf('F', 90) === '+86', 'femenino');
+ok(A.categoryOf('M', 80) === '85' && A.categoryOf('M', 85) === '85' && A.categoryOf('M', 85.1) === '95' && A.categoryOf('M', 60) === '60' && A.categoryOf('M', 70) === '70' && A.categoryOf('M', 130) === '+110', 'masculino: límites y categoría abierta');
+ok(A.categoryOf('F', 48) === '49' && A.categoryOf('F', 57) === '57' && A.categoryOf('F', 57.1) === '61' && A.categoryOf('F', 62) === '69' && A.categoryOf('F', 90) === '+86', 'femenino');
+ok(JSON.stringify(A.catOptions('M')) === JSON.stringify(['60','65','70','75','85','95','110','+110']) && JSON.stringify(A.catOptions('F')) === JSON.stringify(['49','53','57','61','69','77','86','+86']), 'categorías IWF vigentes desde el 1-ago-2026');
 ok(A.categoryOf('', 70) === '' && A.categoryOf('M', 0) === '', 'sin sexo o sin peso: sin categoría');
-ok(A.categoryOf('F', 62, '69') === '69' && A.categoryOf('F', 62, '88') === '63', 'categoría elegida a mano solo si es válida para el sexo');
-ok(A.catText('71') === '−71 kg' && A.catText('+110') === '+110 kg' && A.catSortKey('+86') > A.catSortKey('77'), 'texto y orden');
+ok(A.categoryOf('F', 62, '77') === '77' && A.categoryOf('F', 62, '88') === '69' && A.categoryOf('F', 62, '63') === '69', 'categoría elegida a mano solo si es válida para el sexo');
+ok(A.catText('75') === '−75 kg' && A.catText('+110') === '+110 kg' && A.catSortKey('+86') > A.catSortKey('77'), 'texto y orden');
 
 console.log('3. Carga de sesión');
 const s2 = { startedAt: T(18, 0), endedAt: T(20, 0), items: [{ sets: [set(60, 3, { doneAt: T(18, 50), rpe: 7 }), set(60, 3, { doneAt: T(19, 30), rpe: 8 })] }] };

@@ -9,8 +9,8 @@ const srv = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ ' : '  ✗ ') + m); };
 const rec = (o, t) => ({ t: t, d: JSON.stringify(o), u: Date.now(), at: Date.now() });
 const ATH = [
-  ['a1', 'Ana Rojas', { sex: 'F', bw: 62 }, 70, 90], ['a2', 'Bea Soto', { sex: 'F', bw: 61 }, 75, 95],
-  ['a3', 'Carlos Díaz', { sex: 'M', bw: 80, bwLog: [{ d: '2026-11-02', kg: 80 }] }, 100, 125], ['a4', 'Diego Paz', { sex: 'M', bw: 87 }, 105, 130],
+  ['a1', 'Ana Rojas', { sex: 'F', bw: 60.5 }, 70, 90], ['a2', 'Bea Soto', { sex: 'F', bw: 61 }, 75, 95],
+  ['a3', 'Carlos Díaz', { sex: 'M', bw: 80, bwLog: [{ d: '2026-11-02', kg: 80 }] }, 100, 125], ['a4', 'Diego Paz', { sex: 'M', bw: 84 }, 105, 130],
   ['a5', 'Eli Mora', { sex: 'M', bw: 112 }, 0, 0], ['a6', 'Fran Luna', {}, 60, 80]
 ];
 (async () => {
@@ -22,7 +22,7 @@ const ATH = [
   page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/fonts\.g|net::ERR/.test(m.text())) errors.push(m.text()); });
   await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
   const txt = sel => page.locator(sel).first().innerText();
-  const tab = async t => { await page.click('#nav button[data-tab="' + t + '"]'); await page.waitForTimeout(400); };
+  const tab = async t => { if (t === 'marcas') { await page.click('#nav button[data-tab="mas"]'); await page.waitForTimeout(250); await page.click('.mrow[data-tab="marcas"]'); } else await page.click('#nav button[data-tab="' + t + '"]'); await page.waitForTimeout(400); };
   await page.goto(URL); await page.waitForSelector('#gForm');
   await page.click('[data-g="mode"][data-v="signup"]'); await page.selectOption('#gSex', 'F'); await page.fill('#gName', 'Cristian Mateluna'); await page.fill('#gEmail', 'cristian@correo.cl'); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123');
   await page.check('#gPriv').catch(() => {}); await page.click('#gForm button[type=submit]').catch(() => {});
@@ -38,24 +38,24 @@ const ATH = [
   }), ATH);
   await page.reload(); await page.waitForSelector('#appRoot:not([hidden])', { timeout: 8000 }).catch(() => {});
   if (!(await page.locator('#appRoot:not([hidden])').count())) { await page.fill('#gEmail', 'cristian@correo.cl'); await page.fill('#gPass', 'clave123'); await page.click('#gForm button[type=submit]'); await page.waitForSelector('#appRoot:not([hidden])'); }
-  ok(await page.locator('#nav button[data-tab="marcas"]').count() === 1, 'el entrenador ve la pestaña «Marcas»');
+  await page.click('#nav button[data-tab="mas"]'); ok(await page.locator('.mrow[data-tab="marcas"]').count() === 1, 'el entrenador llega a «Marcas» desde «Más»');
   await tab('marcas'); await page.waitForSelector('.cmp-tab', { timeout: 8000 });
   await page.screenshot({ path: path.join(SHOTS, 'marcas-1.png'), fullPage: true });
   const h2 = await page.locator('.cmp-grp h2').allInnerTexts();
   ok(h2.join('|') === 'Masculino|Femenino|Sin sexo indicado', 'grupos separados: masculino, femenino y sin sexo');
   const eyes = (await page.locator('.cmp-grp .eyebrow').allInnerTexts()).map(x => x.toLowerCase());
-  ok(eyes[0].startsWith('−88 kg') && eyes[1].startsWith('+110 kg') && eyes[2].startsWith('−63 kg'), 'categorías por peso: M −88 y +110; F −63 (' + eyes.join(' / ') + ')');
+  ok(eyes[0].startsWith('−85 kg') && eyes[1].startsWith('+110 kg') && eyes[2].startsWith('−61 kg'), 'categorías por peso: M −85 y +110; F −61 (' + eyes.join(' / ') + ')');
   const m88 = await page.locator('.cmp-grp').first().locator('.cmp-tab').first().locator('tbody tr').allInnerTexts();
-  ok(/Diego Paz/.test(m88[0]) && /235/.test(m88[0]) && /líder/.test(m88[0]), 'M −88: Diego (235) lidera');
-  ok(/Carlos Díaz/.test(m88[1]) && /225/.test(m88[1]) && /−10/.test(m88[1]), 'M −88: Carlos 225, 10 kg bajo el líder');
+  ok(/Diego Paz/.test(m88[0]) && /235/.test(m88[0]) && /líder/.test(m88[0]), 'M −85: Diego (235) lidera');
+  ok(/Carlos Díaz/.test(m88[1]) && /225/.test(m88[1]) && /−10/.test(m88[1]), 'M −85: Carlos 225, 10 kg bajo el líder');
   const f63 = await page.locator('.cmp-grp').nth(1).locator('tbody tr').allInnerTexts();
-  ok(/Bea Soto/.test(f63[0]) && /170/.test(f63[0]) && /Ana Rojas/.test(f63[1]) && /−10/.test(f63[1]), 'F −63: Bea (170) sobre Ana (160)');
+  ok(/Bea Soto/.test(f63[0]) && /170/.test(f63[0]) && /Ana Rojas/.test(f63[1]) && /−10/.test(f63[1]), 'F −61: Bea (170) sobre Ana (160)');
   ok(!(await page.locator('.cmp-grp').nth(1).innerText()).includes('Carlos'), 'las mujeres no se mezclan con los hombres');
   ok(/Eli Mora/.test(await page.locator('.cmp-grp').first().innerText()) && /–/.test(await page.locator('tr', { hasText: 'Eli Mora' }).innerText()), 'sin marcas: aparece sin total');
   await page.click('.cmp-bar[aria-label="Sexo"] [data-v="F"]');
   ok((await page.locator('.cmp-grp h2').allInnerTexts()).join('|') === 'Femenino', 'filtro por sexo: solo femenino');
-  await page.click('.cmp-bar[aria-label="Sexo"] [data-v="all"]'); await page.click('.cmp-bar[aria-label="Categoría de peso"] [data-v="88"]');
-  ok(await page.locator('.cmp-tab').count() === 1 && /Diego/.test(await txt('.cmp-tab')), 'filtro por categoría −88');
+  await page.click('.cmp-bar[aria-label="Sexo"] [data-v="all"]'); await page.click('.cmp-bar[aria-label="Categoría de peso"] [data-v="85"]');
+  ok(await page.locator('.cmp-tab').count() === 1 && /Diego/.test(await txt('.cmp-tab')), 'filtro por categoría −85');
   await page.click('.cmp-bar[aria-label="Categoría de peso"] [data-v="all"]');
   await page.click('[data-act="cmp-open"][data-uid="a3"]'); await page.waitForSelector('.cmp-det .ratio');
   const det = await txt('.cmp-det');

@@ -45,6 +45,9 @@ service cloud.firestore {
     // (o es el entrenador). El entrenador puede leer los de todos (informes de la fase 4b).
     // Los registros no se borran de verdad: se marcan con del = true para avisar a los otros dispositivos.
     function isMemberOf(uid) { return exists(/databases/$(database)/documents/members/$(uid)); }
+    // Quien entrena el plan: un atleta aprobado, o el entrenador con su propia cuenta (entrena la misma semana que el equipo,
+    // pero no es miembro: no entra en las marcas ni en las comparaciones del equipo).
+    function isTrainee(uid) { return isMemberOf(uid) || (isCoach() && request.auth.uid == uid); }
     match /users/{uid}/records/{key} {
       allow read: if signedIn() && ((request.auth.uid == uid && (isMemberOf(uid) || isCoach())) || isCoach());
       allow create, update: if signedIn() && request.auth.uid == uid && (isMemberOf(uid) || isCoach())
@@ -152,10 +155,10 @@ service cloud.firestore {
         && request.resource.data.weekEndsAt is number
         && request.resource.data.setBy == request.auth.uid
         && request.resource.data.at == request.time
-        && isMemberOf(uid)
+        && isTrainee(uid)
         && weekOf(request.resource.data.planId, request.resource.data.weekId).stageId == request.resource.data.stageId
         && weekOf(request.resource.data.planId, request.resource.data.weekId).week == request.resource.data.week;
-      allow update: if signedIn() && request.auth.uid == uid && isMemberOf(uid)
+      allow update: if signedIn() && request.auth.uid == uid && isTrainee(uid)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['weekId', 'week', 'stageId', 'weekEndsAt', 'at'])
         && request.resource.data.at == request.time
         && request.time.toMillis() >= resource.data.weekEndsAt
@@ -173,7 +176,7 @@ service cloud.firestore {
     // la semana que tiene asignada. No se puede editar ni borrar.
     match /users/{uid}/completions/{id} {
       allow read: if signedIn() && ((request.auth.uid == uid && isMemberOf(uid)) || isCoach());
-      allow create: if signedIn() && request.auth.uid == uid && isMemberOf(uid)
+      allow create: if signedIn() && request.auth.uid == uid && isTrainee(uid)
         && request.resource.data.keys().hasOnly(['planId', 'weekId', 'sessionIdx', 'completedAt'])
         && request.resource.data.keys().hasAll(['planId', 'weekId', 'sessionIdx', 'completedAt'])
         && request.resource.data.completedAt == request.time
@@ -189,7 +192,7 @@ service cloud.firestore {
     // Ajuste de porcentajes (desde 90 %) de un atleta en una semana. Id: {uid}_{planId}_{weekId}.
     // Lo escribe el entrenador; el atleta solo lee el suyo.
     match /adjustments/{id} {
-      allow read: if signedIn() && (isCoach() || (id.matches(request.auth.uid + '_.*') && isMemberOf(request.auth.uid)));
+      allow read: if signedIn() && (isCoach() || (id.matches(request.auth.uid + '_.*') && isTrainee(request.auth.uid)));
       allow create, update: if isCoach()
         && request.resource.data.keys().hasOnly(['pcts', 'at'])
         && request.resource.data.pcts is map && request.resource.data.pcts.size() <= 400

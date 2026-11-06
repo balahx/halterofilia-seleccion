@@ -138,8 +138,9 @@ function sessionStats(sess) {
 }
 
 /* ----- Indicadores (puros) ----- */
-/* Categorías de peso vigentes de la IWF (desde junio de 2025); la última es abierta («+110», «+86»). Confirmar con el reglamento de cada torneo. */
-const WEIGHT_CATS = { M: [60, 65, 71, 79, 88, 94, 110], F: [48, 53, 58, 63, 69, 77, 86] };
+/* Categorías de peso absolutas (senior y junior) vigentes de la IWF desde el 1 de agosto de 2026; la última es abierta («+110», «+86»).
+   Antes de esa fecha regían (desde junio de 2025) M 60, 65, 71, 79, 88, 94, 110 y F 48, 53, 58, 63, 69, 77, 86. Fuente: iwf.sport (3-nov-2025). Confirmar con el reglamento de cada torneo. */
+const WEIGHT_CATS = { M: [60, 65, 70, 75, 85, 95, 110], F: [49, 53, 57, 61, 69, 77, 86] };
 const SEX_LABEL = { M: 'Masculino', F: 'Femenino' };
 function catOptions(sex) {
   const l = WEIGHT_CATS[sex];
@@ -397,6 +398,8 @@ function save(now) {
 function normalize(o) {
   const old = o.profile && o.profile.prefs !== 2;
   o.profile = Object.assign({}, DEFAULT_PROFILE, o.profile || {});
+  /* una categoría elegida que ya no existe (cambio de la IWF del 1-ago-2026) se descarta: vuelve la automática según el peso */
+  if (o.profile.cat && catOptions(o.profile.sex).indexOf(String(o.profile.cat)) < 0) o.profile.cat = '';
   if (old) {
     /* una sola vez: valores iniciales según el cuestionario del equipo */
     o.profile.showRpe = true; o.profile.autoTimer = false; o.profile.prefs = 2;
@@ -411,9 +414,10 @@ function ex(id) {
 }
 function activeSession() { return S.sessions.find(s => !s.endedAt) || null; }
 function endedSessions() { return S.sessions.filter(s => s.endedAt); }
+/* Las repeticiones de la planificación (pr) se muestran sombreadas como guía; el campo queda vacío y el atleta anota las que hace */
 function mkSet(e, reps, pct) {
-  const kg = (e.max > 0 && pct > 0) ? roundTo(e.max * pct / 100, S.profile.rounding) : 0;
-  return { kg: kg, reps: String(reps == null ? '' : reps), pct: pct || 0, rpe: null, done: false, doneAt: null };
+  const kg = (e.max > 0 && pct > 0) ? roundTo(e.max * pct / 100, S.profile.rounding) : 0, pr = String(reps == null ? '' : reps);
+  return Object.assign({ kg: kg, reps: '', pct: pct || 0, rpe: null, done: false, doneAt: null }, pr ? { pr: pr } : {});
 }
 function lastSetsFor(exId) {
   const list = endedSessions().sort((a, b) => b.endedAt - a.endedAt);
@@ -609,7 +613,7 @@ function setRowHTML(i, j, st, it) {
   return '<div class="set' + (rpe ? ' rpe' : '') + (tm ? ' tm' : '') + (st.done ? ' is-done' : '') + (st.miss ? ' is-miss' : '') + '" data-i="' + i + '" data-j="' + j + '">' +
     '<span class="set-n">' + (j + 1) + '</span>' +
     '<input class="num" id="' + id + '-kg" data-f="kg" inputmode="decimal" autocomplete="off" aria-label="Peso en kg, serie ' + (j + 1) + '" placeholder="kg" value="' + (st.kg > 0 ? fmtNum(st.kg, 2) : '') + '">' +
-    '<input class="num" id="' + id + '-reps" data-f="reps" inputmode="text" autocomplete="off" aria-label="Repeticiones, serie ' + (j + 1) + '" placeholder="reps" value="' + esc(st.reps) + '">' +
+    '<input class="num" id="' + id + '-reps" data-f="reps" inputmode="text" autocomplete="off" aria-label="Repeticiones, serie ' + (j + 1) + (st.pr ? ' (planificadas: ' + esc(st.pr) + ')' : '') + '" placeholder="' + esc(st.pr || 'reps') + '" value="' + esc(st.reps) + '">' +
     '<div class="pctw"><input class="num" id="' + id + '-pct" data-f="pct" inputmode="decimal" autocomplete="off" aria-label="Porcentaje del máximo, serie ' + (j + 1) + '" placeholder="%"' + (e.max > 0 ? '' : ' disabled') + ' value="' + (st.pct > 0 ? fmtNum(st.pct, 1) : '') + '">' + plateDot(zoneOf(st.pct)) + '</div>' +
     (rpe ? rpeSelect(st, id + '-rpe') : '') +
     (tm ? '<button class="missb" data-act="miss" aria-pressed="' + !!st.miss + '" aria-label="Serie ' + (j + 1) + ': levantamiento fallado">✕</button>' : '') +
@@ -625,7 +629,7 @@ function exerciseCard(it, i) {
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
     '<div class="set sethead' + (rpe ? ' rpe' : '') + (tm ? ' tm' : '') + '" aria-hidden="true"><span></span><span>kg</span><span>reps</span><span>%</span>' + (rpe ? '<span>RPE</span>' : '') + (tm ? '<span>Falló</span>' : '') + '<span></span></div>' +
     it.sets.map((st, j) => setRowHTML(i, j, st, it)).join('') +
-    '<label class="inote-l"><span class="sr-only">Observación de este ejercicio</span><input class="txt inote" data-f="inote" maxlength="200" autocomplete="off" placeholder="Observación (técnica, dolor, sensaciones…)" value="' + esc(it.note || '') + '"></label>' +
+    '<label class="inote-l"><span class="sr-only">Observación de este ejercicio</span><input class="txt inote" data-f="inote" maxlength="200" autocomplete="off" placeholder="Observación (técnica, dolor…)" value="' + esc(it.note || '') + '"></label>' +
     '<div class="exc-f"><button class="btn ghost sm" data-act="add-set" data-i="' + i + '">+ Serie</button>' +
     '<button class="btn ghost sm" data-act="rm-set" data-i="' + i + '">' + confirmLabel('rs' + i, '− Serie', '¿Quitar hecha?') + '</button>' +
     '<button class="btn ghost sm" data-act="plates" data-i="' + i + '">Discos</button>' +
@@ -1088,7 +1092,7 @@ function renderDock() {
   if (!dockVisible()) { el.innerHTML = ''; return; }
   const p = S.profile, down = T.mode === 'down', ico = svg(T.running ? 'pause' : 'play');
   if (ui.dockMin) {
-    el.innerHTML = '<div class="dock min" id="dockBox" data-state="idle"><button class="dock-expand" data-act="dock-min" aria-label="Mostrar temporizador completo"><span class="dock-time" id="dockTime">0:00</span><span class="dock-lbl" id="dockLbl"></span></button>' +
+    el.innerHTML = '<div class="dock min" id="dockBox" data-state="idle" data-act="dock-min"><button class="dock-expand" data-act="dock-min" aria-label="Mostrar temporizador completo"><span class="dock-time" id="dockTime">0:00</span><span class="dock-lbl" id="dockLbl"></span></button>' +
       '<button class="rbtn play" data-act="t-toggle" aria-label="Iniciar o pausar">' + ico + '</button></div>';
   } else {
     el.innerHTML = '<div class="dock" id="dockBox" data-state="idle"><div class="dock-r1"><div class="dock-read"><span class="dock-time" id="dockTime">0:00</span><span class="dock-lbl" id="dockLbl"></span></div><div class="dock-ctl">' +
@@ -1308,7 +1312,7 @@ function settingsHTML() {
     '<div class="row2"><label class="fl"><span>Peso corporal (kg)</span><input class="num" id="sBw" data-f="set" data-k="bw" data-num="1" inputmode="decimal" value="' + (p.bw > 0 ? fmtNum(p.bw, 1) : '') + '" placeholder="—"></label><label class="fl"><span>Barra</span>' + sel('bar', [20, 15, 10, 5], v => v + ' kg', 'sBar') + '</label></div>' +
     '<div class="row2"><label class="fl"><span>Sexo</span><select class="sel tall" id="sSex" data-f="set" data-k="sex">' + [['', '—'], ['F', 'Femenino'], ['M', 'Masculino']].filter(o => o[0] || !p.sex).map(o => '<option value="' + o[0] + '"' + (p.sex === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' +
     '<label class="fl"><span>Categoría de peso</span><select class="sel tall" id="sCat" data-f="set" data-k="cat"' + (p.sex ? '' : ' disabled') + '><option value="">Automática' + (categoryOf(p.sex, p.bw) ? ' · ' + catText(categoryOf(p.sex, p.bw)) : '') + '</option>' + catOptions(p.sex).map(c => '<option value="' + c + '"' + (p.cat === c ? ' selected' : '') + '>' + catText(c) + '</option>').join('') + '</select></label></div>' +
-    '<p class="muted">Tu entrenador usa tu sexo, tu peso y tu categoría para comparar marcas entre atletas de la misma categoría. Solo lo ven tú y tu entrenador.</p>' +
+    '<p class="muted">' + (APP.more && APP.more().coach ? 'Solo para tus indicadores personales (por ejemplo, si compites en torneos externos). No entra en las comparaciones del equipo.' : 'Tu entrenador usa tu sexo, tu peso y tu categoría para comparar marcas entre atletas de la misma categoría. Solo lo ven tú y tu entrenador.') + '</p>' +
     '<p class="eyebrow">Cargas</p><div class="row2"><label class="fl"><span>Redondeo de pesos</span>' + sel('rounding', [0.5, 1, 2.5, 5], v => fmtNum(v, 1) + ' kg', 'sRound') + '</label>' +
     '<label class="fl"><span>Descanso predeterminado</span>' + restSelect(p.rest, 'id="sRest" data-f="set" data-k="rest" data-num="1"').replace('class="sel"', 'class="sel tall"') + '</label></div>' +
     '<p class="eyebrow">Temporizador</p><div class="checks">' + chk('timerEnabled', 'Mostrar temporizador y cronómetro') + chk('autoTimer', 'Iniciar solo al marcar una serie como hecha') + chk('sound', 'Sonido al terminar el descanso') + chk('vibrate', 'Vibración al terminar') + '</div>' +
@@ -1457,6 +1461,9 @@ function onField(t) {
 }
 
 /* ----- Clics ----- */
+/* Pantalla fija: ni pellizco ni doble toque acercan la app (iOS ignora user-scalable, por eso también se frena aquí) */
+['gesturestart', 'gesturechange', 'gestureend'].forEach(n => document.addEventListener(n, e => e.preventDefault()));
+document.addEventListener('touchmove', e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('click', e => {
   primeAudio();
   const t = e.target.closest('[data-act]');
@@ -1472,7 +1479,7 @@ document.addEventListener('click', e => {
     case 'tick': { const row = t.closest('.set'); toggleDone(+row.dataset.i, +row.dataset.j); break; }
     case 'add-set': {
       const it = s.items[+t.dataset.i], last = it.sets[it.sets.length - 1];
-      it.sets.push(last ? { kg: last.kg, reps: last.reps, pct: last.pct, rpe: null, done: false, doneAt: null } : mkSet(ex(it.exId), '', 0));
+      it.sets.push(last ? Object.assign({ kg: last.kg, reps: last.pr ? '' : last.reps, pct: last.pct, rpe: null, done: false, doneAt: null }, last.pr ? { pr: last.pr } : {}) : mkSet(ex(it.exId), '', 0));
       save(); render(); break;
     }
     case 'rm-set': {

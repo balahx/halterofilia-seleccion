@@ -132,10 +132,10 @@ En **Equipo → Semana** de cada atleta, la tarjeta **Informe del atleta** → �
 - **Progreso:** intensidad media (ponderada por repeticiones), repeticiones (NL), efectividad, tabla semanal y resumen mensual, y peso corporal.
 - **Máximos:** razones entre máximos (arranque/dos tiempos, sentadillas/dos tiempos, tirones) y total por kg de peso corporal. **Meta** por ejercicio (kg y fecha opcional): faltan X kg, semanas al ritmo actual y kg por semana necesarios para la fecha.
 - **Sexo obligatorio:** se elige al crear la cuenta (queda en el perfil al primer ingreso). Las cuentas anteriores sin sexo reciben una ventana que no se puede cerrar hasta elegir (el entrenador no la ve). Se puede cambiar en Ajustes, pero no dejar vacío.
-- **Perfil:** sexo, categoría de peso (automática según el peso, o elegida) y peso corporal semanal (la pantalla Hoy lo pide si pasó una semana). Categorías IWF vigentes: M 60, 65, 71, 79, 88, 94, 110, +110; F 48, 53, 58, 63, 69, 77, 86, +86 (`WEIGHT_CATS` en `app.js`; confirmar con el reglamento de cada torneo).
+- **Perfil:** sexo, categoría de peso (automática según el peso, o elegida) y peso corporal semanal (la pantalla Hoy lo pide si pasó una semana). Categorías IWF (senior y junior) vigentes desde el 1 de agosto de 2026: M 60, 65, 70, 75, 85, 95, 110, +110; F 49, 53, 57, 61, 69, 77, 86, +86 (`WEIGHT_CATS` en `app.js`; fuente iwf.sport, 3-nov-2025; confirmar con el reglamento de cada torneo). Las categorías juveniles (youth) no se usan. Una categoría elegida que ya no existe se descarta y vuelve la automática según el peso.
 - El CSV de historial incluye ahora `fallada`, `duracion_min`, `rpe_sesion` y `carga_sesion`.
 
-**Entrenador (pestaña Marcas, `compare.js`):** lee perfil, arranque y dos tiempos de cada atleta (3 lecturas por atleta al abrir o actualizar) y los agrupa por sexo y categoría, ordenados por total. Al tocar un atleta se ven todos sus máximos y metas. Los atletas de cuentas antiguas que aún no abrieron la app (sin sexo) aparecen aparte, de forma transitoria. Compara marcas registradas por los atletas, no resultados oficiales.
+**Entrenador (Marcas del equipo, en «Más» → Equipo; `compare.js`):** lee perfil, arranque y dos tiempos de cada atleta (3 lecturas por atleta al abrir o actualizar) y los agrupa por sexo y categoría, ordenados por total. Al tocar un atleta se ven todos sus máximos y metas. Los atletas de cuentas antiguas que aún no abrieron la app (sin sexo) aparecen aparte, de forma transitoria. Compara marcas registradas por los atletas, no resultados oficiales.
 
 Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/compare-e2e.js`, `tests/sex-e2e.js`. El aviso de privacidad pasó a la versión `2026-11-05.2` (sexo, categoría, peso semanal, RPE y duración).
 
@@ -143,7 +143,7 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 
 - **Marca:** «WL» con «SELECCIÓN» debajo; el logo es el caballito de mar dorado levantando una barra (`icons/wl-marca-claro.svg` y `icons/wl-marca-oscuro.svg`, la marca sola; los íconos de la app en `icons/icon-*.png` salen de `D:\proyecto halt\WL-iconos\pwa`). **El logo es un calco aproximado de una captura**: cuando llegue el vector original del entrenador hay que regenerar los archivos y confirmar el permiso de uso del escudo con él y la institución.
 - **Paleta** (en `styles.css`, claro y oscuro): azul de marca #274F83 (en oscuro #3F72B8 para botones), dorado #A07E34 (en oscuro #DDB962), fondo #F3F5F9 / #0E1A2E, superficie #FFFFFF / #16263F, texto #14233B / #EEF2F8. Las zonas de carga (blanco, verde, amarillo, azul, rojo) no cambian. Tipografía: Barlow Condensed 700 (títulos y números) y Barlow (texto).
-- **Menú inferior:** atleta = Hoy · Semana · Progreso · Máximos · Más. Entrenador = Equipo · Marcas · Planes · Mi sesión · Más.
+- **Menú inferior:** atleta = Hoy · Semana · Progreso · Máximos · Más. Entrenador = Equipo · Planes · Mi semana · Mi sesión · Más (Marcas del equipo, Progreso y Máximos están en «Más»).
 - **«Más»** agrupa: plan semanal libre, historial de sesiones, mis ejercicios, calculadora de discos, ajustes, aviso de privacidad y cerrar sesión; el entrenador además ve «Mi entrenamiento» (progreso, máximos, plan libre), el respaldo del equipo y las solicitudes de acceso.
 - Prueba: `node tests/design-e2e.js` (con `SHOTS=carpeta` guarda capturas en claro y oscuro).
 - **Estados vacíos y de error:** `HalterApp.empty(...)` y `HalterApp.errorBox(mensaje, {retry})` son los componentes comunes. Una franja amarilla bajo la cabecera avisa cuando no hay conexión, falta permiso en la nube o falla la sincronización (los registros siguen guardándose en el dispositivo). La pantalla de ingreso sin servicio de cuentas muestra el icono en rojo con «Reintentar».
@@ -159,3 +159,14 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 ## Lo que viene
 
 - Informe automático diario y semanal con aviso al entrenador (pide un servicio de envío fuera del plan gratuito; por ahora se abre a mano).
+
+## El entrenador también entrena (fase 9)
+
+- **Mi semana:** el entrenador se asigna una semana del plan activo (cualquiera, sin corte de viernes ni requisitos) y entrena las mismas sesiones que el equipo, con sus kilos calculados desde sus propios máximos. Se guarda en `assignments/{su uid}` y `users/{su uid}/completions`. **No es miembro**: no aparece en Marcas ni en las comparaciones del equipo.
+- **Reglas de Firestore:** nueva función `isTrainee(uid)` (atleta aprobado, o el entrenador con su propia cuenta) en la asignación, el avance, las sesiones cumplidas y la lectura de ajustes. **Hay que volver a publicar `firestore.rules` en la consola de Firebase** (Firestore → Reglas → pegar → Publicar).
+- **Indicadores propios:** Progreso y Máximos (en «Más») muestran sus indicadores individuales; en Ajustes puede poner sexo, peso y categoría para sus torneos externos (no entra en las comparaciones del equipo).
+- **Categorías IWF:** hombres 60 · 65 · 70 · 75 · 85 · 95 · 110 · +110; mujeres 49 · 53 · 57 · 61 · 69 · 77 · 86 · +86 (vigentes desde el 1 de agosto de 2026).
+- **Pantalla fija en el teléfono:** sin zoom por pellizco ni doble toque (`viewport`, `touch-action`, bloqueo de gestos); todos los campos son de 16 px o más para que iOS no acerque la pantalla al tocarlos. Contrapartida de accesibilidad: no se puede ampliar con gestos (para letra más grande está el ajuste del sistema).
+- **Temporizador:** minimizado, se abre tocándolo en cualquier parte; solo el botón de pausa/reanudar conserva su función.
+- **Repeticiones planificadas:** en la sesión del plan (semana asignada o plan semanal libre) las repeticiones aparecen sombreadas como guía y el campo queda vacío: el atleta anota las que realmente hace (sin ellas no se puede marcar la serie; «Falló» también las pide).
+- Pruebas: `node tests/coach-self-e2e.js` y `node tests/phone-e2e.js`.

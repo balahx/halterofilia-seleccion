@@ -335,9 +335,9 @@
     hideGate();
     const fresh = window.HalterApp.start({
       cloud: true, requireSex: role !== 'coach', sex: role !== 'coach' ? pendingSex() : null, storageKey: 'halterofilia.v1.' + C.user.uid, name: C.name,
-      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : [])
+      tabs: role === 'coach' ? [{ id: 'equipo', label: 'Equipo', icon: 'team', render: teamView }].concat(window.HalterCompare ? [{ id: 'marcas', label: 'Marcas', icon: 'prog', render: window.HalterCompare.view }] : []).concat(window.HalterPlan ? [{ id: 'planual', label: 'Planes', icon: 'plan', render: window.HalterPlan.view }] : []).concat(window.HalterAssign ? [{ id: 'semana', label: 'Mi semana', icon: 'semana', render: window.HalterAssign.athleteView }] : [])
         : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []),
-      nav: role === 'coach' ? [['equipo'], ['marcas'], ['planual'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
+      nav: role === 'coach' ? [['equipo'], ['planual'], ['semana', 'Mi semana'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
       more: moreInfo,
       accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
       onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
@@ -390,6 +390,7 @@
       o.sub = 'Entrenador · ' + C.members.length + (C.members.length === 1 ? ' atleta aprobado' : ' atletas aprobados');
       o.chip = 'Entrenador';
       o.team = [{ ico: 'cloud', t: 'Descargar respaldo del equipo', s: 'Archivo con todos los datos · guárdalo en un lugar privado', act: 'bk-run' },
+        { ico: 'prog', t: 'Marcas del equipo', s: 'Comparar atletas por categoría de peso', tab: 'marcas' },
         { ico: 'team', t: 'Solicitudes de acceso', s: pend ? pend + (pend === 1 ? ' nueva' : ' nuevas') : 'Sin solicitudes nuevas', tab: 'equipo', chip: pend ? String(pend) : '' }];
     }
     return o;
@@ -440,7 +441,7 @@
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
-      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
+      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
       case 'cmp-sex': case 'cmp-cat': case 'cmp-refresh': case 'cmp-open': if (window.HalterCompare) window.HalterCompare.onAct(act, el); window.HalterApp.render(); break;
       case 'eq-approve': { const p = find(uid); if (p) guarded(() => C.remote.approve(uid, p.name, p.email), 'Aprobado: ' + (p.name || p.email)); break; }

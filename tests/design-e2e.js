@@ -42,12 +42,12 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await shot('02-ingreso-oscuro');
   await page.emulateMedia({ colorScheme: 'light' });
 
-  console.log('2. Entrenador: Equipo · Marcas · Planes · Mi sesión · Más');
+  console.log('2. Entrenador: Equipo · Planes · Mi semana · Mi sesión · Más');
   await signup('Cristian Mateluna', 'cristian@correo.cl', 'M');
   const cuid = await page.evaluate(() => __fake.uid('cristian@correo.cl'));
   await page.evaluate(u => __fake.admin('config/team', { coachUid: u }), cuid);
   await page.waitForSelector('#appRoot:not([hidden])');
-  ok((await navLabels()).join('|') === 'Equipo|Marcas|Planes|Mi sesión|Más', 'menú del entrenador: ' + (await navLabels()).join(' · '));
+  ok((await navLabels()).join('|') === 'Equipo|Planes|Mi semana|Mi sesión|Más', 'menú del entrenador: ' + (await navLabels()).join(' · '));
   ok((await txt('header.top .brand')).trim() === 'WL' && /wl-marca-claro/.test(await css('header.top .mk', 'backgroundImage')), 'cabecera con el logo y «WL»');
   await page.click('#nav [data-tab="mas"]'); await page.waitForTimeout(200);
   let mas = await txt('#view');

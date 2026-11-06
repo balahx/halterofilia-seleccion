@@ -155,7 +155,7 @@
     });
     h += '<div class="cmp-bar"><button class="btn ghost sm" data-act="cmp-refresh"' + (K.loading ? ' disabled' : '') + '>' + (K.loading ? 'Actualizando…' : 'Actualizar') + '</button>' +
       '<span class="muted">' + (K.at ? 'Leído a las ' + new Date(K.at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) + ' · ' + K.reads + ' lecturas' : '') + '</span></div>' +
-      '<p class="muted">★ = líder de la categoría por total. Dif. = diferencia de total con el líder. Las categorías siguen la tabla de la IWF vigente; confirma con el reglamento de cada torneo. Compara solo marcas registradas por los atletas, no resultados de competencia oficial.</p>';
+      '<p class="muted">★ = líder de la categoría por total. Dif. = diferencia de total con el líder. Las categorías siguen la tabla de la IWF vigente desde el 1 de agosto de 2026; confirma con el reglamento de cada torneo. Compara solo marcas registradas por los atletas, no resultados de competencia oficial.</p>';
     return h;
   }
 

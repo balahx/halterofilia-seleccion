@@ -32,6 +32,8 @@ const WEEKS = {
   const signup = async (name, email) => { await page.click('[data-g="mode"][data-v="signup"]'); await page.selectOption('#gSex', 'F'); await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', 'clave123'); await page.fill('#gPass2', 'clave123'); await page.check('#gPriv'); await page.click('#gForm button[type=submit]'); await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || '')); };
   const login = async email => { await page.fill('#gEmail', email); await page.fill('#gPass', 'clave123'); await page.click('#gForm button[type=submit]'); await page.waitForSelector('#appRoot:not([hidden])'); };
   const tab = async t => { await page.click('#nav button[data-tab="' + t + '"]'); await page.waitForTimeout(250); };
+  // el atleta anota las repeticiones que hizo (aquí, las mismas del plan) y marca cada serie
+  const tickAll = async () => { const r = page.locator('[data-f="reps"]'); for (let i = 0; i < await r.count(); i++) { if (!(await r.nth(i).inputValue())) await r.nth(i).fill(await r.nth(i).getAttribute('placeholder')); } for (const t of await page.locator('.tick').all()) await t.click(); };
   const remoteTry = (fn) => page.evaluate(async src => { try { await (new Function('r', 'return (async()=>{' + src + '})()'))(window.HALTER_REMOTE_FACTORY()); return 'ok'; } catch (e) { return e.code || String(e.message); } }, fn);
 
   console.log('0. Preparación: entrenador, atleta y un plan publicado');
@@ -99,7 +101,11 @@ const WEEKS = {
   ok(/Hoy|Arranque/.test(await txt('#view')), 'la sesión se abre lista para registrar');
   const kgs = await page.locator('[data-f="kg"]').evaluateAll(l => l.map(x => x.value));
   ok(kgs.join(',') === '70,70,95', 'series prellenadas con 70, 70 y 95 kg: ' + kgs.join(','));
-  for (const t of await page.locator('.tick').all()) await t.click();
+  const phs = await page.locator('[data-f="reps"]').evaluateAll(l => l.map(x => x.placeholder + '|' + x.value));
+  ok(phs.join(',') === '3|,3|,1|', 'las repeticiones del plan van sombreadas (placeholder) y los campos vacíos: ' + phs.join(','));
+  await page.locator('.tick').first().click(); await page.waitForTimeout(200);
+  ok(!(await page.locator('.set.is-done').count()) && /Anota el peso y las repeticiones/.test(await txt('#toast')), 'sin anotar las repeticiones no se puede marcar la serie');
+  await tickAll();
   await page.click('[data-act="finish"]'); await page.waitForSelector('#dlg[open]'); await page.waitForTimeout(700);
   d = await docs();
   ok(d['users/' + auid + '/completions/p1_e1_1_0'] && d['users/' + auid + '/completions/p1_e1_1_0'].sessionIdx === 0, 'quedó registrada la sesión cumplida (hora del servidor)');
@@ -128,7 +134,7 @@ const WEEKS = {
   await page.click('[data-act="as-start"][data-i="1"]'); await page.waitForSelector('.tick');
   const k0 = page.locator('[data-f="kg"]').first(); await k0.fill('80');
   const kg2 = page.locator('[data-f="kg"]'); for (let i = 1; i < await kg2.count(); i++) await kg2.nth(i).fill('80');
-  for (const t of await page.locator('.tick').all()) await t.click();
+  await tickAll();
   await page.click('[data-act="finish"]'); await page.waitForSelector('#dlg[open]'); await page.waitForTimeout(700);
   d = await docs();
   ok(!!d['users/' + auid + '/completions/p1_e1_1_1'], 'la segunda sesión (la última) quedó cumplida');

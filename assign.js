@@ -125,7 +125,8 @@
       const ref = refFor(S, it, adj);
       const sets = expandSets(it, adj, si, ii).map(s => {
         const pct = s.pct || 0;
-        return { kg: ref.kg > 0 && pct > 0 ? roundTo(ref.kg * pct / 100, rounding) : 0, reps: s.max ? '1' : String(s.reps || ''), pct: pct, rpe: null, done: false, doneAt: null };
+        const pr = s.max ? '1' : String(s.reps || '');   // lo planificado va sombreado (pr); el atleta anota las repeticiones que hace
+        return Object.assign({ kg: ref.kg > 0 && pct > 0 ? roundTo(ref.kg * pct / 100, rounding) : 0, reps: '', pct: pct, rpe: null, done: false, doneAt: null }, pr ? { pr: pr } : {});
       });
       if (!sets.length) sets.push({ kg: 0, reps: '', pct: 0, rpe: null, done: false, doneAt: null });
       const prev = items.find(q => q.exId === e.id);
@@ -161,10 +162,10 @@
   };
   const A = {
     uid: null, role: null, active: null, names: {}, plans: [],
-    weeks: [], stages: [], asg: {}, sel: null, selDone: {}, selAdj: null, selAdjKey: '', selDoneKey: '', draft: null, pick: '', ready: false, busy: '', err: '',
+    weeks: [], stages: [], asg: {}, sel: null, selDone: {}, selAdj: null, selAdjKey: '', selDoneKey: '', draft: null, pick: '', ready: false, busy: '', err: '', selfPick: '',
     me: { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }
   };
-  let H = null, unsub = [], weekUnsub = [], selUnsub = [], adjUnsub = [];
+  let H = null, unsub = [], weekUnsub = [], meUnsub = [], selUnsub = [], adjUnsub = [];   // weekUnsub: semanas del plan activo (entrenador) · meUnsub: mi propia semana
   const cacheKey = () => 'halterofilia.v1.' + A.uid + '.week';
   const pendKey = () => 'halterofilia.v1.' + A.uid + '.pend';
   const rerender = () => { if (H) H.render(); };
@@ -177,7 +178,7 @@
   let weekKey = '';   // semana que se está escuchando como atleta
   function init(helpers) {
     H = helpers; if (root.HalterReport) root.HalterReport.init(helpers);
-    document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } });
+    document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } if (t && t.dataset && t.dataset.as === 'selfweek') { A.selfPick = t.value; } });
     document.addEventListener('input', e => {
       const t = e.target; if (!t || !t.dataset || t.dataset.as !== 'pct') return;
       const v = parseFloat(String(t.value).replace(',', '.')); A.draft = A.draft || {};
@@ -185,7 +186,7 @@
       const b = document.querySelector('[data-act="as-adj-save"]'); if (b) b.disabled = !adjDirty() || !!A.busy;   // el botón se habilita al escribir
     });
   }
-  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }; }
+  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(meUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selfPick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0 }; }
 
   /* ---------- Escuchar datos ---------- */
   function startCoach(uid) {
@@ -193,6 +194,7 @@
     unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
     unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); rerender(); }, () => { /* opcional */ }));
     unsub.push(r.watchDoc('config/plan', d => { watchPlan(d ? d.activePlanId : null); }, () => { /* sin plan activo */ }));
+    selfStart(uid, false, true);   // el entrenador también entrena el plan: su propia semana
   }
   function watchPlan(planId) {
     if (planId === A.active && weekUnsub.length) return;
@@ -204,37 +206,38 @@
   }
   const stageOrder = id => { const s = A.stages.find(x => x.id === id); return s ? s.order : 0; };
 
-  function startAthlete(uid, offline) {
-    reset(); A.uid = uid; A.role = 'athlete';
+  function startAthlete(uid, offline) { reset(); A.uid = uid; A.role = 'athlete'; selfStart(uid, offline, false); }
+  /* Mi propia semana (atleta, y el entrenador cuando entrena el plan). noEx: el entrenador ya escucha los ejercicios */
+  function selfStart(uid, offline, noEx) {
     try { const c = JSON.parse(LS.get(cacheKey()) || 'null'); if (c && c.asg) { A.me = { asg: c.asg, week: c.week || null, adj: c.adj || {}, done: c.done || {}, savedAt: c.savedAt || 0 }; A.names = c.names || {}; A.stages = c.stages || []; } } catch (e) { /* caché dañada */ }
     if (offline) return;
     const r = H.remote();
     unsub.push(r.watchDoc('assignments/' + uid, (d, m) => {
       if (m && m.fromCache && d === null) return;
       const was = A.me.asg; A.me.asg = d;
-      if (!d) { unwatch(weekUnsub); weekKey = ''; A.me.week = null; A.me.adj = {}; A.me.done = {}; rerender(); return; }
+      if (!d) { unwatch(meUnsub); weekKey = ''; A.me.week = null; A.me.adj = {}; A.me.done = {}; rerender(); return; }
       // se escucha la semana una vez por sesión de la app, aunque la asignación sea igual a la guardada en el dispositivo
       const key = d.planId + '|' + d.weekId;
       if (key !== weekKey) { weekKey = key; watchMyWeek(d, !!was && was.planId === d.planId && was.weekId === d.weekId); }
       saveCache(); rerender(); flush();
     }, e => { A.err = H.err(e); rerender(); }));
-    unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); saveCache(); rerender(); }, () => { /* opcional */ }));
+    if (!noEx) unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); saveCache(); rerender(); }, () => { /* opcional */ }));
     flush();
   }
   function watchMyWeek(a, keepCache) {
-    unwatch(weekUnsub); const r = H.remote(), pre = a.planId + '_' + a.weekId + '_';
+    unwatch(meUnsub); const r = H.remote(), pre = a.planId + '_' + a.weekId + '_';
     if (!keepCache) { A.me.week = null; A.me.adj = {}; A.me.done = {}; }
-    weekUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
-    weekUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
-    weekUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
+    if (A.role !== 'coach') meUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
+    meUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
+    meUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
     // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
-    weekUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {
+    meUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {
       const done = {}; list.forEach(x => { if (x.id.indexOf(pre) === 0 && typeof x.sessionIdx === 'number') done[x.sessionIdx] = true; });
       A.me.done = done; saveCache(); rerender();
     }, () => { /* sin conexión */ }, { planId: a.planId, weekId: a.weekId }));
   }
   function saveCache() {
-    if (A.role !== 'athlete' || !A.me.asg) return;
+    if (!A.role || !A.me.asg) return;
     A.me.savedAt = Date.now();
     LS.set(cacheKey(), JSON.stringify({ asg: A.me.asg, week: A.me.week, adj: A.me.adj, done: A.me.done, names: A.names, stages: A.stages, savedAt: A.me.savedAt }));
   }
@@ -244,7 +247,7 @@
   const writePend = l => LS.set(pendKey(), JSON.stringify(l));
   let flushing = false;
   async function flush() {
-    if (flushing || A.role !== 'athlete' || !H) return; flushing = true;
+    if (flushing || !A.role || !H) return; flushing = true;
     try {
       let q = readPend();
       for (const p of q.slice()) {
@@ -260,7 +263,7 @@
     } finally { flushing = false; }
   }
   function onFinish(s) {
-    if (!s || !s.plan || A.role !== 'athlete') return;
+    if (!s || !s.plan || !A.role) return;
     const q = readPend(); if (!q.some(x => x.planId === s.plan.planId && x.weekId === s.plan.weekId && x.idx === s.plan.idx)) q.push(s.plan);
     writePend(q); flush();
   }
@@ -297,18 +300,34 @@
     let h = '<h1>Mi semana</h1>';
     if (A.err) h += window.HalterApp.errorBox(A.err, { retry: 'sync-now' });
     if (a === undefined) return h + '<div class="card sec"><p class="muted">Cargando…</p></div>';
+    const coach = A.role === 'coach';
+    if (!a && coach) return h + '<p class="muted">Elige una semana del plan activo para entrenarla tú también. Tus sesiones y tus marcas quedan solo en tu cuenta; no entran en las comparaciones del equipo.</p>' + selfPicker(null);
     if (!a) return h + window.HalterApp.empty('semana', 'Aún no tienes semana asignada', 'Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
     const w = m.week;
     if (!w) return h + '<div class="card sec"><p class="muted">Cargando la semana…</p></div>';
     h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
       (w.kind === 'transition' ? '<p class="muted">Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.</p>' : '') +
       (w.notes && w.notes.length && w.kind !== 'transition' ? '<ul class="plain">' + w.notes.map(n => `<li><small>${esc(n)}</small></li>`).join('') + '</ul>' : '') +
-      `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small></div>`;
+      (coach ? '' : `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small>`) + '</div>';
     h += (w.sessions || []).map((s, i) => sessionCard(w, i, s)).join('');
+    if (coach) return h + selfPicker(a);
     const st = advanceState(a, w, m.done, Date.now());
     h += `<div class="card sec"><span class="eyebrow">Cambiar de semana</span><p class="muted">${st.ok ? 'Cumpliste la última sesión y ya pasó el corte: puedes pasar a la semana siguiente.' : esc(st.why)}</p>` +
       `<div class="actions"><button class="btn ghost block" data-act="as-advance"${st.ok && !A.busy ? '' : ' disabled'}>${A.busy || 'Pasar a la semana siguiente'}</button></div></div>`;
     return h;
+  }
+  /* El entrenador elige su propia semana (sin corte ni requisitos: es su plan personal) */
+  function selfPicker(a) {
+    if (!A.active) return window.HalterApp.empty('plan', 'Todavía no hay un plan activo', 'Publica y activa uno en «Planes».');
+    if (!A.weeks.length) return '<div class="card sec"><p class="muted">Cargando las semanas del plan…</p></div>';
+    const sel = A.selfPick || (a && a.weekId) || '';
+    return `<div class="card sec"><span class="eyebrow">${a ? 'Cambiar de semana' : 'Mi semana'}</span><label class="lab" for="myWeek">${a ? 'Ir a otra semana' : 'Asignarme semana'}</label><select class="sel tall" id="myWeek" data-f="asx" data-as="selfweek">${weekOpts(sel)}</select>` +
+      `<div class="stack"><button class="btn${a ? ' ghost' : ''}" data-act="as-self"${A.busy ? ' disabled' : ''}>${A.busy || (a ? 'Ir a esta semana' : 'Asignarme')}</button></div></div>`;
+  }
+  function assignSelf() {
+    const wid = A.selfPick || (A.me.asg && A.me.asg.weekId) || (A.weeks[0] && A.weeks[0].id), w = A.weeks.find(x => x.id === wid);
+    if (!w || !A.active || A.role !== 'coach') return;
+    guard(() => H.remote().setAssignment(A.uid, { planId: A.active, weekId: w.id, week: w.week, stageId: w.stageId, weekEndsAt: cutoffFor(Date.now()), setBy: A.uid }), 'Estás en la semana ' + w.week);
   }
   function startSession(i) {
     const w = A.me.week, a = A.me.asg; if (!w || !a) return;
@@ -349,8 +368,8 @@
     adjUnsub.push(H.remote().watchDoc('adjustments/' + k, d => { A.selAdj = (d && d.pcts) || {}; if (!A.draft) A.draft = Object.assign({}, A.selAdj); rerender(); }, () => { A.selAdj = {}; }));
   }
   const memberName = uid => { const m = (H.members() || []).find(x => x.id === uid); return m ? m.name : uid; };
-  function weekOptions() {
-    const cur = A.asg[A.sel], sel = A.pick || (cur && cur.weekId) || '';
+  function weekOptions() { const cur = A.asg[A.sel]; return weekOpts(A.pick || (cur && cur.weekId) || ''); }
+  function weekOpts(sel) {
     let h = '', last = null;
     A.weeks.forEach(w => {
       if (w.stageId !== last) { if (last !== null) h += '</optgroup>'; h += `<optgroup label="${esc(stageName(w.stageId) || w.stageId)}">`; last = w.stageId; }
@@ -421,6 +440,7 @@
       case 'as-back': select(null); return true;
       case 'as-assign': assign(); return true;
       case 'as-start': startSession(+el.dataset.i); return true;
+      case 'as-self': assignSelf(); return true;
       case 'as-advance': advance(); return true;
       case 'rp-toggle': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': return !!root.HalterReport && root.HalterReport.onAct(act, el, reportCtx());
       case 'as-adj-save': {
