@@ -159,6 +159,7 @@
     setAssignment(uid, d) { return this.m.fs.setDoc(this._doc('assignments/' + uid), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
     advanceAssignment(uid, d) { return this.m.fs.updateDoc(this._doc('assignments/' + uid), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
     setCompletion(uid, id, d) { return this.m.fs.setDoc(this._doc('users/' + uid + '/completions/' + id), Object.assign({}, d, { completedAt: this.m.fs.serverTimestamp() })); }
+    deleteCompletion(uid, id) { return this.m.fs.deleteDoc(this._doc('users/' + uid + '/completions/' + id)); }
     setAdjust(id, pcts) { return this.m.fs.setDoc(this._doc('adjustments/' + id), { pcts: pcts, at: this.m.fs.serverTimestamp() }); }
     deleteAdjust(id) { return this.m.fs.deleteDoc(this._doc('adjustments/' + id)); }
     /* Rutinas especiales del entrenador para un atleta */
@@ -402,7 +403,8 @@
       nav: role === 'coach' ? [['equipo'], ['planual'], ['semana', 'Mi semana'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
       more: moreInfo, hoyHTML: () => (window.HalterComp ? window.HalterComp.nextCardHTML() : '') + (window.HalterAssign ? window.HalterAssign.todayHTML() : ''),
       accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
-      onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); }
+      onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); },
+      onDelete: s => { if (window.HalterAssign) window.HalterAssign.onDelete(s); }
     });
     if (role !== 'coach' && pendingSex()) sexSet(C.user.email, null);
     startSync(fresh);

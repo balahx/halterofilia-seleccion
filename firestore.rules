@@ -198,7 +198,7 @@ service cloud.firestore {
     }
 
     // Sesión cumplida: la crea el atleta al terminar una sesión del plan, con la hora del servidor, solo para
-    // la semana que tiene asignada. No se puede editar ni borrar.
+    // la semana que tiene asignada. No se puede editar. Desde 4.10.1 el atleta puede borrar la suya (cuando elimina esa sesión de su Historial).
     match /users/{uid}/completions/{id} {
       allow read: if signedIn() && ((request.auth.uid == uid && isMemberOf(uid)) || isCoach());
       allow create: if signedIn() && request.auth.uid == uid && isTrainee(uid)
@@ -211,7 +211,8 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/assignments/$(uid)).data.weekId == request.resource.data.weekId
         && request.resource.data.sessionIdx < weekOf(request.resource.data.planId, request.resource.data.weekId).sessions.size()
         && id == request.resource.data.planId + '_' + request.resource.data.weekId + '_' + string(request.resource.data.sessionIdx);
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn() && request.auth.uid == uid && isTrainee(uid);
     }
 
     // Ajuste de porcentajes (desde 90 %) de un atleta en una semana. Id: {uid}_{planId}_{weekId}.

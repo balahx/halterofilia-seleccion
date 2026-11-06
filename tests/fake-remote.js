@@ -25,6 +25,7 @@
     if (col === 'users' && ps[2] === 'completions') {
       const owner = u.uid === id;
       if (op === 'get' || op === 'list') return coach || (owner && member);
+      if (op === 'delete') return owner && trainee;   // desde 4.10.1 el atleta puede quitar su marca (al borrar la sesión del Historial)
       if (op !== 'create' || (prev && Object.keys(prev).length)) return false;   // solo se crea, nunca se reescribe
       const d = data || {}, a = s.docs['assignments/' + id], w = a && wkDoc(d.planId, d.weekId);
       return owner && trainee && keysOnly(d, ['planId', 'weekId', 'sessionIdx', 'completedAt']) && ['planId', 'weekId', 'sessionIdx', 'completedAt'].every(k => k in d)
@@ -198,6 +199,7 @@
     async setAssignment(uid, d) { mutate('create', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }
     async advanceAssignment(uid, d) { mutate('update', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }
     async setCompletion(uid, id, d) { window.__fake.completions.push(id); mutate('create', 'users/' + uid + '/completions/' + id, Object.assign({}, d, { completedAt: Date.now() })); }
+    async deleteCompletion(uid, id) { window.__fake.uncompleted = (window.__fake.uncompleted || []).concat(id); mutate('delete', 'users/' + uid + '/completions/' + id); }
     async setAdjust(id, pcts) { mutate('create', 'adjustments/' + id, { pcts, at: Date.now() }); }
     async setRoutine(id, d) { mutate('create', 'routines/' + id, Object.assign({}, d, { at: Date.now() })); inv('routines'); }
     async deleteRoutine(id) { mutate('delete', 'routines/' + id); inv('routines'); }

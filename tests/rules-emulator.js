@@ -68,6 +68,11 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
   await succeeds(ana.doc('users/ana/completions/p1_e1_1_0').set({ planId: 'p1', weekId: 'e1_1', sessionIdx: 0, completedAt: TS() }), 'registra una sesión de su semana asignada');
   await denied(ana.doc('users/ana/completions/p1_e1_1_0').set({ planId: 'p1', weekId: 'e1_1', sessionIdx: 0, completedAt: TS() }), 'no se reescribe una sesión ya cumplida');
   await denied(ana.doc('users/ana/completions/p1_e1_2_0').set({ planId: 'p1', weekId: 'e1_2', sessionIdx: 0, completedAt: TS() }), 'no registra sesiones de una semana que no tiene asignada');
+  await denied(beto.doc('users/ana/completions/p1_e1_1_0').delete(), 'otro atleta no borra mi sesión cumplida (4.10.1)');
+  await denied(coach.doc('users/ana/completions/p1_e1_1_0').delete(), 'tampoco el entrenador: la marca la quita su dueña al borrar la sesión del Historial (4.10.1)');
+  await denied(carla.doc('users/carla/completions/p1_e1_1_0').delete(), 'sin estar aprobada no se borra nada (4.10.1)');
+  await succeeds(ana.doc('users/ana/completions/p1_e1_1_0').delete(), 'la atleta quita su propia marca de cumplida al borrar la sesión del Historial (4.10.1)');
+  await succeeds(ana.doc('users/ana/completions/p1_e1_1_0').set({ planId: 'p1', weekId: 'e1_1', sessionIdx: 0, completedAt: TS() }), 'y puede volver a registrarla al repetir la sesión');
 
   console.log('3b. Pasar de semana exige todas las sesiones (S5), también con 7 sesiones (límite de lecturas de las reglas)');
   const adv = { weekId: 'e1_2', week: 2, stageId: 'e1', weekEndsAt: NOW + 604800000 - 86400000 + 10000, at: TS() };

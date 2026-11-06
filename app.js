@@ -1091,7 +1091,11 @@ document.addEventListener('click', e => {
     case 'range': ui.range = +t.dataset.v; render(); break;
     case 'hist-toggle': ui.openSess = ui.openSess === t.dataset.id ? null : t.dataset.id; render(); break;
     case 'hist-more': ui.histN += 10; render(); break;
-    case 'del-sess': if (askConfirm('ds' + t.dataset.id)) { S.sessions = S.sessions.filter(x => x.id !== t.dataset.id); ui.openSess = null; save(); render(); } break;
+    case 'del-sess': if (askConfirm('ds' + t.dataset.id)) {
+      const gone = S.sessions.find(x => x.id === t.dataset.id);
+      S.sessions = S.sessions.filter(x => x.id !== t.dataset.id); ui.openSess = null; save(); render();
+      if (gone && APP.onDelete) { try { APP.onDelete(gone); } catch (e) { /* no debe frenar el borrado */ } }
+    } break;
     case 'plan-add': {
       const di = +t.dataset.d;
       openSheet('pick', { cb: id => { S.plan.days[di].items.push({ exId: id, sets: 3, reps: '3', pct: 70, kg: 0, rest: 0, pause: 0 }); save(); render(); } }); break;
@@ -1173,12 +1177,13 @@ document.addEventListener('change', e => {
 let started = false, tickId = null;
 /* opts: { storageKey, name, demo, tabs:[{id,label,icon,render}], accountHTML(), onAct(act, el), onSave() }
    onFinish(sesión): se llama al terminar una sesión (la fase 4 registra las sesiones del plan).
+   onDelete(sesión): se llama al borrar una sesión del Historial (quita la marca «Cumplida» de la sesión del plan).
    Lo llama cloud.js cuando la persona ya inició sesión y tiene acceso. */
 function start(opts) {
   opts = opts || {};
   applyZoom();
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, hoyHTML: opts.hoyHTML || null, cloud: !!opts.cloud };
+  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);

@@ -327,6 +327,19 @@
     writePend(q); flush();
   }
 
+  /* Al borrar una sesión del Historial se quita su marca «Cumplida» (Semana y Hoy). Se conserva si otra sesión terminada del
+     Historial cubre la misma sesión del plan (por ejemplo, si se repitió). Si no hay conexión, la baja queda en cola del propio Firestore. */
+  function onDelete(s) {
+    if (!s || !s.plan || !A.role || !H) return;
+    const p = s.plan, id = p.planId + '_' + p.weekId + '_' + p.idx, S = window.HalterApp.state();
+    if ((S.sessions || []).some(x => x.endedAt && x.plan && x.plan.planId === p.planId && x.plan.weekId === p.weekId && x.plan.idx === p.idx)) return;
+    const q = readPend(), wasPending = q.some(x => x.planId === p.planId && x.weekId === p.weekId && x.idx === p.idx);
+    if (wasPending) writePend(q.filter(x => !(x.planId === p.planId && x.weekId === p.weekId && x.idx === p.idx)));   // aún sin enviar: ya no se enviará
+    const a = A.me.asg; if (a && a.planId === p.planId && a.weekId === p.weekId && A.me.done[p.idx]) { delete A.me.done[p.idx]; saveCache(); rerender(); }
+    if (wasPending) return;
+    H.remote().deleteCompletion(A.uid, id).catch(e => { H.toast('No se pudo quitar la marca «Cumplida»: ' + H.err(e)); });
+  }
+
   /* ---------- Atleta ---------- */
   function sessionCard(w, si, ses) {
     const S = window.HalterApp.state(), done = !!A.me.done[si], adj = A.me.adj, rounding = (S.profile && S.profile.rounding) || 1, lang = (S.profile && S.profile.exLang) || 'en';
@@ -647,7 +660,7 @@
   }
 
   root.HalterAssign = {
-    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, onFinish: onFinish, flush: flush,
+    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, onFinish: onFinish, onDelete: onDelete, flush: flush,
     selected: () => A.sel, detail: detailHTML, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);
