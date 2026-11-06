@@ -246,6 +246,13 @@
   function start(uid) {
     if (R.uid === uid && unsub) return;
     reset(); R.uid = uid; R.open = true;
+    if (root.HalterReads) {
+      /* Con reads.js: la primera vez se baja el historial del atleta y queda guardado en este dispositivo; después solo se leen
+         los registros escritos desde la última vez (antes se descargaban todos en cada apertura y quedaban escuchándose). */
+      let live = true; unsub = () => { live = false; };
+      root.HalterReads.records(H.remote(), uid).then(res => { if (!live) return; R.recs = parseRecords(res.list); R.err = ''; H.render(); }, e => { if (!live) return; R.err = H.err(e); R.recs = null; H.render(); });
+      return;
+    }
     unsub = H.remote().watchCol('users/' + uid + '/records', list => { R.recs = parseRecords(list); R.err = ''; H.render(); }, e => { R.err = H.err(e); R.recs = null; H.render(); });
   }
   function needAdj(uid, planId, weekId) {

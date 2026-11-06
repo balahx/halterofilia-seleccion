@@ -10,6 +10,11 @@
 (function () {
   'use strict';
   const FB_VERSION = '13.1.0'; // misma versión del SDK que usa la app de finanzas
+  /* Lecturas económicas (reads.js). Todo es opcional: sin ese archivo la app lee como antes. */
+  const RD = () => window.HalterReads || null;
+  const inv = name => { try { const r = RD(); if (r) r.invalidate(name); } catch (e) { /* sin caché */ } };
+  const invPlan = id => { try { const r = RD(); if (r) r.invalidatePlan(id); } catch (e) { /* sin caché */ } };
+  const cnt = (path, n) => { try { const r = RD(); if (r) r.count(r.labelOf(path), n); } catch (e) { /* solo estadística */ } };
   const $ = (s, r) => (r || document).querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = m => window.HalterApp.toast(m);
@@ -52,7 +57,10 @@
       this.m = { app, auth, fs };
       this.app = app.initializeApp(this.config);
       this.auth = auth.getAuth(this.app);
-      this.db = fs.getFirestore(this.app);
+      /* Caché local persistente (varias pestañas): al reabrir la app, Firestore reutiliza lo ya descargado en vez de volver a pedirlo.
+         Si el navegador no la admite (navegación privada, almacenamiento bloqueado) se usa el modo anterior, sin caché entre aperturas. */
+      try { this.db = fs.initializeFirestore(this.app, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+      catch (e) { this.db = fs.getFirestore(this.app); }
     }
     onAuth(cb) { return this.m.auth.onAuthStateChanged(this.auth, u => cb(u ? { uid: u.uid, email: u.email, verified: !!u.emailVerified } : null)); }
     signIn(email, password) { return this.m.auth.signInWithEmailAndPassword(this.auth, email, password); }
@@ -61,16 +69,27 @@
     /* Verificación del correo (S2): se envía el enlace; luego se vuelve a leer la cuenta y a renovar el token para que las reglas vean email_verified */
     sendVerification() { return this.m.auth.sendEmailVerification(this.auth.currentUser); }
     async refreshUser() { const u = this.auth.currentUser; await u.reload(); if (u.emailVerified) await u.getIdToken(true); return !!u.emailVerified; }
-    signOut() { return this.m.auth.signOut(this.auth); }
+    signOut() { const r = RD(); if (r) r.clear(); return this.m.auth.signOut(this.auth); }   // lo guardado en el dispositivo (plan, registros de atletas) no queda para la cuenta siguiente
     _doc(path) { return this.m.fs.doc(this.db, ...path.split('/')); }
     _plain(d) { // Timestamp → milisegundos
       const o = {};
       Object.keys(d).forEach(k => { const v = d[k]; o[k] = v && typeof v.toMillis === 'function' ? v.toMillis() : v; });
       return o;
     }
+    /* Estadística de lecturas (solo cuenta; no cambia ningún dato). Primera respuesta del servidor = todos los documentos; después, solo los que cambian. */
+    _tally(path, snap, st) {
+      try {
+        if (snap.metadata.fromCache) return;
+        let n;
+        if (typeof snap.docChanges === 'function') n = st.first ? Math.max(1, snap.size) : snap.docChanges().length;
+        else { const s = JSON.stringify(snap.exists() ? snap.data() : null); n = (st.first || s !== st.last) ? 1 : 0; st.last = s; }
+        st.first = false; cnt(path, n);
+      } catch (e) { /* solo estadística */ }
+    }
     watchDoc(path, cb, onErr) {
+      const st = { first: true };
       return this.m.fs.onSnapshot(this._doc(path), { includeMetadataChanges: true },
-        snap => cb(snap.exists() ? this._plain(snap.data()) : null, { fromCache: snap.metadata.fromCache }), onErr);
+        snap => { this._tally(path, snap, st); cb(snap.exists() ? this._plain(snap.data()) : null, { fromCache: snap.metadata.fromCache }); }, onErr);
     }
     /* Colección completa o, con `filters` ({ campo: valor }), solo los documentos que cumplen todas las igualdades
        (así se leen pocos documentos: p. ej. las sesiones cumplidas de una semana y no las de todo el año) */
@@ -80,11 +99,13 @@
     }
     async getCol(path, filters) {
       const snap = await this.m.fs.getDocs(this._col(path, filters));
+      cnt(path, Math.max(1, snap.size));
       return snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data())));
     }
     watchCol(path, cb, onErr, filters) {
+      const st = { first: true };
       return this.m.fs.onSnapshot(this._col(path, filters), { includeMetadataChanges: true },
-        snap => cb(snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data()))), { fromCache: snap.metadata.fromCache }), onErr);
+        snap => { this._tally(path, snap, st); cb(snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data()))), { fromCache: snap.metadata.fromCache }); }, onErr);
     }
     createRequest(uid, name, email) { return this.m.fs.setDoc(this._doc('requests/' + uid), { name, email, status: 'pending', createdAt: this.m.fs.serverTimestamp() }); }
     deleteRequest(uid) { return this.m.fs.deleteDoc(this._doc('requests/' + uid)); }
@@ -93,15 +114,23 @@
       const { writeBatch, serverTimestamp } = this.m.fs, b = writeBatch(this.db);
       b.set(this._doc('members/' + uid), { name, email, approvedAt: serverTimestamp() });
       b.delete(this._doc('requests/' + uid));
-      return b.commit();
+      return b.commit().then(r => { inv('members'); return r; });
     }
-    removeMember(uid) { return this.m.fs.deleteDoc(this._doc('members/' + uid)); }
+    removeMember(uid) { return this.m.fs.deleteDoc(this._doc('members/' + uid)).then(r => { inv('members'); return r; }); }
     /* Datos propios (fase 2): users/{uid}/records. Solo se piden los registros que cambiaron desde `sinceMs` (hora del servidor). */
     watchRecords(uid, sinceMs, cb, onErr) {
       const fs = this.m.fs;
       const q = fs.query(fs.collection(this.db, 'users', uid, 'records'), fs.where('at', '>=', fs.Timestamp.fromMillis(sinceMs || 0)));
+      const st = { first: true };
       return fs.onSnapshot(q, { includeMetadataChanges: true },
-        snap => cb(snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data()))), { fromCache: snap.metadata.fromCache }), onErr);
+        snap => { this._tally('users/' + uid + '/records', snap, st); cb(snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data()))), { fromCache: snap.metadata.fromCache }); }, onErr);
+    }
+    /* Registros de un atleta escritos desde `sinceMs` (hora del servidor), una sola vez. Lo usa el informe del entrenador (reads.js) */
+    async getRecordsSince(uid, sinceMs) {
+      const fs = this.m.fs, path = 'users/' + uid + '/records';
+      const snap = await fs.getDocs(fs.query(fs.collection(this.db, 'users', uid, 'records'), fs.where('at', '>=', fs.Timestamp.fromMillis(sinceMs || 0))));
+      cnt(path, Math.max(1, snap.size));
+      return snap.docs.map(d => Object.assign({ id: d.id }, this._plain(d.data())));
     }
     setRecord(uid, key, data) { return this.m.fs.setDoc(this._doc('users/' + uid + '/records/' + key), Object.assign({}, data, { at: this.m.fs.serverTimestamp() })); }
     /* Plan anual (fase 3). Los documentos del plan se escriben primero y la ficha del plan al final,
@@ -121,6 +150,7 @@
       p.exercises.forEach(x => ops.push({ ref: this._doc('exercises/' + x.id), data: x.data, merge: true }));
       await this._commit(ops);
       await this._commit([{ ref: this._doc(base), data: Object.assign({}, p.meta, { createdAt: this.m.fs.serverTimestamp() }) }]);
+      invPlan(p.planId); inv('plans');   // el plan nuevo/actualizado se vuelve a bajar una vez (reads.js)
     }
     setBackupStamp(counts, reads) { return this.m.fs.setDoc(this._doc('config/backup'), { at: this.m.fs.serverTimestamp(), by: this.auth.currentUser.uid, counts: counts || {}, reads: reads || 0 }); }
     setActivePlan(id) { return this.m.fs.setDoc(this._doc('config/plan'), { activePlanId: id, at: this.m.fs.serverTimestamp() }); }
@@ -132,14 +162,15 @@
     setAdjust(id, pcts) { return this.m.fs.setDoc(this._doc('adjustments/' + id), { pcts: pcts, at: this.m.fs.serverTimestamp() }); }
     deleteAdjust(id) { return this.m.fs.deleteDoc(this._doc('adjustments/' + id)); }
     /* Rutinas especiales del entrenador para un atleta */
-    setRoutine(id, d) { return this.m.fs.setDoc(this._doc('routines/' + id), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
-    deleteRoutine(id) { return this.m.fs.deleteDoc(this._doc('routines/' + id)); }
+    setRoutine(id, d) { return this.m.fs.setDoc(this._doc('routines/' + id), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })).then(r => { inv('routines'); return r; }); }
+    deleteRoutine(id) { return this.m.fs.deleteDoc(this._doc('routines/' + id)).then(r => { inv('routines'); return r; }); }
     async deletePlan(id, wasActive) {
       const { getDocs, collection } = this.m.fs, ops = [];
       for (const sub of ['weeks', 'stages']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
       if (wasActive) ops.push({ ref: this._doc('config/plan'), del: true });
       ops.push({ ref: this._doc('plans/' + id), del: true });
       await this._commit(ops);
+      invPlan(id); inv('plans');
     }
   }
 
@@ -288,12 +319,19 @@
       C.requests = list; C.colReady = true; window.HalterApp.render();
       if (grew) toast('Nueva solicitud de acceso en «Equipo»');
     }, e => { C.err = dataErr(e); }));
-    C.unsub.push(r.watchCol('members', list => { C.members = list; window.HalterApp.render(); }, e => { C.err = dataErr(e); }));
+    const RDm = RD();   // con reads.js: miembros, planes y catálogo se leen una vez y se reutilizan (se renuevan al cambiar algo desde la app o pasados 10 min)
+    if (RDm) C.unsub.push(RDm.feed('members', { ttl: 10 * 60000, fetch: () => r.getCol('members'), cb: list => { C.members = list; window.HalterApp.render(); }, err: e => { C.err = dataErr(e); } }));
+    else C.unsub.push(r.watchCol('members', list => { C.members = list; window.HalterApp.render(); }, e => { C.err = dataErr(e); }));
     if (window.HalterPlan) {
       const HP = window.HalterPlan;
-      C.unsub.push(r.watchCol('plans', list => { HP.setPlans(list); window.HalterApp.render(); }, e => { HP.state.err = dataErr(e); HP.setPlans([]); window.HalterApp.render(); }));
-      C.unsub.push(r.watchCol('exercises', list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
-      C.unsub.push(r.watchDoc('config/plan', d => { HP.setActive(d); window.HalterApp.render(); }, () => { /* sin plan activo */ }));
+      if (RDm) {
+        C.unsub.push(RDm.feed('plans', { ttl: 10 * 60000, fetch: () => r.getCol('plans'), cb: list => { HP.setPlans(list); window.HalterApp.render(); }, err: e => { HP.state.err = dataErr(e); HP.setPlans([]); window.HalterApp.render(); } }));
+        C.unsub.push(RDm.feedCatalog(r, () => HP.state.active, list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
+      } else {
+        C.unsub.push(r.watchCol('plans', list => { HP.setPlans(list); window.HalterApp.render(); }, e => { HP.state.err = dataErr(e); HP.setPlans([]); window.HalterApp.render(); }));
+        C.unsub.push(r.watchCol('exercises', list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
+      }
+      C.unsub.push(r.watchDoc('config/plan', d => { HP.setActive(d); if (RDm) RDm.poke('catalog'); window.HalterApp.render(); }, () => { /* sin plan activo */ }));
     }
   }
   function decide() { // devuelve { role, definitive } o { phase }

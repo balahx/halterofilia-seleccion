@@ -222,16 +222,33 @@
   function startCoach(uid) {
     reset(); A.uid = uid; A.role = 'coach'; const r = H.remote();
     unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
-    unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); rerender(); }, () => { /* opcional */ }));
+    /* Catálogo: con reads.js se baja una vez por versión del plan y se reutiliza (cloud.js lo pide igual y comparte la misma copia) */
+    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => A.active, list => { setNames(list || []); rerender(); }, () => { /* opcional */ })
+      : r.watchCol('exercises', list => { setNames(list); rerender(); }, () => { /* opcional */ }));
     unsub.push(r.watchDoc('config/plan', d => { watchPlan(d ? d.activePlanId : null); }, () => { /* sin plan activo */ }));
-    unsub.push(r.watchCol('routines', list => { A.routines = list.slice().sort((a, b) => (tsMs(b.at) - tsMs(a.at))); rerender(); }, e => { A.err = H.err(e); rerender(); }));
+    const onRoutines = list => { A.routines = list.slice().sort((a, b) => (tsMs(b.at) - tsMs(a.at))); rerender(); }, onRoutinesErr = e => { A.err = H.err(e); rerender(); };
+    unsub.push(root.HalterReads ? root.HalterReads.feed('routines', { ttl: 10 * 60000, fetch: () => r.getCol('routines'), cb: onRoutines, err: onRoutinesErr })   // se renueva al guardar o quitar una rutina
+      : r.watchCol('routines', onRoutines, onRoutinesErr));
     selfStart(uid, false, true);   // el entrenador también entrena el plan: su propia semana
   }
+  const setNames = list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); };
   function watchPlan(planId) {
     if (planId === A.active && weekUnsub.length) return;
     unwatch(weekUnsub); A.active = planId; A.weeks = []; A.weeksOk = false; A.stages = [];
+    if (root.HalterReads) root.HalterReads.poke('catalog');   // el catálogo se versiona con el plan activo
     if (!planId) { rerender(); return; }
     const r = H.remote();
+    if (root.HalterReads) {
+      /* Semanas y etapas del año: una copia local por versión del plan; por abrir la app solo se lee la ficha del plan (1 documento) */
+      weekUnsub.push(root.HalterReads.feedPlan(r, planId, (parts, m) => {
+        if (parts) {
+          A.stages = (parts.stages || []).slice().sort((a, b) => a.order - b.order);
+          A.weeks = (parts.weeks || []).slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week);
+        } else { A.stages = []; A.weeks = []; }
+        A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */; rerender();
+      }, () => { /* sin permiso o sin conexión */ }));
+      return;
+    }
     weekUnsub.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { A.weeks = list.slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week); A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */; rerender(); }, () => { /* sin permiso o sin conexión */ }));
     weekUnsub.push(r.watchCol('plans/' + planId + '/stages', list => { A.stages = list.slice().sort((a, b) => a.order - b.order); rerender(); }, () => { /* idem */ }));
   }
@@ -249,21 +266,28 @@
       if (!d) { unwatch(meUnsub); weekKey = ''; A.me.week = null; A.me.adj = {}; A.me.done = {}; rerender(); return; }
       // se escucha la semana una vez por sesión de la app, aunque la asignación sea igual a la guardada en el dispositivo
       const key = d.planId + '|' + d.weekId;
-      if (key !== weekKey) { weekKey = key; watchMyWeek(d, !!was && was.planId === d.planId && was.weekId === d.weekId); }
+      if (key !== weekKey) { weekKey = key; watchMyWeek(d, !!was && was.planId === d.planId && was.weekId === d.weekId); if (root.HalterReads) root.HalterReads.poke('catalog'); }
       saveCache(); rerender(); flush();
     }, e => { A.err = H.err(e); rerender(); }));
     if (!noEx) unsub.push(r.watchCol('routines', list => { A.me.routines = list.slice().sort((a, b) => (tsMs(b.at) - tsMs(a.at))); saveCache(); rerender(); }, () => { /* sin conexión: quedan las guardadas */ }, { uid: uid }));
-    if (!noEx) unsub.push(r.watchCol('exercises', list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); saveCache(); rerender(); }, () => { /* opcional */ }));
+    if (!noEx) unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => (A.me.asg && A.me.asg.planId) || null, list => { setNames(list || []); saveCache(); rerender(); }, () => { /* opcional */ })
+      : r.watchCol('exercises', list => { setNames(list); saveCache(); rerender(); }, () => { /* opcional */ }));
     flush();
   }
   function watchMyWeek(a, keepCache) {
     unwatch(meUnsub); const r = H.remote(), pre = a.planId + '_' + a.weekId + '_';
     if (!keepCache) { A.me.week = null; A.me.adj = {}; A.me.done = {}; }
-    if (A.role !== 'coach') meUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
-    meUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, (d, m) => {
+    /* Etapas y semana del plan: con reads.js salen de la copia local si la versión del plan no cambió (1 lectura de la ficha del plan en vez de las etapas + la semana) */
+    const RDw = root.HalterReads;
+    const onStages = list => { A.stages = list || []; saveCache(); rerender(); };
+    const onWeek = (d, m) => {
       A.me.weekErr = ''; A.me.weekMissing = !d && !(m && m.fromCache);   // el servidor confirma que esa semana no existe en el plan
       if (d) { A.me.week = d; saveCache(); } else if (A.me.weekMissing) A.me.week = null; rerender();
-    }, e => { A.me.weekErr = H.err(e); rerender(); }));
+    };
+    const onWeekErr = e => { A.me.weekErr = H.err(e); rerender(); };
+    if (A.role !== 'coach') meUnsub.push(RDw ? RDw.feedStages(r, a.planId, onStages, () => { /* sin conexión: queda la copia guardada */ })
+      : r.watchCol('plans/' + a.planId + '/stages', onStages, () => { /* sin conexión: queda la copia guardada */ }));
+    meUnsub.push(RDw ? RDw.feedWeek(r, a.planId, a.weekId, onWeek, onWeekErr) : r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, onWeek, onWeekErr));
     meUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
     // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
     meUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {

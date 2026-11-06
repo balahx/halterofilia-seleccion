@@ -8,6 +8,7 @@
   const watchers = [];
   const authCbs = [];
   const err = (code, message) => Object.assign(new Error(message || code), { code });
+  const inv = n => { if (window.HalterReads) window.HalterReads.invalidate(n); };   // como cloud.js: las escrituras invalidan lo guardado (reads.js)
   const offline = () => L.getItem('fake.offline') === '1';
   const curUser = () => { const u = L.getItem('fake.cur'); return u ? JSON.parse(u) : null; };
   const isCoach = (s, uid) => !!(s.docs['config/team'] && s.docs['config/team'].coachUid === uid);
@@ -150,7 +151,7 @@
     async sendVerification() { const u = curUser(); if (L.getItem('fake.sendfail') === '1') throw err('auth/too-many-requests'); window.__fake.verifs.push(u.email); }
     async refreshUser() { const u = curUser(), x = rd().users[u.email]; if (x && x.verified !== false) { setUser(Object.assign({}, u, { verified: true }), true); return true; } return false; }
     async resetPassword(email) { window.__fake.resets.push(email); }
-    async signOut() { setUser(null); }
+    async signOut() { if (window.HalterReads) window.HalterReads.clear(); setUser(null); }
     watchDoc(path, cb, onErr) { const w = { path, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
     async getCol(path, filters) {
       if (offline()) throw err('unavailable'); if (!allowed('list', path + '/x', null)) throw err('permission-denied');
@@ -158,6 +159,11 @@
       return Object.keys(s.docs).filter(k => k.startsWith(path + '/') && k.split('/').length === path.split('/').length + 1 && matches(s.docs[k], filters)).map(k => Object.assign({ id: k.split('/').pop() }, s.docs[k]));
     }
     watchCol(path, cb, onErr, filters) { const w = { path, col: true, cb, err: onErr, filters }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
+    async getRecordsSince(uid, since) {
+      if (offline()) throw err('unavailable'); if (!allowed('list', 'users/' + uid + '/records/x', null)) throw err('permission-denied');
+      const s = rd(), pre = 'users/' + uid + '/records/';
+      return Object.keys(s.docs).filter(k => k.startsWith(pre) && (s.docs[k].at || 0) >= (since || 0)).map(k => Object.assign({ id: k.slice(pre.length) }, s.docs[k]));
+    }
     watchRecords(uid, since, cb, onErr) { const w = { rec: true, uid, since: since || 0, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
     async setRecord(uid, key, data) {
       window.__fake.writes.push(key);
@@ -167,14 +173,15 @@
     async createRequest(uid, name, email) { mutate('create', 'requests/' + uid, { name, email, status: 'pending', createdAt: Date.now() }); }
     async deleteRequest(uid) { mutate('delete', 'requests/' + uid); }
     async rejectRequest(uid) { mutate('update', 'requests/' + uid, { status: 'rejected' }); }
-    async approve(uid, name, email) { mutate('create', 'members/' + uid, { name, email, approvedAt: Date.now() }); mutate('delete', 'requests/' + uid); }
-    async removeMember(uid) { mutate('delete', 'members/' + uid); }
+    async approve(uid, name, email) { mutate('create', 'members/' + uid, { name, email, approvedAt: Date.now() }); mutate('delete', 'requests/' + uid); inv('members'); }
+    async removeMember(uid) { mutate('delete', 'members/' + uid); inv('members'); }
     async publishPlan(p) {
       const base = 'plans/' + p.planId;
       p.stages.forEach(x => mutate('create', base + '/stages/' + x.id, x.data));
       p.weeks.forEach(x => mutate('create', base + '/weeks/' + x.id, x.data));
       p.exercises.forEach(x => mutate('create', 'exercises/' + x.id, x.data));
       mutate('create', base, Object.assign({}, p.meta, { createdAt: Date.now() }));
+      if (window.HalterReads) { window.HalterReads.invalidatePlan(p.planId); inv('plans'); }
     }
     async setBackupStamp(counts, reads) { mutate('create', 'config/backup', { at: Date.now(), by: curUser().uid, counts: counts || {}, reads: reads || 0 }); }
     async setActivePlan(id) { mutate('create', 'config/plan', { activePlanId: id, at: Date.now() }); }
@@ -183,13 +190,14 @@
     async advanceAssignment(uid, d) { mutate('update', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }
     async setCompletion(uid, id, d) { window.__fake.completions.push(id); mutate('create', 'users/' + uid + '/completions/' + id, Object.assign({}, d, { completedAt: Date.now() })); }
     async setAdjust(id, pcts) { mutate('create', 'adjustments/' + id, { pcts, at: Date.now() }); }
-    async setRoutine(id, d) { mutate('create', 'routines/' + id, Object.assign({}, d, { at: Date.now() })); }
-    async deleteRoutine(id) { mutate('delete', 'routines/' + id); }
+    async setRoutine(id, d) { mutate('create', 'routines/' + id, Object.assign({}, d, { at: Date.now() })); inv('routines'); }
+    async deleteRoutine(id) { mutate('delete', 'routines/' + id); inv('routines'); }
     async deleteAdjust(id) { mutate('delete', 'adjustments/' + id); }
     async deletePlan(id, wasActive) {
       Object.keys(rd().docs).filter(k => k.startsWith('plans/' + id + '/')).forEach(k => mutate('delete', k));
       if (wasActive) mutate('delete', 'config/plan');
       mutate('delete', 'plans/' + id);
+      if (window.HalterReads) { window.HalterReads.invalidatePlan(id); inv('plans'); }
     }
   }
   window.HALTER_REMOTE_FACTORY = () => new FakeRemote();
@@ -198,7 +206,13 @@
     srv: rd,
     load(srv) { wr(srv); later(emit); }, // reemplaza el estado del servidor (para simular otro dispositivo que ve lo mismo)
     uid: email => rd().users[email] && rd().users[email].uid,
-    admin(path, data) { const s = rd(); if (data === null) delete s.docs[path]; else s.docs[path] = data; wr(s); later(emit); }, // salta las reglas (como la consola de Firebase)
+    admin(path, data) {
+      const s = rd(); if (data === null) delete s.docs[path]; else s.docs[path] = data;
+      /* (reads.js) cambiar el plan equivale a publicarlo: sube la versión de la ficha del plan e invalida lo guardado, como hace cloud.js al publicar */
+      const m = /^plans\/([^/]+)\//.exec(path); if (m && s.docs['plans/' + m[1]]) s.docs['plans/' + m[1]] = Object.assign({}, s.docs['plans/' + m[1]], { createdAt: Math.max(Date.now(), (s.docs['plans/' + m[1]].createdAt || 0) + 1) });
+      wr(s); later(emit);
+      const R = window.HalterReads; if (R) { if (m) R.invalidatePlan(m[1]); if (/^exercises\//.test(path)) R.invalidate('catalog'); if (/^members\//.test(path)) R.invalidate('members'); if (/^routines\//.test(path)) R.invalidate('routines'); if (/^plans\/[^/]+$/.test(path)) R.invalidate('plans'); }
+    }, // salta las reglas (como la consola de Firebase)
     verify(email) { const s = rd(); if (s.users[email]) { s.users[email].verified = true; wr(s); } },   // simula abrir el enlace del correo
     setOffline(v) { L.setItem('fake.offline', v ? '1' : '0'); later(emit); },
     sdkFail(v) { L.setItem('fake.sdkfail', v ? '1' : '0'); }
