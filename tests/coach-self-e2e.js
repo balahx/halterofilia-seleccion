@@ -74,6 +74,14 @@ const WEEKS = {
   await page.keyboard.press('Escape'); await tab('semana');
   ok(/Cumplida/.test(await txt('#view')), 'su semana marca la sesión como cumplida');
 
+  console.log('2b. Si la semana asignada ya no existe en el plan, lo dice (en vez de «Cargando» para siempre)');
+  await page.evaluate(() => __fake.admin('plans/p1/weeks/e1_1', null));
+  await page.waitForFunction(() => /Semana no encontrada/.test(document.querySelector('#view').innerText), null, { timeout: 5000 }).catch(() => {});
+  ok(/Semana no encontrada/.test(await txt('#view')) && await page.locator('#myWeek').count() === 1, 'avisa que la semana no existe y deja elegir otra');
+  await page.evaluate(W => __fake.admin('plans/p1/weeks/e1_1', W.e1_1), WEEKS);
+  await page.waitForSelector('[data-act="as-start"]', { timeout: 5000 });
+  ok(true, 'al volver la semana, se muestra con normalidad');
+
   console.log('3. Indicadores y perfil propios');
   await tab('mas');
   ok(await page.locator('.mrow[data-tab="prog"]').count() === 1 && await page.locator('.mrow[data-tab="max"]').count() === 1, 'desde «Más» llega a Progreso y Máximos');

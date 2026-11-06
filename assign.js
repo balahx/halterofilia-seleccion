@@ -228,7 +228,10 @@
     unwatch(meUnsub); const r = H.remote(), pre = a.planId + '_' + a.weekId + '_';
     if (!keepCache) { A.me.week = null; A.me.adj = {}; A.me.done = {}; }
     if (A.role !== 'coach') meUnsub.push(r.watchCol('plans/' + a.planId + '/stages', list => { A.stages = list; saveCache(); rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
-    meUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, d => { if (d) { A.me.week = d; saveCache(); } rerender(); }, () => { /* sin conexión: queda la copia guardada */ }));
+    meUnsub.push(r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, (d, m) => {
+      A.me.weekErr = ''; A.me.weekMissing = !d && !(m && m.fromCache);   // el servidor confirma que esa semana no existe en el plan
+      if (d) { A.me.week = d; saveCache(); } else if (A.me.weekMissing) A.me.week = null; rerender();
+    }, e => { A.me.weekErr = H.err(e); rerender(); }));
     meUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
     // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
     meUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {
@@ -304,6 +307,8 @@
     if (!a && coach) return h + '<p class="muted">Elige una semana del plan activo para entrenarla tú también. Tus sesiones y tus marcas quedan solo en tu cuenta; no entran en las comparaciones del equipo.</p>' + selfPicker(null);
     if (!a) return h + window.HalterApp.empty('semana', 'Aún no tienes semana asignada', 'Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
     const w = m.week;
+    if (!w && m.weekErr) return h + window.HalterApp.errorBox('No se pudo leer tu semana (' + m.weekErr + ').', { retry: 'sync-now' });
+    if (!w && m.weekMissing) return h + window.HalterApp.errorBox('La semana que tienes asignada ya no existe en el plan activo. ' + (A.role === 'coach' ? 'Elige otra semana más abajo.' : 'Pídele a tu entrenador que te la asigne de nuevo.'), { title: 'Semana no encontrada' }) + (A.role === 'coach' ? selfPicker(a) : '');
     if (!w) return h + '<div class="card sec"><p class="muted">Cargando la semana…</p></div>';
     h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
       (w.kind === 'transition' ? '<p class="muted">Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.</p>' : '') +
