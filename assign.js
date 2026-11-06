@@ -198,10 +198,10 @@
   }
   function watchPlan(planId) {
     if (planId === A.active && weekUnsub.length) return;
-    unwatch(weekUnsub); A.active = planId; A.weeks = []; A.stages = [];
+    unwatch(weekUnsub); A.active = planId; A.weeks = []; A.weeksOk = false; A.stages = [];
     if (!planId) { rerender(); return; }
     const r = H.remote();
-    weekUnsub.push(r.watchCol('plans/' + planId + '/weeks', list => { A.weeks = list.slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week); rerender(); }, () => { /* sin permiso o sin conexión */ }));
+    weekUnsub.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { A.weeks = list.slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week); A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */; rerender(); }, () => { /* sin permiso o sin conexión */ }));
     weekUnsub.push(r.watchCol('plans/' + planId + '/stages', list => { A.stages = list.slice().sort((a, b) => a.order - b.order); rerender(); }, () => { /* idem */ }));
   }
   const stageOrder = id => { const s = A.stages.find(x => x.id === id); return s ? s.order : 0; };
@@ -352,7 +352,10 @@
   }
 
   /* ---------- Entrenador ---------- */
-  const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; return 'Semana ' + a.week + (stageName(a.stageId) ? ' · ' + stageName(a.stageId) : ''); };
+  /* La semana asignada ya no existe en el plan activo (por ejemplo, se volvió a subir el plan): el atleta no puede ver su semana */
+  const isStale = (uid) => { const a = A.asg[uid]; return !!(a && A.weeksOk && A.active && a.planId === A.active && !A.weeks.some(w => w.id === a.weekId)); };
+  const staleList = (uids) => (uids || Object.keys(A.asg)).filter(isStale);
+  const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; return 'Semana ' + a.week + (stageName(a.stageId) ? ' · ' + stageName(a.stageId) : '') + (isStale(uid) ? ' · ya no existe en el plan' : ''); };
   function select(uid) {
     if (root.HalterReport) root.HalterReport.reset();
     unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.selDone = {}; A.selDoneKey = ''; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
@@ -463,6 +466,6 @@
 
   root.HalterAssign = {
     init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, onFinish: onFinish, flush: flush,
-    selected: () => A.sel, detail: detailHTML, summary: asgLine, onAct: onAct, state: A, pure: pure
+    selected: () => A.sel, detail: detailHTML, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);

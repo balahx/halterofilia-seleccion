@@ -419,9 +419,11 @@
     h += `<div class="card sec"><span class="eyebrow">Solicitudes pendientes (${pend.length})</span>`;
     h += pend.length ? pend.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-reject', p.id, 'Rechazar'))).join('') : window.HalterApp.empty('check', 'Sin solicitudes pendientes', '');
     h += '</div>';
-    h += `<div class="card sec"><span class="eyebrow">Atletas aprobados (${mem.length})</span>`;
     const HA = window.HalterAssign;
-    h += mem.length ? mem.map(p => `<div class="person"><div class="who-row">${av(p.name)}<div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}</small>${HA ? `<small class="asg">${esc(HA.summary(p.id))}</small>` : ''}</div></div><div class="acts">` +
+    const stale = HA ? HA.stale(mem.map(x => x.id)) : [];
+    if (stale.length) h += window.HalterApp.errorBox((stale.length === 1 ? 'Este atleta tiene' : 'Estos atletas tienen') + ' una semana asignada que ya no existe en el plan activo y no ven su semana: ' + stale.map(id => { const m = mem.find(x => x.id === id); return (m && m.name) || '(sin nombre)'; }).join(', ') + '. Asígnales una semana de nuevo con el botón «Semana».', { title: 'Semanas que ya no existen' });
+    h += `<div class="card sec"><span class="eyebrow">Atletas aprobados (${mem.length})</span>`;
+    h += mem.length ? mem.map(p => `<div class="person"><div class="who-row">${av(p.name)}<div><b>${esc(p.name || '(sin nombre)')}</b><small>${esc(p.email || '')}</small>${HA ? `<small class="asg${HA.isStale(p.id) ? ' warn' : ''}">${esc(HA.summary(p.id))}</small>` : ''}</div></div><div class="acts">` +
       (HA ? `<button class="btn sm" data-act="as-open" data-uid="${esc(p.id)}">Semana</button>` : '') + cf('eq-remove', p.id, 'Quitar acceso') + '</div></div>').join('') : window.HalterApp.empty('team', 'Aún no has aprobado atletas', 'Cuando alguien solicite acceso, aprueba su solicitud aquí arriba.');
     h += '</div>';
     if (rej.length) h += `<div class="card sec"><span class="eyebrow">Rechazadas (${rej.length})</span>` + rej.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-delreq', p.id, 'Borrar'))).join('') + '</div>';

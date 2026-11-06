@@ -82,6 +82,23 @@ const WEEKS = {
   await page.waitForSelector('[data-act="as-start"]', { timeout: 5000 });
   ok(true, 'al volver la semana, se muestra con normalidad');
 
+  console.log('2c. Equipo avisa qué atletas tienen una semana que ya no existe');
+  await page.evaluate(c => {
+    __fake.admin('members/u-ana', { name: 'Ana Pérez', email: 'ana@correo.cl', approvedAt: 1 }); __fake.admin('members/u-leo', { name: 'Leo Rojas', email: 'leo@correo.cl', approvedAt: 1 });
+    __fake.admin('assignments/u-ana', { planId: 'p1', weekId: 'e1_9', week: 9, stageId: 'e1', weekEndsAt: Date.now() + 1e9, setBy: c, at: 1 });
+    __fake.admin('assignments/u-leo', { planId: 'p1', weekId: 'e1_2', week: 2, stageId: 'e1', weekEndsAt: Date.now() + 1e9, setBy: c, at: 1 });
+  }, cuid);
+  await tab('equipo'); await page.waitForSelector('.person');
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/equipo-stale.png' });
+  const banner = await txt('#view .err, #view .errbox, #view [role=alert]').catch(() => '');
+  ok(/Semanas que ya no existen/.test(await txt('#view')) && /Ana Pérez/.test(banner || await txt('#view')), 'el aviso nombra a la atleta con una semana inexistente');
+  ok(!/Leo Rojas\.? Asígnales|existe en el plan activo y no ven su semana: [^.]*Leo/.test(await txt('#view')), 'no nombra al atleta cuya semana sí existe');
+  const rows = await page.locator('.person').evaluateAll(l => l.map(x => x.innerText.replace(/\s+/g, ' ')));
+  ok(rows.some(r => /Ana Pérez/.test(r) && /ya no existe en el plan/.test(r)) && rows.some(r => /Leo Rojas/.test(r) && !/ya no existe/.test(r)), 'la fila de Ana lo dice y la de Leo no');
+  await page.evaluate(() => __fake.admin('assignments/u-ana', { planId: 'p1', weekId: 'e1_1', week: 1, stageId: 'e1', weekEndsAt: Date.now() + 1e9, setBy: 'x', at: 1 }));
+  await page.waitForFunction(() => !/Semanas que ya no existen/.test(document.querySelector('#view').innerText), null, { timeout: 5000 });
+  ok(true, 'al reasignarle una semana válida, el aviso desaparece');
+
   console.log('3. Indicadores y perfil propios');
   await tab('mas');
   ok(await page.locator('.mrow[data-tab="prog"]').count() === 1 && await page.locator('.mrow[data-tab="max"]').count() === 1, 'desde «Más» llega a Progreso y Máximos');

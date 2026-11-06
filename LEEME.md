@@ -170,3 +170,4 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 - **Temporizador:** minimizado, se abre tocándolo en cualquier parte; solo el botón de pausa/reanudar conserva su función.
 - **Repeticiones planificadas:** en la sesión del plan (semana asignada o plan semanal libre) las repeticiones aparecen sombreadas como guía y el campo queda vacío: el atleta anota las que realmente hace (sin ellas no se puede marcar la serie; «Falló» también las pide).
 - Pruebas: `node tests/coach-self-e2e.js` y `node tests/phone-e2e.js`.
+- **Semanas que ya no existen:** si se vuelve a subir el plan y la semana asignada a un atleta desaparece, él ve «Semana no encontrada» y el entrenador ve en Equipo un aviso rojo con los nombres, y la fila del atleta marca «ya no existe en el plan». Se resuelve asignándole una semana de nuevo.
