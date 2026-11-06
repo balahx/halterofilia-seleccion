@@ -16,7 +16,7 @@ const ATH = [
 (async () => {
   await new Promise(r => srv.listen(0, r)); const URL = 'http://localhost:' + srv.address().port + '/';
   const br = await chromium.launch(), errors = [];
-  const ctx = await br.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
+  const ctx = await br.newContext({ viewport: { width: +(process.env.VW || 390), height: +(process.env.VH || 780) }, deviceScaleFactor: +(process.env.DSF || 2), serviceWorkers: 'block' });
   await ctx.addInitScript({ path: path.join(__dirname, 'fake-remote.js') });
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/fonts\.g|net::ERR/.test(m.text())) errors.push(m.text()); });

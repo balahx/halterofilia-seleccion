@@ -8,7 +8,7 @@ const srv = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split
   await new Promise(r => srv.listen(0, r)); const URL = 'http://localhost:' + srv.address().port + '/';
   const br = await chromium.launch();
   for (const scheme of ['light', 'dark']) {
-    const ctx = await br.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, serviceWorkers: 'block', colorScheme: scheme });
+    const ctx = await br.newContext({ viewport: { width: +(process.env.VW || 390), height: +(process.env.VH || 780) }, deviceScaleFactor: +(process.env.DSF || 2), serviceWorkers: 'block', colorScheme: scheme });
     await ctx.clock.install({ time: new Date('2026-11-04T10:00:00-03:00') });
     const page = await ctx.newPage(); await page.route(/fonts\.(googleapis|gstatic)\.com|cloud\.js/, r => r.abort());
     await page.goto(URL); await page.evaluate(() => { document.getElementById('gate').hidden = true; document.getElementById('appRoot').hidden = false; HalterApp.start({ demo: true, storageKey: 'halterofilia.v1.local' }); });

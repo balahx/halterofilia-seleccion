@@ -500,3 +500,53 @@ dialog .actions > .lnk { margin: 0 auto; }
 .person .who-row small { display: block; }
 .person small.asg { color: var(--gold-ink); font-weight: 600; }
 .av.sm { width: 38px; height: 38px; font-size: 16px; flex: none; }
+
+/* Estados de error */
+.errbox { display: flex; gap: 12px; align-items: flex-start; padding: 14px 14px; margin: 0 0 14px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line)); border-left: 4px solid var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--surface)); }
+.errbox > div { min-width: 0; }
+.errbox b { display: block; font: 700 19px/1.1 var(--font-display); color: var(--ink); margin-bottom: 2px; }
+.errbox p { margin: 0 0 8px; color: var(--ink); overflow-wrap: anywhere; }
+.errbox p:last-child { margin-bottom: 0; }
+.errbox-ic { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+.errbox-ic svg { width: 20px; height: 20px; }
+.netbar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 0 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-ink); }
+.netbar[hidden] { display: none; }
+.netbar > div { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.35; }
+.netbar b { display: block; font-size: 14.5px; }
+.netbar-ic svg { width: 22px; height: 22px; flex: none; }
+.netbar .lnk { color: var(--warn-ink); font-weight: 700; flex: none; }
+.gate .big-ico.is-warn { border-color: var(--bad); color: var(--bad); }
+
+/* ===== Escritorio (≥ 1024 px): barra lateral y contenido en columnas ===== */
+@media (min-width: 1024px) {
+  :root { --side: 248px; }
+  .wrap { max-width: none; margin: 0; }
+  .app { padding: 26px 56px calc(var(--barh, 0px) + 40px) calc(var(--side) + 56px); }
+  #appRoot::before { content: ""; position: fixed; inset: 0 auto 0 0; width: var(--side); background: var(--surface); border-right: 1px solid var(--line); z-index: 19; }
+  header.top { position: fixed; left: 0; top: 0; width: var(--side); padding: 22px 18px 10px 24px; z-index: 21; box-sizing: border-box; }
+  #bar { left: 0; right: 0; background: none; border: 0; pointer-events: none; }
+  #dock { margin-left: var(--side); pointer-events: auto; }
+  .dock { padding-left: 56px; padding-right: 56px; }
+  .dock-r1, .dock-r2 { max-width: 1080px; margin-left: 0; margin-right: 0; }
+  .dock.min > * { max-width: none; }
+  #nav { position: fixed; left: 0; top: 88px; bottom: 0; width: var(--side); box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin: 0; max-width: none; pointer-events: auto; z-index: 21; align-content: start; }
+  #nav button { flex-direction: row; justify-content: flex-start; gap: 14px; min-height: 48px; flex: none; padding: 0 14px; border-radius: 12px; font-size: 15px; }
+  #nav button span { max-width: none; }
+  #nav button:hover { background: var(--surface2); }
+  #nav button[aria-current="page"] { background: var(--surface2); }
+  #nav button[aria-current="page"]::before { top: 11px; bottom: 11px; left: 0; right: auto; width: 3px; height: auto; border-radius: 0 3px 3px 0; }
+  #view { max-width: 1080px; }
+  h1 { font-size: 46px; margin-bottom: 14px; }
+  .stats b { font-size: 32px; }
+  dialog { margin: auto; border-radius: 18px; max-width: 520px; }
+  .toast, #toast { left: calc(var(--side) + 28px); right: auto; transform: none; }
+
+  #view[data-tab="hoy"] { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 0 28px; align-items: start; }
+  #view[data-tab="hoy"] > :first-child { grid-column: 1 / -1; }
+  #view[data-tab="hoy"] > .hoy-plan { grid-row: span 3; }
+  #view[data-tab="semana"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; align-items: start; }
+  #view[data-tab="semana"] > h1, #view[data-tab="semana"] > .wk-card, #view[data-tab="semana"] > .errbox, #view[data-tab="semana"] > .empty, #view[data-tab="semana"] > .note, #view[data-tab="semana"] > :last-child { grid-column: 1 / -1; }
+  #view[data-tab="equipo"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; align-items: start; }
+  #view[data-tab="equipo"] > h1, #view[data-tab="equipo"] > .errbox, #view[data-tab="equipo"] > p, #view[data-tab="equipo"] > :last-child { grid-column: 1 / -1; }
+  #view[data-tab="mas"] { max-width: 640px; }
+}

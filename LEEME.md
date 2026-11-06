@@ -146,6 +146,8 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 - **Menú inferior:** atleta = Hoy · Semana · Progreso · Máximos · Más. Entrenador = Equipo · Marcas · Planes · Mi sesión · Más.
 - **«Más»** agrupa: plan semanal libre, historial de sesiones, mis ejercicios, calculadora de discos, ajustes, aviso de privacidad y cerrar sesión; el entrenador además ve «Mi entrenamiento» (progreso, máximos, plan libre), el respaldo del equipo y las solicitudes de acceso.
 - Prueba: `node tests/design-e2e.js` (con `SHOTS=carpeta` guarda capturas en claro y oscuro).
+- **Estados vacíos y de error:** `HalterApp.empty(...)` y `HalterApp.errorBox(mensaje, {retry})` son los componentes comunes. Una franja amarilla bajo la cabecera avisa cuando no hay conexión, falta permiso en la nube o falla la sincronización (los registros siguen guardándose en el dispositivo). La pantalla de ingreso sin servicio de cuentas muestra el icono en rojo con «Reintentar».
+- **Escritorio (≥ 1024 px):** el menú pasa a una barra lateral de 248 px con icono y texto, el contenido se acomoda en columnas (Hoy, Semana, Equipo, Sesión en curso) y las hojas se centran. En el celular no cambia nada. Prueba: `node tests/error-e2e.js` (variables `VW`, `VH`, `DSF` cambian el tamaño de las capturas de las demás pruebas; ej. `VW=1280 VH=800 DSF=1 SHOTS=carpeta node tests/assign-e2e.js`).
 
 ## Lo que viene
 

@@ -108,7 +108,7 @@
   function detailHTML(uid) {
     const d = K.detail[uid];
     if (!d || d.loading) return '<div class="cmp-det"><p class="muted">Leyendo marcas…</p></div>';
-    if (d.err) return '<div class="cmp-det"><p class="warn-t">' + esc(d.err) + '</p></div>';
+    if (d.err) return '<div class="cmp-det">' + window.HalterApp.errorBox(d.err) + '</div>';
     if (!d.list.length) return '<div class="cmp-det">' + window.HalterApp.empty('max', 'Sin máximos guardados', 'Este atleta aún no registra máximos.') + '</div>';
     return '<div class="cmp-det"><div class="ratios">' + d.list.map(e => '<div class="ratio"><span>' + esc(e.name) + (e.date ? ' <small class="dim">' + esc(dateText(e.date)) + '</small>' : '') + '</span><b>' + fmt(e.max, 1) + ' kg' +
       (e.goal > 0 ? ' <small class="dim">meta ' + fmt(e.goal, 1) + (e.goalDate ? ' al ' + esc(dateText(e.goalDate)) : '') + '</small>' : '') + '</b></div>').join('') + '</div></div>';
@@ -134,7 +134,7 @@
     const ids = members.map(m => m.id).sort().join(',');
     if (!K.loading && (K.rows === null || (K.ids !== ids && members.length))) { if (members.length || K.rows === null) setTimeout(load, 0); }
     let h = '<h1>Marcas del equipo</h1><p class="muted">Máximos de arranque y dos tiempos de cada atleta, por sexo y categoría de peso. Los datos salen de lo que cada atleta tiene guardado en su cuenta.</p>';
-    if (K.err) h += '<div class="note warn">' + esc(K.err) + '</div>';
+    if (K.err) h += window.HalterApp.errorBox(K.err, { retry: 'cmp-refresh' });
     if (K.rows === null || (K.loading && !K.rows)) return h + '<p class="muted">Leyendo marcas del equipo…</p>';
     const rows = K.rows || [];
     if (!rows.length) return h + window.HalterApp.empty(members.length ? 'prog' : 'team', members.length ? 'Sin datos todavía' : 'Aún no hay atletas aprobados', members.length ? 'Los datos aparecen cuando los atletas registran máximos.' : 'Aprueba solicitudes en «Equipo».');

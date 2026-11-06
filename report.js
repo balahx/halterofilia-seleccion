@@ -267,7 +267,7 @@
       });
       h += `<label class="lab" for="rpWeek">Semana del plan</label><select class="sel tall" id="rpWeek" data-as="rpweek">${opts}${last !== null ? '</optgroup>' : ''}</select>`;
     } else h += `<label class="lab" for="rpDate">Fecha</label><input class="txt" type="date" id="rpDate" data-as="rpdate" value="${esc(R.date)}">`;
-    if (R.err) h += `<div class="note warn">${esc(R.err)}</div>`;
+    if (R.err) h += window.HalterApp.errorBox(R.err);
     else if (!R.recs) h += '<p class="muted">Cargando los registros del atleta…</p>';
     else {
       const rep = build(ctx);

@@ -164,14 +164,30 @@
       default: return 'Conectando…';
     }
   }
-  function paintSync(s) { const t = syncText(s || (C.sync && C.sync.current)); document.querySelectorAll('#syncStat, [data-sync]').forEach(el => { el.textContent = t; }); }
+  /* Franja de estado de la nube bajo la cabecera: solo aparece cuando hay un problema (sin conexión, sin permiso, error). */
+  function netBarHTML(s) {
+    if (!s) return '';
+    const st = s.state, pend = s.pending ? ' ' + s.pending + (s.pending === 1 ? ' cambio espera' : ' cambios esperan') + ' para enviarse.' : '';
+    if (st === 'offline') return ['Sin conexión', 'Sigues registrando: todo se guarda en este dispositivo y se envía al volver la señal.' + pend, true];
+    if (st === 'denied') return ['Sin permiso en la nube', 'Faltan las reglas de Firestore: avisa al entrenador. Tus datos siguen guardados aquí.', false];
+    if (st === 'error') return ['No se pudo sincronizar', 'Se reintentará solo.' + pend, true];
+    return '';
+  }
+  function paintNet(s) {
+    const el = document.getElementById('netBar'); if (!el) return;
+    const b = netBarHTML(s || (C.sync && C.sync.current));
+    if (!b) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = '<span class="netbar-ic">' + window.HalterApp.icon('warn') + '</span><div><b>' + esc(b[0]) + '</b><span>' + esc(b[1]) + '</span></div>' + (b[2] ? '<button class="lnk" data-act="sync-now">Reintentar</button>' : '');
+  }
+  function paintSync(s) { const t = syncText(s || (C.sync && C.sync.current)); document.querySelectorAll('#syncStat, [data-sync]').forEach(el => { el.textContent = t; }); paintNet(s); }
   function startSync(fresh) {
     stopSync();
     if (!C.remote || typeof C.remote.watchRecords !== 'function' || !window.HalterSync || !C.user) return;
     C.sync = new window.HalterSync.Engine({ remote: C.remote, uid: C.user.uid, app: window.HalterApp, store: LS, onStatus: paintSync });
     C.sync.start({ fresh: fresh });
   }
-  function stopSync() { if (C.sync) { C.sync.stop(); C.sync = null; } }
+  function stopSync() { if (C.sync) { C.sync.stop(); C.sync = null; } const nb = document.getElementById('netBar'); if (nb) { nb.hidden = true; nb.innerHTML = ''; } }
 
   /* ---------- Pantallas de ingreso ---------- */
   const gate = () => $('#gate');
@@ -194,16 +210,16 @@
       (m !== 'signup' && window.HalterPrivacy ? window.HalterPrivacy.html(false) : '');
   }
   function msgView(icon, title, body, actions) {
-    const ico = { clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', ban: '<circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/>', cloud: '<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>', user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>' }[icon];
-    return `<div class="big-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ico}</svg></div><h1>${title}</h1>${body}<div class="stack">${actions || ''}</div>`;
+    const ico = { warn: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5M12 17.2v.1"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', ban: '<circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/>', cloud: '<path d="M7 18a4 4 0 010-8 5 5 0 019.6-1A4.5 4.5 0 0117 18z"/>', user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>' }[icon];
+    return `<div class="big-ico${icon === 'warn' ? ' is-warn' : ''}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ico}</svg></div><h1>${title}</h1>${body}<div class="stack">${actions || ''}</div>`;
   }
   const accountLine = () => `<p class="muted">Sesión: <b>${esc(C.user ? C.user.email : '')}</b></p>`;
   const outBtn = '<button class="lnk" data-g="logout">Cerrar sesión</button>';
   function gateHTML() {
     switch (C.phase) {
       case 'loading': return msgView('cloud', 'Conectando…', '<p class="lead">Un momento.</p>');
-      case 'nocfg': return msgView('cloud', 'Falta la configuración', '<p class="lead">No se encontró la configuración de Firebase (<b>firebase-config.js</b>). Revisa el archivo LEEME.md.</p>');
-      case 'failed': return msgView('cloud', 'Sin conexión', `<p class="lead">No se pudo cargar el servicio de cuentas (${esc(C.err || 'sin conexión')}). Revisa tu internet.</p>`, '<button class="btn" data-g="retry">Reintentar</button>');
+      case 'nocfg': return msgView('warn', 'Falta la configuración', '<p class="lead">No se encontró la configuración de Firebase (<b>firebase-config.js</b>). Revisa el archivo LEEME.md.</p>');
+      case 'failed': return msgView('warn', 'Sin conexión', `<p class="lead">No se pudo cargar el servicio de cuentas (${esc(C.err || 'sin conexión')}). Revisa tu internet.</p>`, '<button class="btn" data-g="retry">Reintentar</button>');
       case 'signedout': return authForm();
       case 'resolving': return msgView('cloud', 'Comprobando tu acceso…', accountLine() + (C.err ? `<div class="note warn">${esc(C.err)}</div>` : ''), (C.err ? '<button class="btn" data-g="rewatch">Reintentar</button>' : '') + outBtn);
       case 'norequest': return `<h1>Pide acceso al equipo</h1><p class="lead">Tu cuenta está creada. Para usar la app, el entrenador debe aprobarte.</p>${accountLine()}<form id="gForm" data-g-form="request" novalidate>${field('gName', 'Nombre y apellido', 'text', `autocomplete="name" maxlength="60" required value="${esc(LS.get(K_NAME) || C.prefill || '')}" placeholder="Ej. Camila Soto"`)}<p id="gErr" class="form-error" role="alert">${esc(C.err)}</p><div class="stack"><button class="btn" type="submit"${C.busy ? ' disabled' : ''}>${C.busy ? 'Enviando…' : 'Enviar solicitud'}</button></div></form><div class="alt">${outBtn}</div>`;
@@ -398,7 +414,7 @@
     const cf = (key, id, txt, ok) => `<button class="btn ${ok ? '' : 'ghost'} sm" data-act="${key}" data-uid="${esc(id)}">${C.confirm === key + id ? 'Confirmar' : txt}</button>`;
     if (window.HalterAssign && window.HalterAssign.selected()) return window.HalterAssign.detail();
     let h = '<h1>Equipo</h1>';
-    if (C.err) h += `<div class="note warn">${esc(C.err)}</div>`;
+    if (C.err) h += window.HalterApp.errorBox(C.err, { retry: 'sync-now' });
     h += `<div class="card sec"><span class="eyebrow">Solicitudes pendientes (${pend.length})</span>`;
     h += pend.length ? pend.map(p => personRow(p, `<button class="btn sm" data-act="eq-approve" data-uid="${esc(p.id)}">Aprobar</button>` + cf('eq-reject', p.id, 'Rechazar'))).join('') : window.HalterApp.empty('check', 'Sin solicitudes pendientes', '');
     h += '</div>';

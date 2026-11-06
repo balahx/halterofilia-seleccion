@@ -510,6 +510,12 @@ function svg(n, c) {
 function emptyHTML(ico, title, text, action) {
   return '<div class="empty"><span class="empty-ic">' + svg(ico) + '</span><b>' + esc(title) + '</b>' + (text ? '<p>' + text + '</p>' : '') + (action || '') + '</div>';
 }
+/* Aviso de error con pantalla propia: icono, título, mensaje y (opcional) «Reintentar». `msg` es texto plano. */
+function errorHTML(msg, o) {
+  o = o || {};
+  return '<div class="errbox" role="alert"><span class="errbox-ic">' + svg('warn') + '</span><div><b>' + esc(o.title || 'No se pudo cargar') + '</b><p>' + esc(msg) + '</p>' +
+    (o.retry ? '<button class="btn sm" data-act="' + esc(o.retry) + '">Reintentar</button>' : '') + '</div></div>';
+}
 function plateDot(z) { return '<i class="pl pl-' + (z || 'none') + '" aria-hidden="true"></i>'; }
 function setDot(el, z) { if (el) el.className = 'pl pl-' + (z || 'none'); }
 
@@ -573,7 +579,7 @@ function viewHoy() {
   else { title = 'Día de descanso'; sub = 'No tienes sesión planificada hoy.'; }
   let h = '<section class="sec"><p class="eyebrow">' + esc(cap(fmtDay.format(now))) + '</p><h1>' + esc(title) + '</h1><p class="muted">' + esc(sub) + '</p>' + weekStrip() + '</section>';
   if (day.on) {
-    h += '<section class="card sec">' + (day.items.length ? planItemsList(day) : emptyHTML('plan', 'Este día no tiene ejercicios', 'Arma la sesión en tu plan semanal.')) +
+    h += '<section class="card sec hoy-plan">' + (day.items.length ? planItemsList(day) : emptyHTML('plan', 'Este día no tiene ejercicios', 'Arma la sesión en tu plan semanal.')) +
       '<div class="actions go"><button class="btn block" data-act="start" data-d="' + di + '">' + svg('play') + '<span>Iniciar entrenamiento</span></button>' +
       (day.items.length ? '' : '<button class="btn ghost block" data-act="tab" data-tab="plan">Ir al plan</button>') + '</div></section>';
   }
@@ -945,6 +951,7 @@ function buildChrome() {
 function render() {
   const v = $('#view'), a = document.activeElement, keep = (a && a.id && v.contains(a)) ? a.id : null;
   const ct = APP.tabs.find(t => t.id === ui.tab);
+  v.dataset.tab = ui.tab;
   v.innerHTML = ct ? ct.render() : ui.tab === 'hoy' ? viewHoy() : ui.tab === 'plan' ? viewPlan() : ui.tab === 'prog' ? viewProg() : ui.tab === 'hist' ? viewHist() : ui.tab === 'mas' ? viewMas() : viewMax();
   const inNav = navItems().some(a => a[0] === ui.tab), cur = inNav ? ui.tab : 'mas';   // las pantallas que viven dentro de «Más» marcan «Más»
   $$('#nav button').forEach(b => { if (b.dataset.tab === cur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
@@ -1621,7 +1628,7 @@ let refreshLater = false;
 function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
 function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
 document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
-window.HalterApp = { empty: emptyHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
+window.HalterApp = { icon: svg, empty: emptyHTML, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
   /* cálculos compartidos con la vista del entrenador (compare.js) */
   pure: { categoryOf: categoryOf, catText: catText, catOptions: catOptions, catSortKey: catSortKey, fmtNum: fmtNum, SEX_LABEL: SEX_LABEL, shortDate: shortDate, parseYmd: parseYmd, ymd: ymd } };
 })();

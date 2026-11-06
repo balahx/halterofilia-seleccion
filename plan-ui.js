@@ -140,7 +140,7 @@
   }
   function view() {
     let h = '<h1>Planes anuales</h1>';
-    if (P.err) h += `<div class="note warn">${esc(P.err)}</div>`;
+    if (P.err) h += window.HalterApp.errorBox(P.err, { title: 'No se pudo completar' });
     h += '<div class="card sec"><span class="eyebrow">Planes publicados</span>';
     if (!P.plansReady) h += '<p class="muted">Cargando…</p>';
     else if (!P.plans.length) h += window.HalterApp.empty('plan', 'Aún no hay un plan', 'Sube el Excel de Cristian o la plantilla simple.');

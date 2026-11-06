@@ -11,7 +11,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
 (async () => {
   await new Promise(r => srv.listen(0, r)); const URL = 'http://localhost:' + srv.address().port + '/';
   const br = await chromium.launch(), errors = [];
-  const ctx = await br.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, serviceWorkers: 'block', colorScheme: 'light' });
+  const ctx = await br.newContext({ viewport: { width: +(process.env.VW || 390), height: +(process.env.VH || 780) }, deviceScaleFactor: +(process.env.DSF || 2), serviceWorkers: 'block', colorScheme: 'light' });
   await ctx.addInitScript({ path: path.join(__dirname, 'fake-remote.js') });
   await ctx.addInitScript(() => { window.__viol = []; document.addEventListener('securitypolicyviolation', e => window.__viol.push(e.violatedDirective + ' ' + e.blockedURI)); });
   const page = await ctx.newPage();

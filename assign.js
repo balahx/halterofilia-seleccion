@@ -295,7 +295,7 @@
   function athleteView() {
     const m = A.me, a = m.asg;
     let h = '<h1>Mi semana</h1>';
-    if (A.err) h += `<div class="note warn">${esc(A.err)}</div>`;
+    if (A.err) h += window.HalterApp.errorBox(A.err, { retry: 'sync-now' });
     if (a === undefined) return h + '<div class="card sec"><p class="muted">Cargando…</p></div>';
     if (!a) return h + window.HalterApp.empty('semana', 'Aún no tienes semana asignada', 'Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
     const w = m.week;
@@ -387,7 +387,7 @@
   function detailHTML() {
     const uid = A.sel, a = A.asg[uid];
     let h = `<p><button class="lnk" data-act="as-back">← Equipo</button></p><h1>${esc(memberName(uid))}</h1>`;
-    if (A.err) h += `<div class="note warn">${esc(A.err)}</div>`;
+    if (A.err) h += window.HalterApp.errorBox(A.err, { retry: 'sync-now' });
     h += `<div class="card sec"><span class="eyebrow">Semana asignada</span><p class="lead">${esc(asgLine(uid))}</p>` +
       (a ? `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small>` : '');
     if (!A.active) h += window.HalterApp.empty('plan', 'Todavía no hay un plan activo', 'Publica y activa uno en «Planes».');
