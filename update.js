@@ -7,10 +7,16 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-  /* Lee { v, date } del texto de version.js (sin ejecutarlo) */
+  /* Lee { n, v, date } del texto de version.js (sin ejecutarlo) */
   function parseVersion(text) {
-    const v = /v:\s*'([^']+)'/.exec(text || ''), d = /date:\s*'([^']+)'/.exec(text || '');
-    return v ? { v: v[1], date: d ? d[1] : '' } : null;
+    const v = /v:\s*'([^']+)'/.exec(text || ''), d = /date:\s*'([^']+)'/.exec(text || ''), n = /\bn:\s*(\d+)/.exec(text || '');
+    return v ? { n: n ? Number(n[1]) : null, v: v[1], date: d ? d[1] : '' } : null;
+  }
+  /* ¿La versión publicada es más nueva? Por número («Versión 4»); si alguna no lo trae, por el texto AAAA.MM.DD.n */
+  function isNewer(remote, local) {
+    if (!remote || !local) return false;
+    if (typeof remote.n === 'number' && typeof local.n === 'number') return remote.n > local.n;
+    return newer(remote.v, local.v);
   }
   /* ¿`remote` es distinta (más nueva) que `local`? Compara cada número: 2026.11.05.2 > 2026.11.05.1 */
   function newer(remote, local) {
@@ -23,8 +29,9 @@
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if (!m) return '';
     return Number(m[3]) + ' ' + MESES[Number(m[2]) - 1] + ' ' + m[1];
   }
-  const current = () => root.HALTER_VERSION || { v: '?', date: '' };
-  const versionText = () => 'Versión ' + current().v + (current().date ? ' · ' + dateText(current().date) : '');
+  const current = () => root.HALTER_VERSION || { n: null, v: '?', date: '' };
+  const label = x => x && typeof x.n === 'number' ? String(x.n) : (x && x.v) || '?';
+  const versionText = () => 'Versión ' + label(current());
 
   /* ---------- Estado y acciones (solo navegador) ---------- */
   const U = { state: 'idle', remote: null, at: 0, msg: '' };   // idle | checking | latest | new | applying | error
@@ -40,7 +47,7 @@
       const r = parseVersion(await res.text());
       if (!r) throw new Error('respuesta inesperada');
       U.remote = r; U.at = Date.now();
-      U.state = newer(r.v, current().v) ? 'new' : 'latest';
+      U.state = isNewer(r, current()) ? 'new' : 'latest';
     } catch (e) {
       U.state = 'error'; U.msg = (typeof navigator !== 'undefined' && navigator.onLine === false) ? 'Sin conexión: conéctate a internet para buscar actualizaciones.' : 'No se pudo comprobar ahora. Inténtalo de nuevo en un rato.';
     }
@@ -70,7 +77,7 @@
       case 'checking': return '<p class="muted" role="status">Buscando…</p>';
       case 'applying': return '<p class="muted" role="status">Actualizando… la app se reinicia sola. No necesitas volver a entrar.</p>';
       case 'latest': return '<p class="upd-ok" role="status">Ya tienes la última versión.</p>';
-      case 'new': return '<p class="upd-new" role="status">Hay una versión nueva: <b>' + esc(U.remote.v) + '</b>' + (U.remote.date ? ' (' + esc(dateText(U.remote.date)) + ')' : '') + '. Tus datos y tu cuenta se conservan.</p>';
+      case 'new': return '<p class="upd-new" role="status">Hay una versión nueva: <b>Versión ' + esc(label(U.remote)) + '</b>. Tus datos y tu cuenta se conservan.</p>';
       case 'error': return '<p class="warn-t" role="status">' + esc(U.msg) + '</p>';
       default: return '<p class="muted">Si tu entrenador avisó de cambios, búscalos aquí. No hace falta cerrar la sesión ni volver a ingresar.</p>';
     }
@@ -96,7 +103,7 @@
   /* Comprobación silenciosa poco después de abrir la app: si hay versión nueva, el engranaje muestra un punto */
   function checkSoon() { if (hasDom) setTimeout(() => check(false), 6000); }
 
-  const api = { parseVersion: parseVersion, newer: newer, dateText: dateText, versionText: versionText, card: card, footer: footer, onAct: onAct, check: check, apply: apply, checkSoon: checkSoon, state: U };
+  const api = { parseVersion: parseVersion, newer: newer, isNewer: isNewer, label: label, dateText: dateText, versionText: versionText, card: card, footer: footer, onAct: onAct, check: check, apply: apply, checkSoon: checkSoon, state: U };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.HalterUpdate = api;
 })(typeof window !== 'undefined' ? window : globalThis);

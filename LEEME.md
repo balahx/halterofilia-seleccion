@@ -153,7 +153,7 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 - **Ajustes → Aplicación → «Buscar actualización»** compara la versión que corre con la publicada (`version.js`, siempre pedida a la red). Si hay una nueva aparece «Actualizar ahora»: renueva el service worker, borra lo guardado antes y recarga. **La cuenta y los datos se conservan: no hay que volver a ingresar.** Sin conexión avisa y no se rompe. Es igual en computador y celular.
 - 6 segundos después de abrir la app se comprueba en silencio; si hay una versión nueva, el engranaje muestra un punto dorado.
 - La versión se ve al final de «Más» y de Ajustes («Versión 2026.11.05.2 · 5 nov 2026»).
-- **Al publicar cambios, sube el número en `version.js`** (formato `AAAA.MM.DD.n`, n = publicación del día; la fecha debe coincidir). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
+- **Al publicar cambios, sube la versión en `version.js`**: `n` (el número que se ve, «Versión 4»; sube de a 1) y `v` (`AAAA.MM.DD.n`, nombra el caché; la fecha debe coincidir). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
 - Pruebas: `node tests/update-unit.js` y `node tests/update-e2e.js`.
 
 ## Lo que viene

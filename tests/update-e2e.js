@@ -32,19 +32,19 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await page.evaluate(u => __fake.admin('members/' + u, { name: 'Camila Rojas', email: 'camila@correo.cl', approvedAt: Date.now() }), cuid);
   await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(600);
   await page.click('#nav [data-tab="mas"]'); await page.waitForTimeout(250);
-  ok((await txt('#view')).includes(V.v), 'al final de «Más» se ve la versión ' + V.v);
+  ok(new RegExp('Versión ' + V.n + '(?![\\d.])').test(await txt('#view')) && !(await txt('#view')).includes(V.v), 'al final de «Más» se ve solo «Versión ' + V.n + '»');
   await page.click('#gear'); await page.waitForSelector('#dlg[open] #updCard'); await page.waitForTimeout(900);
   let card = await txt('#updCard');
-  ok(card.includes(V.v), 'la tarjeta de Ajustes muestra la versión');
+  ok(new RegExp('Versión ' + V.n + '(?![\\d.])').test(card) && !card.includes(V.v), 'la tarjeta de Ajustes muestra solo «Versión ' + V.n + '»');
   ok(/Ya tienes la última versión/.test(card), 'con la misma versión publicada dice que está al día');
   ok(/Versión/.test(await txt('#dlg #verLine')), 'la versión también va al final de Ajustes');
   await shot('01-al-dia');
 
   console.log('2. Hay una versión nueva publicada');
-  await page.route(/version\.js\?t=/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: "const V = { v: '2099.01.01.1', date: '2099-01-01' };" }));
+  await page.route(/version\.js\?t=/, r => r.fulfill({ status: 200, contentType: 'text/javascript', body: "const V = { n: 99, v: '2099.01.01.1', date: '2099-01-01' };" }));
   await page.click('[data-act="upd-check"]'); await page.waitForTimeout(700);
   card = await txt('#updCard');
-  ok(/versión nueva/i.test(card) && card.includes('2099.01.01.1'), 'avisa que hay una versión nueva y cuál es');
+  ok(/versión nueva/i.test(card) && /Versión 99(?!\d)/.test(card), 'avisa que hay una versión nueva y cuál es');
   ok(/se conservan/.test(card), 'aclara que los datos y la cuenta se conservan');
   ok(await page.locator('[data-act="upd-apply"]').count() === 1, 'aparece «Actualizar ahora»');
   ok(await page.evaluate(() => document.documentElement.hasAttribute('data-upd')), 'el engranaje muestra un punto de aviso');
