@@ -920,6 +920,7 @@ function viewMas() {
   h += '<p class="eyebrow">Cuenta</p><div class="mlist">' + mrow('gear', 'Ajustes', 'Apariencia, nombres, temporizador', 'data-act="settings"') +
     mrow('file', 'Aviso de privacidad', window.HalterPrivacy ? 'Versión ' + window.HalterPrivacy.VERSION : '', 'data-act="privacy"') +
     (m.logout ? mrow('out', 'Cerrar sesión', '', 'data-act="cl-logout"') : '') + '</div>';
+  if (window.HalterUpdate) h += window.HalterUpdate.footer();
   return h;
 }
 function viewHist() {
@@ -1318,7 +1319,8 @@ function settingsHTML() {
     '<label class="lab" for="impFile">Importar respaldo</label><input type="file" id="impFile" data-f="impFile" accept=".json,application/json" class="file">' +
     '<textarea class="txt area" id="impText" rows="2" placeholder="…o pega aquí el contenido del respaldo"></textarea><div class="row-end"><button class="btn ghost sm" data-act="import-run">Importar texto</button></div>';
   if (ui2.imp != null) h += '<div class="note warn"><b>Se reemplazarán tus datos actuales' + (APP.cloud ? ' (también en la nube)' : '') + '</b> por un respaldo con ' + ui2.imp + ' sesiones.<div class="actions"><button class="btn sm" data-act="import-confirm">Reemplazar</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>';
-  h += '<div class="row-end"><button class="lnk danger" data-act="wipe">' + confirmLabel('wipe', APP.cloud ? 'Borrar todos mis datos (también en la nube)' : 'Borrar todos mis datos', 'Confirmar: borrar todo') + '</button></div></div>';
+  if (window.HalterUpdate) h += window.HalterUpdate.card();
+  h += '<div class="row-end"><button class="lnk danger" data-act="wipe">' + confirmLabel('wipe', APP.cloud ? 'Borrar todos mis datos (también en la nube)' : 'Borrar todos mis datos', 'Confirmar: borrar todo') + '</button></div>' + (window.HalterUpdate ? window.HalterUpdate.footer() : '') + '</div>';
   return h;
 }
 function maxSheetHTML(exId) {
@@ -1573,7 +1575,7 @@ document.addEventListener('click', e => {
       break;
     }
     case 'toast-act': { const fn = ui.toastFn; hideToast(); if (fn) fn(); break; }
-    default: if (APP.onAct) APP.onAct(a, t);
+    default: if (window.HalterUpdate && window.HalterUpdate.onAct(a)) break; if (APP.onAct) APP.onAct(a, t);
   }
   if (prevConfirm && !ui.confirm) { prevConfirm = null; refresh(); }
 });
@@ -1598,6 +1600,7 @@ function start(opts) {
   if (!ui.tab || (!BUILTIN_TABS.includes(ui.tab) && !APP.tabs.some(t => t.id === ui.tab))) ui.tab = 'hoy';
   T.mode = S.profile.timerMode; T.target = S.profile.rest;
   buildChrome(); render();
+  if (window.HalterUpdate) window.HalterUpdate.checkSoon();
   if (!started) {
     started = true;
     tickId = setInterval(tick, 500);

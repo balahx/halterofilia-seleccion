@@ -542,7 +542,7 @@
 
   /* Funciona sin conexión y se puede instalar */
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { /* sin service worker */ }));
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => { /* sin service worker */ }));
   }
   window.HalterCloud = { state: C }; // para pruebas
 })();

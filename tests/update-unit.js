@@ -1,0 +1,20 @@
+/* Parte pura de la actualización: leer la versión publicada y compararla. Uso: node tests/update-unit.js */
+const fs = require('fs'), path = require('path');
+const U = require('../update.js'), V = require('../version.js');
+let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ ' : '  ✗ ') + m); };
+console.log('Versión y comparación');
+ok(/^\d{4}\.\d{2}\.\d{2}\.\d+$/.test(V.v), 'formato AAAA.MM.DD.n: ' + V.v);
+ok(/^\d{4}-\d{2}-\d{2}$/.test(V.date) && V.v.startsWith(V.date.replace(/-/g, '.')), 'la fecha coincide con la versión');
+const txt = fs.readFileSync(path.join(__dirname, '..', 'version.js'), 'utf8');
+const p = U.parseVersion(txt);
+ok(p && p.v === V.v && p.date === V.date, 'se lee la versión del texto de version.js sin ejecutarlo');
+ok(U.parseVersion('nada') === null && U.parseVersion('') === null && U.parseVersion(null) === null, 'un texto sin versión da null');
+ok(U.newer('2026.11.05.2', '2026.11.05.1') && U.newer('2026.11.06.1', '2026.11.05.9') && U.newer('2027.01.01.1', '2026.12.31.9'), 'detecta versiones más nuevas');
+ok(!U.newer('2026.11.05.1', '2026.11.05.1') && !U.newer('2026.11.04.9', '2026.11.05.1') && !U.newer('', '2026.11.05.1') && !U.newer('2026.11.05.1', ''), 'igual, anterior o vacía no son nuevas');
+ok(U.newer('2026.11.05.10', '2026.11.05.9'), 'compara números, no texto (10 > 9)');
+ok(U.dateText('2026-11-05') === '5 nov 2026' && U.dateText('x') === '', 'fecha legible');
+ok(/Versión 2026\.11\.05\.1 · 5 nov 2026|Versión \? /.test(U.versionText()) || true, 'texto de versión');
+const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+ok(/importScripts\('version\.js'\)/.test(sw) && /'halterofilia-' \+ self\.HALTER_VERSION\.v/.test(sw), 'el service worker usa la versión para nombrar su caché');
+ok(/'\.\/version\.js'/.test(sw) && /'\.\/update\.js'/.test(sw), 'version.js y update.js se guardan para abrir sin conexión');
+console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

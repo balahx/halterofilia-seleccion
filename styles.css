@@ -550,3 +550,14 @@ dialog .actions > .lnk { margin: 0 auto; }
   #view[data-tab="equipo"] > h1, #view[data-tab="equipo"] > .errbox, #view[data-tab="equipo"] > p, #view[data-tab="equipo"] > :last-child { grid-column: 1 / -1; }
   #view[data-tab="mas"] { max-width: 640px; }
 }
+
+/* Actualizar la app y versión */
+.upd { display: grid; gap: 8px; margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface2); }
+.upd p { margin: 0; }
+.upd .btn.block { margin: 4px 0 0; }
+.upd-ver { font-weight: 600; color: var(--ink); }
+.upd-ok { color: var(--ok); font-weight: 600; }
+.upd-new { background: var(--gold-bg); color: var(--ink); padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--gold); }
+.ver-line { text-align: center; color: var(--muted); font-size: 12.5px; margin: 18px 0 4px; letter-spacing: .02em; }
+[data-upd] #gear { position: relative; }
+[data-upd] #gear::after { content: ""; position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px var(--bg); }

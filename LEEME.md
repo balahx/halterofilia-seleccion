@@ -149,6 +149,13 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 - **Estados vacíos y de error:** `HalterApp.empty(...)` y `HalterApp.errorBox(mensaje, {retry})` son los componentes comunes. Una franja amarilla bajo la cabecera avisa cuando no hay conexión, falta permiso en la nube o falla la sincronización (los registros siguen guardándose en el dispositivo). La pantalla de ingreso sin servicio de cuentas muestra el icono en rojo con «Reintentar».
 - **Escritorio (≥ 1024 px):** el menú pasa a una barra lateral de 248 px con icono y texto, el contenido se acomoda en columnas (Hoy, Semana, Equipo, Sesión en curso) y las hojas se centran. En el celular no cambia nada. Prueba: `node tests/error-e2e.js` (variables `VW`, `VH`, `DSF` cambian el tamaño de las capturas de las demás pruebas; ej. `VW=1280 VH=800 DSF=1 SHOTS=carpeta node tests/assign-e2e.js`).
 
+## Actualizar la app sin reinstalarla
+- **Ajustes → Aplicación → «Buscar actualización»** compara la versión que corre con la publicada (`version.js`, siempre pedida a la red). Si hay una nueva aparece «Actualizar ahora»: renueva el service worker, borra lo guardado antes y recarga. **La cuenta y los datos se conservan: no hay que volver a ingresar.** Sin conexión avisa y no se rompe. Es igual en computador y celular.
+- 6 segundos después de abrir la app se comprueba en silencio; si hay una versión nueva, el engranaje muestra un punto dorado.
+- La versión se ve al final de «Más» y de Ajustes («Versión 2026.11.05.2 · 5 nov 2026»).
+- **Al publicar cambios, sube el número en `version.js`** (formato `AAAA.MM.DD.n`, n = publicación del día; la fecha debe coincidir). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
+- Pruebas: `node tests/update-unit.js` y `node tests/update-e2e.js`.
+
 ## Lo que viene
 
 - Informe automático diario y semanal con aviso al entrenador (pide un servicio de envío fuera del plan gratuito; por ahora se abre a mano).
