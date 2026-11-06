@@ -4,7 +4,8 @@ importScripts('version.js');   // define HALTER_VERSION: cada versión nueva usa
 const CACHE = 'halterofilia-' + self.HALTER_VERSION.v;
 const NET_WAIT = 3000, NET_WAIT_SLOW = 0;   // ms que se espera a la red antes de abrir desde la copia guardada (menos si la red ya falló hace poco)
 let slowUntil = 0;
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './sync.js', './plan-import.js', './plan-ui.js', './privacy.js', './assign.js', './report.js', './guard.js', './version.js', './update.js', './backup.js', './compare.js', './firebase-config.js', './manifest.webmanifest',
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './js/logic.js',
+  './js/icons.js', './cloud.js', './sync.js', './plan-import.js', './plan-ui.js', './privacy.js', './assign.js', './report.js', './guard.js', './version.js', './update.js', './backup.js', './compare.js', './firebase-config.js', './manifest.webmanifest',
   './fonts/Barlow-Regular.woff', './fonts/Barlow-Medium.woff', './fonts/Barlow-SemiBold.woff', './fonts/BarlowCondensed-Medium.woff', './fonts/BarlowCondensed-SemiBold.woff', './fonts/BarlowCondensed-Bold.woff',
   './icons/icon.svg', './icons/wl-marca-claro.svg', './icons/wl-marca-oscuro.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 

@@ -1,9 +1,9 @@
-/* Indicadores del atleta (parte pura de app.js, sin navegador): series falladas, categoría, carga, efectividad, razones y metas.
+/* Indicadores del atleta (js/logic.js, sin navegador): series falladas, categoría, carga, efectividad, razones y metas.
    Uso: node tests/indicators-unit.js */
-const vm = require('vm'), fs = require('fs'), path = require('path');
-const sb = { module: { exports: {} }, document: { addEventListener() {} }, window: {}, Intl, console };
-vm.createContext(sb); vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8'), sb);
-const A = sb.module.exports;
+const fs = require('fs'), path = require('path');
+(async () => {
+// js/logic.js es un módulo ES sin dependencias: se carga como data URL (sin importar la extensión ni el package.json)
+const A = await import('data:text/javascript;base64,' + fs.readFileSync(path.join(__dirname, '..', 'js', 'logic.js')).toString('base64'));
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ ' : '  ✗ ') + m); };
 const set = (kg, reps, o) => Object.assign({ kg, reps: String(reps), pct: 0, rpe: null, done: true, doneAt: 0 }, o || {});
 const T = (h, m) => new Date(2026, 10, 2, h, m).getTime();
@@ -59,3 +59,4 @@ ok(A.goalInfo(95, 90, '', 1, t0).done === true, 'meta lograda');
 ok(A.goalInfo(80, 90, '', 0, t0).weeks === null, 'sin tendencia, no se inventa un plazo');
 ok(A.goalInfo(0, 90, '', 1, t0) === null, 'sin máximo no hay meta que medir');
 console.log(fails ? 'HAY FALLAS' : 'Todo bien'); process.exit(fails ? 1 : 0);
+})();
