@@ -92,7 +92,7 @@
   function init(helpers) { H = helpers; }
   function card() {
     let h = '<div class="card sec"><span class="eyebrow">Respaldo del equipo</span>';
-    h += '<p class="muted">Descarga un archivo con los datos de todo el equipo (atletas, planes, semanas asignadas, registros y sesiones cumplidas). Guárdalo en un lugar privado: <b>contiene datos personales y de salud</b>. Cada descarga usa lecturas de la cuota diaria gratuita (una por documento), así que úsala, por ejemplo, una vez por semana.</p>';
+    h += '<p class="muted">Descarga un archivo con los datos de todo el equipo (atletas, planes, semanas asignadas, registros y sesiones cumplidas). Guárdalo en un lugar privado: <b>contiene datos personales y de salud</b>. Cada descarga usa lecturas de la cuota diaria gratuita (una por documento), así que úsala, por ejemplo, los fines de semana.</p>';
     if (S.err) h += window.HalterApp.errorBox(S.err, { title: 'Respaldo no completado' });
     if (S.stamp !== undefined) h += '<p class="' + (isStale(S.stamp) ? 'note warn' : 'muted') + '">' + esc(stampText(S.stamp)) + (isStale(S.stamp) && S.stamp ? ' Conviene descargar uno nuevo.' : '') + '</p>';
     if (S.busy) h += '<p class="muted" role="status">' + esc(S.msg || 'Preparando…') + '</p>';
