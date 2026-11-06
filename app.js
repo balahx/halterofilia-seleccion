@@ -151,10 +151,10 @@ function updateTotals() { const s = activeSession(); if (s) setText($('#sessTota
 
 /* ----- HOY ----- */
 function weekStrip() {
-  const now = new Date(), mon = mondayOf(now), done = new Set(endedSessions().map(s => s.date));
+  const now = new Date(), mon = mondayOf(now), done = new Set(endedSessions().map(s => s.date)), rd = APP.replaceDays ? APP.replaceDays() : null;
   let h = '<ol class="week" aria-label="Semana actual">';
   for (let i = 0; i < 7; i++) {
-    const d = addDays(mon, i), key = ymd(d), isToday = key === ymd(now), planned = S.plan.days[i].on, did = done.has(key);
+    const d = addDays(mon, i), key = ymd(d), isToday = key === ymd(now), planned = rd ? rd[i] : S.plan.days[i].on, did = done.has(key);
     const state = did ? 'Entrenado' : planned ? 'Planificado' : 'Descanso';
     h += '<li class="wd' + (isToday ? ' today' : '') + (did ? ' did' : '') + (planned ? ' planned' : '') + '"><span>' + DAYS_SHORT[i] + '</span><b>' + d.getDate() + '</b><i class="wm">' + (did ? svg('check') : planned ? '<em></em>' : '') + '</i><span class="vh">' + state + '</span></li>';
   }
@@ -174,15 +174,18 @@ function viewHoy() {
   const now = new Date(), di = weekdayIdx(now), day = S.plan.days[di];
   const ended = endedSessions().sort((x, y) => y.endedAt - x.endedAt);
   const todayDone = ended.some(s => s.date === ymd(now));
+  const rd = APP.replaceDays ? APP.replaceDays() : null;   // rutina que reemplaza el plan semanal: solo se entrena los días que marcó el entrenador; el resto es descanso
+  const dayOn = rd ? false : day.on;
   const asg = APP.hoyHTML ? APP.hoyHTML() : '';   // sesiones que el entrenador asignó para hoy (rutina y/o semana del plan)
   let title, sub;
   if (todayDone) { title = 'Sesión de hoy registrada'; sub = 'Puedes entrenar de nuevo o revisar tu progreso.'; }
   else if (asg) { title = 'Tu entrenamiento de hoy'; sub = 'Lo que tu entrenador te asignó para hoy.'; }
-  else if (day.on) { title = day.name || 'Entrenamiento'; sub = day.items.length ? day.items.length + (day.items.length === 1 ? ' ejercicio' : ' ejercicios') + ' en el plan' : 'Este día aún no tiene ejercicios.'; }
+  else if (rd) { title = 'Día de descanso'; sub = 'Tu entrenador no te asignó una sesión para hoy.'; }
+  else if (dayOn) { title = day.name || 'Entrenamiento'; sub = day.items.length ? day.items.length + (day.items.length === 1 ? ' ejercicio' : ' ejercicios') + ' en el plan' : 'Este día aún no tiene ejercicios.'; }
   else { title = 'Día de descanso'; sub = 'No tienes sesión planificada hoy.'; }
   let h = '<section class="sec"><p class="eyebrow">' + esc(cap(fmtDay.format(now))) + '</p><h1>' + esc(title) + '</h1><p class="muted">' + esc(sub) + '</p>' + weekStrip() + '</section>';
   h += asg;
-  if (day.on) {
+  if (dayOn) {
     h += '<section class="card sec hoy-plan">' + (day.items.length ? planItemsList(day) : emptyHTML('plan', 'Este día no tiene ejercicios', 'Arma la sesión en tu plan semanal.')) +
       '<div class="actions go"><button class="btn block" data-act="start" data-d="' + di + '">' + svg('play') + '<span>Iniciar entrenamiento</span></button>' +
       (day.items.length ? '' : '<button class="btn ghost block" data-act="tab" data-tab="plan">Ir al plan</button>') + '</div></section>';
@@ -194,7 +197,7 @@ function viewHoy() {
       '<div class="row2"><input class="num" id="bwq" data-f="bwq" inputmode="decimal" autocomplete="off" placeholder="kg" aria-label="Peso corporal en kg"><button class="btn" data-act="bw-save">Guardar</button></div></section>';
   }
   const others = [];
-  S.plan.days.forEach((d, i) => { if (d.on && i !== di && d.items.length) others.push('<button class="btn ghost sm" data-act="start" data-d="' + i + '">' + DAYS_SHORT[i] + ' · ' + esc(d.name || 'Entrenamiento') + '</button>'); });
+  S.plan.days.forEach((d, i) => { if (!rd && d.on && i !== di && d.items.length) others.push('<button class="btn ghost sm" data-act="start" data-d="' + i + '">' + DAYS_SHORT[i] + ' · ' + esc(d.name || 'Entrenamiento') + '</button>'); });
   h += '<section class="sec"><p class="eyebrow">Otras opciones</p><div class="chips">' + '<button class="btn ghost sm" data-act="start">Sesión libre</button>' + others.join('') + '</div></section>';
   if (ended.length) {
     const s = ended[0], st = sessionStats(s);
@@ -1183,7 +1186,7 @@ function start(opts) {
   opts = opts || {};
   applyZoom();
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, cloud: !!opts.cloud };
+  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, replaceDays: opts.replaceDays || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);

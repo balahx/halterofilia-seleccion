@@ -150,7 +150,7 @@ const WEEKS = {
   ok(/Rutina en lugar del plan semanal/i.test(v3) && /reemplazó tu plan semanal/.test(v3) && (await page.locator('[data-act="as-start"]').count()) === 0 && !/Cambiar de semana/i.test(v3), 'reemplaza: Ana solo ve la rutina; el plan semanal queda oculto');
   if (process.env.SHOTS) await page.screenshot({ path: path.join(SHOTS, 'rutina-reemplaza.png') });
 
-  console.log('3c. «Hoy» muestra lo asignado para hoy: la rutina que reemplaza primero y el plan minimizado');
+  console.log('3c. «Hoy» muestra lo asignado para hoy: si la rutina reemplaza el plan, solo ella (el plan no se ve ningún día)');
   const todayNo = await page.evaluate(() => ((new Date().getDay() + 6) % 7) + 1);
   const setToday = async mode => {
     await page.evaluate(({ id, mode, n, W, a }) => {
@@ -162,8 +162,8 @@ const WEEKS = {
   await logout(); await login('ana@correo.cl'); await tab('hoy'); await page.waitForSelector('[data-act="rt-start"]'); await page.waitForTimeout(300);
   let hv = await txt('#view');
   ok(!/Día de descanso/.test(hv), '«Hoy» ya no dice «Día de descanso» cuando hay algo asignado');
-  const order = await page.evaluate(() => { const v = document.getElementById('view'); const r = v.querySelector('.rt-card'), d = v.querySelector('details.hoy-min'); return { rt: !!r, det: !!d, first: !!(r && d && (r.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING)), open: d ? d.open : null, inside: d ? d.querySelectorAll('[data-act="as-start"]').length : 0 }; });
-  ok(order.rt && order.det && order.first && order.open === false && order.inside === 1, 'reemplazo: la rutina va primero y completa; la sesión del plan queda minimizada debajo: ' + JSON.stringify(order));
+  const order = await page.evaluate(() => { const v = document.getElementById('view'); return { rt: v.querySelectorAll('.rt-card').length, det: !!v.querySelector('details.hoy-min'), plan: v.querySelectorAll('[data-act="as-start"]').length }; });
+  ok(order.rt === 1 && !order.det && order.plan === 0, 'reemplazo (4.10.3): Hoy muestra solo la rutina; la sesión del plan no aparece ni minimizada: ' + JSON.stringify(order));
   await page.click('[data-act="rt-start"]'); await page.waitForSelector('.tick');
   ok((await page.evaluate(() => HalterApp.state().sessions.find(s => !s.endedAt).routine)).id === rid.split('/')[1], 'se puede iniciar la rutina directamente desde «Hoy»');
   await page.click('[data-act="finish"]'); await page.waitForSelector('#dlg[open]'); await page.click('#dlg .btn.ghost'); await page.waitForTimeout(300);
@@ -175,6 +175,22 @@ const WEEKS = {
   await logout(); await login('ana@correo.cl'); await tab('hoy'); await page.waitForSelector('[data-act="as-start"]'); await page.waitForTimeout(300);
   const order2 = await page.evaluate(() => { const v = document.getElementById('view'); return { det: !!v.querySelector('details.hoy-min'), plan: v.querySelectorAll('[data-act="as-start"]').length, rt: v.querySelectorAll('[data-act="rt-start"]').length }; });
   ok(!order2.det && order2.plan === 1 && order2.rt === 1, 'complementaria: Ana ve la sesión del plan y la rutina de hoy, sin minimizar: ' + JSON.stringify(order2));
+  console.log('3d. Con reemplazo, los días que la rutina no marca son descanso (el plan semanal no vuelve a aparecer)');
+  await setToday('replace');
+  await page.evaluate(({ id, n, W }) => {
+    const d = JSON.parse(JSON.stringify(__fake.srv().docs[id])); d.mode = 'replace'; const other = n % 7 + 1; d.sessions.forEach(x => { x.day = other; x.days = [other]; }); __fake.admin(id, d);
+    const w = JSON.parse(JSON.stringify(W.e1_1)); w.sessions[0].day = n; __fake.admin('plans/p1/weeks/e1_1', w);
+  }, { id: rid, n: todayNo, W: WEEKS });
+  await logout(); await login('ana@correo.cl'); await page.evaluate(() => HalterApp.commit(S => { S.plan.days.forEach(d => { d.on = true; }); S.sessions = []; })); await tab('hoy'); await page.waitForTimeout(500);
+  hv = await txt('#view');
+  const restDay = await page.evaluate(() => { const v = document.getElementById('view'); return { plan: v.querySelectorAll('[data-act="as-start"]').length, rt: v.querySelectorAll('[data-act="rt-start"]').length, free: v.querySelectorAll('.hoy-plan').length, planned: v.querySelectorAll('.week .wd.planned').length }; });
+  ok(/Día de descanso/i.test(hv) && restDay.plan === 0 && restDay.rt === 0 && restDay.free === 0, 'un día que la rutina no marca: «Día de descanso», sin sesión del plan ni plan libre: ' + JSON.stringify(restDay));
+  ok(restDay.planned === 1, 'la tira de la semana marca como planificados solo los días de la rutina (1): ' + restDay.planned);
+  await tab('semana');
+  ok((await page.locator('[data-act="as-start"]').count()) === 0 && /reemplazó tu plan semanal/.test(await txt('#view')), 'y en «Semana» tampoco hay plan semanal');
+  await setToday('replace');
+  await logout(); await login('ana@correo.cl'); await tab('hoy'); await page.waitForSelector('[data-act="rt-start"]');
+  ok(!/Día de descanso/i.test(await txt('#view')), 'el día que la rutina sí marca, Hoy muestra la rutina');
   await setToday('replace');
   let rs = await remoteTry("await r.setRoutine('x3', { uid: '" + auid + "', name: 'Mala', mode: 'otro', sessions: [{ name: 'a', items: [] }], setBy: '" + cuid + "' })");
   await logout(); await login('cristian@correo.cl');

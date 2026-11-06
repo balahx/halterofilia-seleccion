@@ -437,10 +437,17 @@
     const rep = coach ? '' : routinesHTML({ today: true, mode: 'replace' }), ext = coach ? '' : routinesHTML({ today: true, mode: 'extra' });
     let plan = '';
     const w = m.week, a = m.asg;
-    if (a && w && w.kind !== 'transition') (w.sessions || []).forEach((s, i) => { if (s.day === todayNo) plan += sessionCard(w, i, s); });
+    // con una rutina que reemplaza el plan semanal, el plan no se muestra ningún día de la semana (4.10.3)
+    if (!coach && !replacing() && a && w && w.kind !== 'transition') (w.sessions || []).forEach((s, i) => { if (s.day === todayNo) plan += sessionCard(w, i, s); });
     if (!rep && !ext && !plan) return '';
-    const planBlock = plan ? (rep ? '<details class="hoy-min"><summary>Sesión del plan semanal de hoy (minimizada)</summary>' + plan + '</details>' : plan) : '';
-    return rep + planBlock + ext;
+    return rep + plan + ext;
+  }
+  /* ¿El plan semanal está reemplazado por una rutina? → null si no; si sí, [lun…dom] con true en los días que la rutina marca para entrenar */
+  function replaceDays() {
+    if (!H || !A.uid || A.role === 'coach' || !replacing()) return null;
+    const out = [false, false, false, false, false, false, false];
+    (A.me.routines || []).forEach(r => { if (r.mode === 'replace') (r.sessions || []).forEach(x => daysOf(x).forEach(d => { out[d - 1] = true; })); });
+    return out;
   }
   function startSession(i) {
     const w = A.me.week, a = A.me.asg; if (!w || !a) return;
@@ -589,7 +596,7 @@
     h += `<div class="card sec"><label class="lab" for="rtName">Nombre de la rutina</label><input class="txt" id="rtName" data-as="rtname" maxlength="80" placeholder="Ej.: Rehabilitación de hombro" value="${esc(R.name)}"></div>`;
     const md = R.mode === 'replace' ? 'replace' : 'extra';
     h += `<div class="card sec"><span class="eyebrow">¿Cómo se usa esta rutina?</span><label class="opt"><input type="radio" name="rtmode" data-as="rtmode" value="extra"${md === 'extra' ? ' checked' : ''}><span><b>Complementa el plan semanal</b><small>El atleta ve su semana del plan y, además, esta rutina. Puede entrenar una, otra o ambas.</small></span></label>` +
-      `<label class="opt"><input type="radio" name="rtmode" data-as="rtmode" value="replace"${md === 'replace' ? ' checked' : ''}><span><b>Reemplaza el plan semanal</b><small>Mientras exista, el atleta solo ve esta rutina. Su semana asignada queda guardada, oculta.</small></span></label></div>`;
+      `<label class="opt"><input type="radio" name="rtmode" data-as="rtmode" value="replace"${md === 'replace' ? ' checked' : ''}><span><b>Reemplaza el plan semanal</b><small>Mientras exista, el plan se reemplaza toda la semana: el atleta solo ve esta rutina y entrena únicamente los días que marques; los demás días son de descanso. Su semana asignada queda guardada, oculta.</small></span></label></div>`;
     h += R.sessions.map((d, i) => ha.rt.card(d, i)).join('');
     h += `<button class="btn ghost block" data-act="rt-ses-add"${R.sessions.length >= 14 ? ' disabled' : ''}>+ Sesión</button>`;
     h += `<div class="card sec"><label class="lab" for="rtNote">Nota para el atleta (opcional)</label><textarea class="txt area" id="rtNote" data-as="rtnote" rows="3" maxlength="400" placeholder="Indicaciones, molestias a cuidar…">${esc(R.note || '')}</textarea></div>`;
@@ -660,7 +667,7 @@
   }
 
   root.HalterAssign = {
-    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, onFinish: onFinish, onDelete: onDelete, flush: flush,
+    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, replaceDays: replaceDays, onFinish: onFinish, onDelete: onDelete, flush: flush,
     selected: () => A.sel, detail: detailHTML, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);
