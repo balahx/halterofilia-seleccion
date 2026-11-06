@@ -575,3 +575,5 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
 .rt-card .plain li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .rt-card .plain li > div { min-width: 0; }
 .rt-card .plain li small { display: block; color: var(--muted); }
+
+.ver-line .credit { display: block; margin-top: 2px; font-size: 11px; opacity: .6; letter-spacing: .03em; }

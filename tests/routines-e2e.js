@@ -70,26 +70,27 @@ const WEEKS = {
   await page.click('[data-act="rt-add"][data-d="0"]'); await page.waitForSelector('.pick');
   await page.click('.pick[data-ex="snatch"]'); await page.waitForSelector('.prow');
   ok((await page.locator('.prow').count()) === 1 && (await page.locator('#pd-0-0').getAttribute('data-f')) === 'prest' && /Pausa \(s\)/i.test(await txt('.prow')), 'mismo editor de la app, con «Pausa (s)» en segundos');
-  await page.fill('#ps-0-0', '4'); await page.fill('#pr-0-0', '2'); await page.fill('#pp-0-0', '65'); await page.fill('#pd-0-0', '45');
-  ok(/4×2/.test(await txt('#pv-0-0')) && /65 %/.test(await txt('#pv-0-0')) && /pausa 0:45/.test(await txt('#pv-0-0')), 'la vista previa muestra series, % y pausa: ' + (await txt('#pv-0-0')));
+  await page.fill('#ps-0-0', '4'); await page.fill('#pr-0-0', '2'); await page.fill('#pp-0-0', '65'); await page.fill('#pd-0-0', '5');
+  ok(/4×2/.test(await txt('#pv-0-0')) && /65 %/.test(await txt('#pv-0-0')) && /pausa 0:05/.test(await txt('#pv-0-0')), 'la vista previa muestra series, % y pausa: ' + (await txt('#pv-0-0')));
   await page.click('[data-act="rt-add"][data-d="0"]'); await page.waitForSelector('.pick'); await page.click('.pick[data-ex="bsq"]'); await page.waitForTimeout(200);
-  await page.fill('#ps-0-1', '3'); await page.fill('#pr-0-1', '5'); await page.fill('#pp-0-1', '70'); await page.fill('#pd-0-1', '90');
+  await page.fill('#ps-0-1', '3'); await page.fill('#pr-0-1', '5'); await page.fill('#pp-0-1', '70'); await page.fill('#pd-0-1', '8');
   await page.click('[data-act="rt-ses-add"]'); await page.waitForSelector('#dn-1');
   await page.fill('#dn-1', 'Tirones'); await page.click('[data-act="rt-add"][data-d="1"]'); await page.waitForSelector('.pick'); await page.click('.pick[data-ex="snpull"]'); await page.waitForTimeout(200);
-  await page.fill('#ps-1-0', '3'); await page.fill('#pr-1-0', '3'); await page.fill('#pp-1-0', '90'); await page.fill('#pd-1-0', '120');
+  await page.fill('#ps-1-0', '3'); await page.fill('#pr-1-0', '3'); await page.fill('#pp-1-0', '90'); await page.fill('#pd-1-0', '99');
+  ok((await page.inputValue('#pd-1-0')) === '10', 'la pausa nunca pasa de 10 segundos (99 queda en 10)');
   await page.fill('#rtNote', 'Sin dolor, parar si molesta el hombro.');
   if (process.env.SHOTS) await page.screenshot({ path: path.join(SHOTS, 'rutina-editor.png') });
   await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
   let d = await docs(), rid = Object.keys(d).find(k => k.startsWith('routines/')), r = d[rid];
   ok(r && r.uid === auid && r.name === 'Rehabilitación de hombro' && r.setBy === cuid && r.sessions.length === 2 && r.note.startsWith('Sin dolor'), 'la rutina quedó guardada para Ana');
-  ok(r.sessions[0].name === 'Movilidad y técnica' && r.sessions[0].items.length === 2 && r.sessions[0].items[0].sets === 4 && r.sessions[0].items[0].reps === '2' && r.sessions[0].items[0].pct === 65 && r.sessions[0].items[0].rest === 45 && r.sessions[0].items[1].rest === 90, 'con series, repeticiones, % y pausa en segundos de cada ejercicio');
+  ok(r.sessions[0].name === 'Movilidad y técnica' && r.sessions[0].items.length === 2 && r.sessions[0].items[0].sets === 4 && r.sessions[0].items[0].reps === '2' && r.sessions[0].items[0].pct === 65 && r.sessions[0].items[0].rest === 5 && r.sessions[0].items[1].rest === 8, 'con series, repeticiones, % y pausa en segundos de cada ejercicio');
   ok(/Rehabilitación de hombro/.test(await txt('#view')) && /2 sesiones · 3 ejercicios/.test(await txt('#view')), 'aparece en la lista del atleta');
 
   console.log('2. Editar y volver a guardar');
   await page.click('[data-act="rt-edit"]'); await page.waitForSelector('#rtName');
-  ok(/Editar rutina/.test(await txt('#view h1')) && (await page.inputValue('#pd-0-0')) === '45' && (await page.inputValue('#rtName')) === 'Rehabilitación de hombro', 'el editor abre con los datos guardados');
-  await page.fill('#pd-0-0', '60'); await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
-  d = await docs(); ok(d[rid].sessions[0].items[0].rest === 60 && Object.keys(d).filter(k => k.startsWith('routines/')).length === 1, 'se actualiza la misma rutina (no se duplica)');
+  ok(/Editar rutina/.test(await txt('#view h1')) && (await page.inputValue('#pd-0-0')) === '5' && (await page.inputValue('#rtName')) === 'Rehabilitación de hombro', 'el editor abre con los datos guardados');
+  await page.fill('#pd-0-0', '7'); await page.click('[data-act="rt-save"]'); await page.waitForSelector('[data-act="rt-edit"]');
+  d = await docs(); ok(d[rid].sessions[0].items[0].rest === 7 && Object.keys(d).filter(k => k.startsWith('routines/')).length === 1, 'se actualiza la misma rutina (no se duplica)');
   await page.click('[data-act="rt-edit"]'); await page.waitForSelector('#rtName'); await page.click('[data-act="rt-cancel"]');
   ok(await page.locator('[data-act="rt-new"]').count() === 1, 'volver sin guardar regresa al atleta');
 
@@ -105,9 +106,9 @@ const WEEKS = {
   const rows = await page.locator('.set[data-i]').evaluateAll(l => l.map(x => ({ kg: x.querySelector('[data-f="kg"]').value, ph: x.querySelector('[data-f="reps"]').placeholder, v: x.querySelector('[data-f="reps"]').value })));
   ok(rows.length === 7 && rows.slice(0, 4).every(x => x.kg === '52' && x.ph === '2' && x.v === '') && rows.slice(4).every(x => x.ph === '5' && x.v === ''), 'series: kilos con el máximo de Ana (65 % de 80 = 52) y repeticiones sombreadas: ' + JSON.stringify(rows.slice(0, 2)));
   const rest = await page.evaluate(() => HalterApp.state().sessions.find(s => !s.endedAt).items.map(i => i.rest));
-  ok(rest.join(',') === '60,90', 'la pausa de cada ejercicio es la que puso el entrenador: ' + rest);
+  ok(rest.join(',') === '7,8', 'la pausa de cada ejercicio es la que puso el entrenador: ' + rest);
   const clock = await page.evaluate(() => document.querySelector('#dockBox') ? document.querySelector('#dockBox').innerText : '');
-  ok(/1:00/.test(clock), 'el temporizador parte con la pausa del primer ejercicio (1:00): ' + clock.replace(/\s+/g, ' '));
+  ok(/0:07/.test(clock), 'el temporizador parte con la pausa del primer ejercicio (0:07): ' + clock.replace(/\s+/g, ' '));
   const kgs = page.locator('[data-f="kg"]'); for (let i = 4; i < await kgs.count(); i++) await kgs.nth(i).fill('70');   // sentadilla trasera: Ana aún no tiene máximo, anota el peso
   const reps = page.locator('[data-f="reps"]'); for (let i = 0; i < await reps.count(); i++) await reps.nth(i).fill(i < 4 ? '2' : '5');
   for (const t of await page.locator('.tick').all()) await t.click();

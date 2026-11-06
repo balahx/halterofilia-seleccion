@@ -660,7 +660,7 @@ function planRow(d, i, p, k, rt) {
     '<div class="prow-f"><label><span>Series</span><input class="num sm" id="ps-' + id + '" data-f="psets" inputmode="numeric" value="' + p.sets + '"></label>' +
     '<label><span>Reps</span><input class="num sm" id="pr-' + id + '" data-f="preps" inputmode="text" value="' + esc(p.reps) + '"></label>' +
     '<label><span>% máx.</span><input class="num sm" id="pp-' + id + '" data-f="ppct" inputmode="decimal" value="' + (p.pct > 0 ? fmtNum(p.pct, 1) : '') + '"></label>' +
-    (rt ? '<label><span>Pausa (s)</span><input class="num sm" id="pd-' + id + '" data-f="prest" inputmode="numeric" placeholder="auto" aria-label="Pausa entre series, en segundos" value="' + (p.rest > 0 ? p.rest : '') + '"></label>'
+    (rt ? '<label><span>Pausa (s)</span><input class="num sm" id="pd-' + id + '" data-f="prest" inputmode="numeric" placeholder="0–10" maxlength="2" aria-label="Pausa entre series, de 0 a 10 segundos" value="' + (p.rest > 0 ? p.rest : '') + '"></label>'
         : '<label><span>Descanso</span>' + restSelect(p.rest, 'id="pd-' + id + '" data-f="prest"', true) + '</label>') + '</div></div>';
 }
 function dayCard(d, i) {
@@ -1438,7 +1438,7 @@ function onField(t) {
       if (f === 'psets') { const n = parseInt(t.value, 10); if (n >= 1 && n <= 30) p.sets = n; }
       else if (f === 'preps') { const c = t.value.replace(/[^\d+]/g, ''); if (c !== t.value) t.value = c; p.reps = c; }
       else if (f === 'ppct') { const v = parseNum(t.value); p.pct = isNaN(v) || v < 0 ? 0 : v; setDot(row.querySelector('.pn .pl'), zoneOf(p.pct)); }
-      else { const r = parseNum(t.value) || 0; p.rest = isRt ? Math.min(Math.max(Math.round(r), 0), 900) : r; }
+      else { const r = parseNum(t.value) || 0; if (isRt) { p.rest = Math.min(Math.max(Math.round(r), 0), 10); if (t.value !== '' && String(p.rest) !== t.value.trim()) t.value = String(p.rest); } else p.rest = r; }
       setText(document.getElementById('pv-' + row.dataset.d + '-' + row.dataset.k), planPreview(p, e, isRt)); if (isRt) { if (RT.onChange) RT.onChange(); } else save(); break;
     }
     case 'autoTimer': S.profile.autoTimer = t.checked; save(); break;

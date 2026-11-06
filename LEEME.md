@@ -153,8 +153,8 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 ## Actualizar la app sin reinstalarla
 - **Ajustes → Aplicación → «Buscar actualización»** compara la versión que corre con la publicada (`version.js`, siempre pedida a la red). Si hay una nueva aparece «Actualizar ahora»: renueva el service worker, borra lo guardado antes y recarga. **La cuenta y los datos se conservan: no hay que volver a ingresar.** Sin conexión avisa y no se rompe. Es igual en computador y celular.
 - 6 segundos después de abrir la app se comprueba en silencio; si hay una versión nueva, el engranaje muestra un punto dorado.
-- La versión se ve al final de «Más» y de Ajustes («Versión 4.1.1»).
-- **Al publicar cambios, sube la versión en `version.js`**: `n` (el número que se ve, «Versión 4.1.1») y `v` (`AAAA.MM.DD.n`, nombra el caché; la fecha debe coincidir). **Regla de `n` (X.Y.Z), sube en cada publicación:** arreglo pequeño → Z (4.1.1 → 4.1.2); función nueva → Y y Z vuelve a 0 (4.1.2 → 4.2.0); cambio grande → X (4.2.0 → 5.0.0). La comparación es numérica por partes (4.10.0 es más nueva que 4.9.0). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
+- La versión se ve al final de «Más» y de Ajustes («Versión 4.1.2»).
+- **Al publicar cambios, sube la versión en `version.js`**: `n` (el número que se ve, «Versión 4.1.2») y `v` (`AAAA.MM.DD.n`, nombra el caché; la fecha debe coincidir). **Regla de `n` (X.Y.Z), sube en cada publicación:** arreglo pequeño → Z (4.1.2 → 4.1.3); función nueva → Y y Z vuelve a 0 (4.1.3 → 4.2.0); cambio grande → X (4.2.0 → 5.0.0). La comparación es numérica por partes (4.10.0 es más nueva que 4.9.0). Sin ese cambio las personas no ven «Hay una versión nueva». El caché del service worker usa ese número.
 - Pruebas: `node tests/update-unit.js` y `node tests/update-e2e.js`.
 
 ## Lo que viene
@@ -173,9 +173,9 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 - Pruebas: `node tests/coach-self-e2e.js` y `node tests/phone-e2e.js`.
 - **Semanas que ya no existen:** si se vuelve a subir el plan y la semana asignada a un atleta desaparece, él ve «Semana no encontrada» y el entrenador ve en Equipo un aviso rojo con los nombres, y la fila del atleta marca «ya no existe en el plan». Se resuelve asignándole una semana de nuevo.
 
-## Rutinas especiales para atletas (versión 4.1.1)
+## Rutinas especiales para atletas (versiones 4.1.1–4.1.2)
 
-- Para atletas iniciados que aún no tienen una semana del plan: en **Equipo**, al abrir un atleta aparece la tarjeta **Rutinas especiales** → «Nueva rutina». El editor es el mismo de la planificación de la app (sesiones con ejercicios, series, repeticiones y % del máximo) y además cada ejercicio lleva **Pausa (s)**: segundos de descanso entre series (0 a 900; 0 = se usa la pausa habitual del ejercicio).
+- Para atletas iniciados que aún no tienen una semana del plan: en **Equipo**, al abrir un atleta aparece la tarjeta **Rutinas especiales** → «Nueva rutina». El editor es el mismo de la planificación de la app (sesiones con ejercicios, series, repeticiones y % del máximo) y además cada ejercicio lleva **Pausa (s)**: segundos de descanso entre series (de 0 a 10; 0 = se usa la pausa habitual del ejercicio).
 - La rutina tiene nombre, nota opcional y de 1 a 14 sesiones; se puede editar o eliminar (pide confirmar). Se guarda en `routines/{id}` y solo la ve el atleta indicado (y el entrenador).
 - **El atleta** ve en «Semana» la tarjeta «Rutina de tu entrenador» con un botón **Iniciar** por sesión; entrena con la misma pantalla de sesión (kilos desde sus máximos, repeticiones sombreadas, pausa del entrenador como temporizador de descanso). También se guarda para abrir sin conexión.
 - Una rutina no reemplaza ni borra la semana asignada: conviven.

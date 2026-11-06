@@ -37,7 +37,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   let card = await txt('#updCard');
   ok(new RegExp('Versión ' + V.n.replace(/\./g, '\\.') + '(?![\\d.])').test(card) && !card.includes(V.v), 'la tarjeta de Ajustes muestra solo «Versión ' + V.n + '»');
   ok(/Ya tienes la última versión/.test(card), 'con la misma versión publicada dice que está al día');
-  ok(/Versión/.test(await txt('#dlg #verLine')), 'la versión también va al final de Ajustes');
+  ok(/Versión/.test(await txt('#dlg #verLine')) && /Created & Developed by Felipe González/.test(await txt('#dlg #verLine')), 'la versión y el crédito también van al final de Ajustes');
   await shot('01-al-dia');
 
   console.log('2. Hay una versión nueva publicada');

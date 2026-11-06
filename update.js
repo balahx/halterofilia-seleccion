@@ -94,7 +94,7 @@
     if (hasDom && !U.at && U.state === 'idle') setTimeout(() => check(false), 0);
     return '<p class="eyebrow">Aplicación</p><div id="updCard" class="upd">' + inner() + '</div>';
   }
-  function footer() { return '<p class="ver-line" id="verLine">WL · Selección · ' + esc(versionText()) + '</p>'; }
+  function footer() { return '<p class="ver-line" id="verLine">' + esc(versionText()) + '<small class="credit">Created &amp; Developed by Felipe González</small></p>'; }
   function paint() { if (!hasDom) return; const el = document.getElementById('updCard'); if (el) el.innerHTML = inner(); }
   function onAct(act) {
     if (act === 'upd-check') { check(true); return true; }
