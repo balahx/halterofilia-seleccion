@@ -47,7 +47,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   ok(rq.length === 1, 'verificado: la solicitud de acceso se envía sola con el nombre escrito al registrarse');
 
   console.log('5. Cuentas que ya existían: no se tocan');
-  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm');
+  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(300);
   await page.evaluate(() => {
     const s = __fake.srv();   // dos cuentas anteriores a 4.6: una con solicitud pendiente y otra ya aprobada, ambas sin verificar
     s.users['vieja@correo.cl'] = { uid: 'uidvieja', pass: 'clave123', verified: false }; s.users['socia@correo.cl'] = { uid: 'uidsocia', pass: 'clave123', verified: false };
@@ -57,11 +57,11 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await page.fill('#gEmail', 'vieja@correo.cl'); await page.fill('#gPass', 'clave123'); await page.click('#gForm button[type=submit]');
   await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || ''));
   ok(true, 'quien ya tenía una solicitud pendiente sigue viéndola (no se le pide verificar)');
-  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm');
+  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(300);
   await page.fill('#gEmail', 'socia@correo.cl'); await page.fill('#gPass', 'clave123'); await page.click('#gForm button[type=submit]');
   await page.waitForSelector('#appRoot:not([hidden])', { timeout: 8000 });
   ok(true, 'quien ya estaba aprobada entra a la app sin verificar nada');
-  await page.evaluate(() => window.HALTER_REMOTE_FACTORY().signOut()); await page.waitForSelector('#gForm'); await page.waitForTimeout(400);
+  await page.evaluate(() => window.HALTER_REMOTE_FACTORY().signOut()); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(300); await page.waitForTimeout(400);
 
   console.log('6. Si no se pudo enviar el correo, se puede reenviar');
   await page.evaluate(() => { localStorage.setItem('fake.noverify', '1'); localStorage.setItem('fake.sendfail', '1'); });

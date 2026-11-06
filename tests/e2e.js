@@ -25,7 +25,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   const shot = n => page.screenshot({ path: path.join(SHOTS, n + '.png') });
   const txt = sel => page.locator(sel).first().innerText();
   const vis = sel => page.locator(sel).first().isVisible();
-  const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500); };
+  const logout = async () => { await page.click('#gear'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(500); };
   const signup = async (name, email, pass, pass2) => {
     await page.click('[data-g="mode"][data-v="signup"]');
     await page.selectOption('#gSex', 'F'); await page.fill('#gName', name); await page.fill('#gEmail', email); await page.fill('#gPass', pass); await page.fill('#gPass2', pass2 == null ? pass : pass2); await page.check('#gPriv');
@@ -58,7 +58,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   ok(rq.length === 1 && rq[0].name === 'Ana Rojas' && rq[0].email === 'ana@correo.cl' && rq[0].status === 'pending', 'solicitud guardada con nombre y correo');
   ok(!(await vis('#appRoot')), 'la app sigue oculta mientras no la aprueben');
   await shot('02-pendiente');
-  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm');
+  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(300);
 
   console.log('3. Entrenador: se configura y aprueba');
   await signup('Cristian Mateluna', 'cristian@correo.cl', 'clave123');
@@ -81,7 +81,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   console.log('4. Rechazo con confirmación');
   await logout(); await signup('Beto Pino', 'beto@correo.cl', 'clave123');
   await page.waitForFunction(() => /Solicitud enviada/.test(document.querySelector('#gate h1')?.textContent || ''));
-  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm');
+  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(300);
   await login('cristian@correo.cl', 'clave123'); await page.waitForSelector('#appRoot:not([hidden])');
   await page.click('#nav button[data-tab="equipo"]'); await page.waitForSelector('[data-act="eq-reject"]');
   await page.click('[data-act="eq-reject"]');
@@ -100,7 +100,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   await page.click('#gear'); await page.waitForSelector('.acct');
   ok(/Atleta/.test(await txt('.acct')) && /ana@correo.cl/.test(await txt('.acct')), 'Ajustes muestra correo y rol');
   ok((await page.locator('details.priv').count()) === 1 && /Borrar todos mis datos/.test(await page.locator('details.priv').textContent()), 'Ajustes incluye el aviso de privacidad');
-  await shot('05-ajustes'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm'); await page.waitForTimeout(500);
+  await shot('05-ajustes'); await page.click('[data-act="cl-logout"]'); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(500);
   await login('beto@correo.cl', 'clave123');
   await page.waitForFunction(() => /no aprobada/.test(document.querySelector('#gate h1')?.textContent || ''));
   ok(true, 'Beto ve «Solicitud no aprobada»');
@@ -119,7 +119,7 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   await page.evaluate(u => __fake.admin('members/' + u, null), bu);
   await page.waitForSelector('#gate:not([hidden])');
   ok(!(await vis('#appRoot')), 'al retirarle el acceso, vuelve a la pantalla de ingreso');
-  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm');
+  await page.evaluate(() => document.querySelector('[data-g="logout"]').click()); await page.waitForSelector('#gForm[data-g-form="login"]'); await page.waitForTimeout(300);
 
   console.log('7. Sin conexión: un dispositivo con acceso previo abre la app');
   await login('ana@correo.cl', 'clave123'); await page.waitForSelector('#appRoot:not([hidden])');
