@@ -1361,12 +1361,15 @@ function settingsHTML() {
     '<p class="eyebrow">Temporizador</p><div class="checks">' + chk('timerEnabled', 'Mostrar temporizador y cronómetro') + chk('autoTimer', 'Iniciar solo al marcar una serie como hecha') + chk('sound', 'Sonido al terminar el descanso') + chk('vibrate', 'Vibración al terminar') + '</div>' +
     '<p class="eyebrow">Nombres de los ejercicios</p><label class="fl"><span>Idioma principal</span>' + sel('exLang', ['en', 'es'], v => v === 'en' ? 'English (principal) · Español debajo' : 'Español (principal) · English debajo', 'sLang').replace(' data-num="1"', '') + '</label>' +
     '<p class="eyebrow">Sesión</p><div class="checks">' + chk('keepAwake', 'Mantener la pantalla encendida durante la sesión') + chk('showRpe', 'Anotar esfuerzo percibido (RPE) por serie') + '</div>' +
+    '<p class="eyebrow">Pantalla</p><div class="checks"><label class="chk"><input type="checkbox" id="sZoom" data-f="zoom"' + (zoomOn() ? ' checked' : '') + '><span>Permitir zoom (pellizcar para ampliar)</span></label></div>' +
+    '<p class="muted">Apagado, la pantalla queda fija. Vale solo para este dispositivo. Si lo enciendes y no cambia, cierra y vuelve a abrir la app.</p>' +
     '<p class="eyebrow">Tus datos</p><p class="muted">' + (APP.cloud ? 'Se guardan en este dispositivo y se copian solos en tu cuenta, así los ves en cualquier dispositivo donde entres. ' : 'Se guardan en este dispositivo. ') + 'Descarga un respaldo de vez en cuando.</p><div class="stack">' +
     '<button class="btn ghost" data-act="export-json">Exportar respaldo (JSON)</button><button class="btn ghost" data-act="export-csv">Exportar historial (CSV para Excel)</button></div>' +
     '<label class="lab" for="impFile">Importar respaldo</label><input type="file" id="impFile" data-f="impFile" accept=".json,application/json" class="file">' +
-    '<textarea class="txt area" id="impText" rows="2" placeholder="…o pega aquí el contenido del respaldo"></textarea><div class="row-end"><button class="btn ghost sm" data-act="import-run">Importar texto</button></div>';
+    '<textarea class="txt area" id="impText" rows="2" aria-label="Contenido del respaldo para importar" placeholder="…o pega aquí el contenido del respaldo"></textarea><div class="row-end"><button class="btn ghost sm" data-act="import-run">Importar texto</button></div>';
   if (ui2.imp != null) h += '<div class="note warn"><b>Se reemplazarán tus datos actuales' + (APP.cloud ? ' (también en la nube)' : '') + '</b> por un respaldo con ' + ui2.imp + ' sesiones.<div class="actions"><button class="btn sm" data-act="import-confirm">Reemplazar</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>';
   if (window.HalterUpdate) h += window.HalterUpdate.card();
+  h += '<div class="row-end"><button class="btn ghost sm" data-act="report-open">Reportar un problema</button></div>';
   h += '<div class="row-end"><button class="lnk danger" data-act="wipe">' + confirmLabel('wipe', APP.cloud ? 'Borrar todos mis datos (también en la nube)' : 'Borrar todos mis datos', 'Confirmar: borrar todo') + '</button></div>' + (window.HalterUpdate ? window.HalterUpdate.footer() : '') + '</div>';
   return h;
 }
@@ -1407,6 +1410,7 @@ function renderSheet() {
   let title = '', body = '';
   switch (sh.kind) {
     case 'settings': title = 'Ajustes'; body = settingsHTML(); break;
+    case 'report': title = 'Reportar un problema'; body = '<p class="muted">Cuéntanos qué pasó. Se arma un texto con la versión, el tipo de teléfono y los últimos errores (sin tus datos de entrenamiento). Cópialo o compártelo con quien administra la app.</p><label class="lab" for="rpNote">Qué pasó</label><textarea class="txt area" id="rpNote" data-f="rpnote" rows="3" maxlength="500" placeholder="Ej.: al marcar una serie la pantalla quedó en blanco">' + esc(sh.note || '') + '</textarea><label class="lab" for="rpText">Texto del reporte</label><textarea class="txt area" id="rpText" rows="8" readonly>' + esc(problemReport(sh.note)) + '</textarea><div class="stack"><button class="btn" data-act="report-copy">Copiar reporte</button>' + (navigator.share ? '<button class="btn ghost" data-act="report-share">Compartir</button>' : '') + '</div>'; break;
     case 'privacy': title = 'Aviso de privacidad'; body = window.HalterPrivacy ? window.HalterPrivacy.html(true) : ''; break;
     case 'pick': title = 'Elegir ejercicio'; body = '<input class="txt" id="pickQ" data-f="pickQ" type="search" placeholder="Buscar ejercicio" autocomplete="off" aria-label="Buscar ejercicio"><div id="pickList">' + pickList(sh.q || '') + '</div><div class="row-end"><button class="btn ghost sm" data-act="ex-new">+ Crear ejercicio</button></div>'; break;
     case 'ex': title = sh.id ? 'Editar ejercicio' : 'Nuevo ejercicio'; body = exSheetHTML(sh.id); break;
@@ -1464,6 +1468,8 @@ function onField(t) {
     case 'srpe': if (s) { const v = parseInt(t.value, 10); if (v >= 1 && v <= 10) s.srpe = v; else delete s.srpe; save(); } break;
     case 'durMin': if (s) { const v = parseInt(t.value, 10); if (v >= 1 && v <= 600) s.durMin = v; else delete s.durMin; save(); } break;
     case 'bwq': break;
+    case 'rpnote': { if (ui.sheet && ui.sheet.kind === 'report') { ui.sheet.note = t.value; const r = $('#rpText'); if (r) r.value = problemReport(t.value); } break; }
+    case 'zoom': lsSet(ZOOM_KEY, t.checked ? '1' : '0'); applyZoom(); toast(t.checked ? 'Zoom permitido en este dispositivo.' : 'Pantalla fija otra vez.'); break;
     case 'inote': if (s) { const it = s.items[+t.closest('.exc').dataset.i]; if (it) { it.note = t.value.slice(0, 200); save(); } } break;
     case 'dname': { const c = t.closest('.day'); if (c.dataset.rt) { RT.days[+c.dataset.d].name = t.value; if (RT.onChange) RT.onChange(); } else { S.plan.days[+c.dataset.d].name = t.value; save(); } break; }
     case 'dday': { const c = t.closest('.day'); if (c && c.dataset.rt) { const v = parseInt(t.value, 10); RT.days[+c.dataset.d].day = v >= 1 && v <= 7 ? v : 0; if (RT.onChange) RT.onChange(); } break; }
@@ -1510,10 +1516,43 @@ function onField(t) {
   }
 }
 
+/* ----- Zoom, registro de errores y «Reportar un problema» ----- */
+/* Por defecto la pantalla es fija; en Ajustes cada dispositivo puede permitir el zoom (se guarda aparte del perfil, no se sincroniza). */
+const ZOOM_KEY = 'halterofilia.zoom', ERR_KEY = 'halterofilia.errlog';
+const VP_FIXED = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover', VP_ZOOM = 'width=device-width, initial-scale=1, viewport-fit=cover';
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } }
+const zoomOn = () => lsGet(ZOOM_KEY) === '1';
+function applyZoom() { const m = document.querySelector('meta[name="viewport"]'); if (m) m.setAttribute('content', zoomOn() ? VP_ZOOM : VP_FIXED); }
+/* Los últimos errores de la app quedan en este dispositivo (sin datos personales) para poder reportarlos. */
+function logError(msg, where) {
+  try {
+    const list = JSON.parse(lsGet(ERR_KEY) || '[]');
+    list.push({ t: new Date().toISOString(), m: String(msg || '').slice(0, 300), w: String(where || '').slice(0, 120) });
+    lsSet(ERR_KEY, JSON.stringify(list.slice(-15)));
+  } catch (e) { /* no debe provocar otro error */ }
+}
+if (typeof window.addEventListener === 'function') {
+  window.addEventListener('error', e => logError(e.message, (e.filename || '').split('/').pop() + ':' + (e.lineno || 0)));
+  window.addEventListener('unhandledrejection', e => logError(e.reason && e.reason.message || e.reason, 'promesa'));
+}
+function problemReport(note) {
+  let errs = []; try { errs = JSON.parse(lsGet(ERR_KEY) || '[]'); } catch (e) { errs = []; }
+  const v = window.HALTER_VERSION || {};
+  const lines = ['Reporte de WL · Selección', 'Versión: ' + (v.n || '?') + ' (' + (v.date || '') + ')', 'Fecha: ' + new Date().toISOString(),
+    'Pantalla: ' + window.innerWidth + '×' + window.innerHeight + ' · zoom ' + (zoomOn() ? 'permitido' : 'fijo'),
+    'Conexión: ' + (navigator.onLine === false ? 'sin conexión' : 'con conexión'), 'Navegador: ' + (navigator.userAgent || '?'),
+    'Sesiones guardadas: ' + (S ? S.sessions.length : '?') + ' · pestaña: ' + (ui.tab || '?'), ''];
+  lines.push(note && note.trim() ? 'Qué pasó: ' + note.trim() : 'Qué pasó: (escríbelo aquí)', '');
+  lines.push(errs.length ? 'Últimos errores de la app:' : 'Sin errores registrados en este dispositivo.');
+  errs.slice(-10).forEach(x => lines.push('- ' + x.t + ' · ' + x.w + ' · ' + x.m));
+  return lines.join('\n');
+}
+
 /* ----- Clics ----- */
 /* Pantalla fija: ni pellizco ni doble toque acercan la app (iOS ignora user-scalable, por eso también se frena aquí) */
-['gesturestart', 'gesturechange', 'gestureend'].forEach(n => document.addEventListener(n, e => e.preventDefault()));
-document.addEventListener('touchmove', e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+['gesturestart', 'gesturechange', 'gestureend'].forEach(n => document.addEventListener(n, e => { if (!zoomOn()) e.preventDefault(); }));
+document.addEventListener('touchmove', e => { if (!zoomOn() && e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('click', e => {
   primeAudio();
   const t = e.target.closest('[data-act]');
@@ -1587,6 +1626,13 @@ document.addEventListener('click', e => {
     case 'plates-toggle': ui.platesOpen = !ui.platesOpen; render(); break;
     case 'open-plates': ui.platesOpen = true; ui.tab = 'max'; render(); window.scrollTo(0, 0); break;
     case 'privacy': openSheet('privacy'); break;
+    case 'report-open': openSheet('report', { note: '' }); break;
+    case 'report-copy': {
+      const ta = $('#rpText'); ta.select();
+      try { navigator.clipboard.writeText(ta.value).then(() => toast('Reporte copiado.'), () => toast('Selecciona el texto y cópialo manualmente.')); } catch (err) { toast('Selecciona el texto y cópialo manualmente.'); }
+      break;
+    }
+    case 'report-share': try { navigator.share({ title: 'Reporte de WL · Selección', text: $('#rpText').value }).catch(() => { /* cancelado */ }); } catch (err) { /* sin compartir */ } break;
     case 'ex-new-sess': openSheet('ex', { id: null, cb: addExerciseToSession }); break;
     case 'ex-new': openSheet('ex', { id: null, cb: ui.sheet && ui.sheet.kind === 'pick' ? ui.sheet.cb : null }); break;
     case 'ex-edit': openSheet('ex', { id: t.dataset.ex }); break;
@@ -1651,6 +1697,7 @@ let started = false, tickId = null;
    Lo llama cloud.js cuando la persona ya inició sesión y tiene acceso. */
 function start(opts) {
   opts = opts || {};
+  applyZoom();
   KEY = opts.storageKey || 'halterofilia.v1.local';
   APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, hoyHTML: opts.hoyHTML || null, cloud: !!opts.cloud };
   storageOK = true;

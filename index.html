@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com/firebasejs/ https://cdnjs.cloudflare.com/ajax/libs/xlsx/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://www.gstatic.com https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; frame-src https://finanzas-personales-134f6.firebaseapp.com; manifest-src 'self'; worker-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://www.gstatic.com/firebasejs/ https://cdnjs.cloudflare.com/ajax/libs/xlsx/; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://www.gstatic.com https://cdnjs.cloudflare.com; frame-src https://finanzas-personales-134f6.firebaseapp.com; manifest-src 'self'; worker-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script src="guard.js"></script>
 <script src="version.js"></script>
@@ -19,9 +19,8 @@
 <link rel="manifest" href="manifest.webmanifest?v=2">
 <link rel="icon" href="icons/icon.svg?v=2" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png?v=2">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/Barlow-Regular.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="fonts/BarlowCondensed-Bold.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>

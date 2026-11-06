@@ -71,6 +71,10 @@ node tests/pwa.js          # manifest, service worker, apertura sin conexión
 node tests/sync-unit.js    # motor de sincronización: varios dispositivos, conflictos, cola sin conexión
 node tests/sync-e2e.js     # sincronización dentro de la app real
 node tests/plan-import.js  # lectura del plan (sin navegador)
+node tools/run-tests.js    # corre TODAS las pruebas y dice cuáles fallan
+node tests/a11y-audit.js   # accesibilidad: tamaño de los controles (44 px), nombres, contraste, sin desborde
+node tests/version-unit.js # formato de version.js, tools/bump.js y archivos de la caché sin conexión
+node tools/bump.js feature # sube la versión (fix → +0.0.1 · feature → +0.1.0 · big → +1.0.0)
 node tests/plan.js         # el entrenador carga, publica y activa un plan
 node tests/assign-unit.js  # hora de corte en Chile, sesión armada desde el plan, avance de semana
 node tests/report-unit.js  # armado de los informes: planificado vs realizado, estados, observaciones, texto
@@ -187,3 +191,7 @@ Pruebas nuevas: `tests/indicators-unit.js`, `tests/compare-unit.js`, `tests/comp
 - **Día de entrenamiento:** cada sesión puede llevar un día (Lunes a Domingo) o «Cualquier día». El atleta ve el día en la sesión y se marca «(hoy)» cuando corresponde.
 - **Modo, a elección del entrenador:** *Complementa el plan semanal* (el atleta ve su semana del plan y la rutina: entrena una, otra o ambas) o *Reemplaza el plan semanal* (mientras la rutina exista, el atleta solo ve la rutina; su semana asignada queda guardada, oculta, y reaparece si se quita la rutina o pasa a complementaria). En la ficha del atleta cada rutina muestra su modo y sus días.
 - **Reglas de Firestore:** la rutina ahora guarda el campo `mode` (`extra` o `replace`). **Hay que volver a publicar `firestore.rules`**; si no, guardar una rutina falla con «Sin permiso».
+
+## Automatización en GitHub (carpeta `.github/workflows`)
+- **Pruebas** (`ci.yml`): en cada subida a `main` corre todas las pruebas, prueba `firestore.rules` con el **emulador de Firestore** (`tests/rules-emulator.js`, solo corre allí) y, tras publicar, comprueba que la página muestre la versión nueva; si no la muestra en 35 minutos el trabajo queda en rojo y GitHub avisa por correo.
+- **Publicación condicionada (opcional):** en *Settings → Pages* elegir «GitHub Actions» y en *Settings → Secrets and variables → Actions → Variables* crear `DEPLOY_PAGES` = `true`. Desde entonces la página solo se publica si todas las pruebas pasan.

@@ -25,6 +25,8 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   const jsFiles = fs.readdirSync(ROOT).filter(f => f.endsWith('.js') && f !== 'sw.js');
   const bad = jsFiles.filter(f => /\son(click|change|input|submit|load|error)=["']|\beval\(|new Function\(/.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
   ok(bad.length === 0, 'el código no genera manejadores en línea ni usa eval' + (bad.length ? ': ' + bad.join(', ') : ''));
+  ok(!/fonts\.(googleapis|gstatic)\.com/.test(html) && pol['font-src'].join() === "'self'" && !(pol['style-src'] || []).some(x => /google/.test(x)), 'las tipografías se alojan en la app: la política no admite fuentes de otros sitios (P5)');
+  ok(['Barlow-Regular', 'Barlow-Medium', 'Barlow-SemiBold', 'BarlowCondensed-Medium', 'BarlowCondensed-SemiBold', 'BarlowCondensed-Bold'].every(n => fs.existsSync(path.join(ROOT, 'fonts', n + '.woff')) && fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8').includes('fonts/' + n + '.woff')), 'los seis archivos de tipografía existen y styles.css los declara');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/guard\.js/.test(sw) && /backup\.js/.test(sw), 'guard.js y backup.js están en la caché sin conexión');
 

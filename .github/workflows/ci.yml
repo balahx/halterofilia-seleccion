@@ -1,0 +1,91 @@
+# Pruebas automáticas en cada subida a GitHub, prueba de las reglas con el emulador de Firestore y
+# aviso si la página publicada no muestra la versión nueva (antes los fallos de GitHub Pages pasaban sin que nadie se enterara).
+# Publicación condicionada (opcional): si en Settings → Pages eliges «GitHub Actions» y en Settings → Variables creas
+# DEPLOY_PAGES = true, la página solo se publica cuando todas las pruebas pasan.
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Pruebas de la app
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm i --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Correr todas las pruebas
+        run: node tools/run-tests.js
+
+  reglas:
+    name: Reglas de Firestore (emulador)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Instalar el emulador y las librerías de prueba
+        run: npm i --no-save firebase@10.14.1 @firebase/rules-unit-testing@3.0.4 firebase-tools@13.29.1
+      - name: Probar firestore.rules
+        run: npx firebase emulators:exec --only firestore --project demo-wl "node tests/rules-emulator.js"
+
+  publicar:
+    name: Publicar en GitHub Pages
+    needs: [pruebas, reglas]
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_PAGES == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  verificar:
+    name: La página publicada muestra la versión nueva
+    needs: [pruebas, publicar]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.pruebas.result == 'success' && needs.publicar.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Esperar la versión nueva en la página
+        run: |
+          want=$(grep -o "n: '[0-9.]*'" version.js | head -1 | grep -o "[0-9.]*")
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/version.js"
+          echo "Versión esperada: $want"
+          for i in $(seq 1 70); do
+            got=$(curl -fsS "$url?t=$RANDOM" | grep -o "n: '[0-9.]*'" | head -1 | grep -o "[0-9.]*" || true)
+            echo "intento $i: la página tiene '$got'"
+            if [ "$got" = "$want" ]; then echo "Listo: la página ya muestra la versión $want"; exit 0; fi
+            sleep 30
+          done
+          echo "::error::Pasaron 35 minutos y la página sigue sin mostrar la versión $want. Revisa Settings → Pages y la pestaña Actions."
+          exit 1

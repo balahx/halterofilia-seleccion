@@ -5,6 +5,7 @@ const CACHE = 'halterofilia-' + self.HALTER_VERSION.v;
 const NET_WAIT = 3000, NET_WAIT_SLOW = 0;   // ms que se espera a la red antes de abrir desde la copia guardada (menos si la red ya falló hace poco)
 let slowUntil = 0;
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './cloud.js', './sync.js', './plan-import.js', './plan-ui.js', './privacy.js', './assign.js', './report.js', './guard.js', './version.js', './update.js', './backup.js', './compare.js', './firebase-config.js', './manifest.webmanifest',
+  './fonts/Barlow-Regular.woff', './fonts/Barlow-Medium.woff', './fonts/Barlow-SemiBold.woff', './fonts/BarlowCondensed-Medium.woff', './fonts/BarlowCondensed-SemiBold.woff', './fonts/BarlowCondensed-Bold.woff',
   './icons/icon.svg', './icons/wl-marca-claro.svg', './icons/wl-marca-oscuro.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,8 +18,7 @@ self.addEventListener('fetch', e => {
   const req = e.request, u = new URL(req.url);
   const ok = u.origin === self.location.origin
     || (u.hostname === 'www.gstatic.com' && u.pathname.startsWith('/firebasejs/')) // SDK de Firebase
-    || (u.hostname === 'cdnjs.cloudflare.com' && u.pathname.startsWith('/ajax/libs/xlsx/')) // lector de Excel
-    || u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com';  // tipografías
+    || (u.hostname === 'cdnjs.cloudflare.com' && u.pathname.startsWith('/ajax/libs/xlsx/'));   // lector de Excel (las tipografías ya van dentro de la app)
   if (req.method !== 'GET' || !ok) return;
   if (u.pathname.endsWith('/version.js') && u.searchParams.has('t')) return;   // la comprobación de versión va directo a la red y no se guarda
   // Red primero, pero sin esperar sin límite: si la red tarda más de NET_WAIT ms y hay copia guardada, se usa la copia
