@@ -847,9 +847,8 @@ function settingsHTML() {
     '<textarea class="txt area" id="impText" rows="2" aria-label="Contenido del respaldo para importar" placeholder="…o pega aquí el contenido del respaldo"></textarea><div class="row-end"><button class="btn ghost sm" data-act="import-run">Importar texto</button></div>';
   if (ui2.imp != null) h += '<div class="note warn"><b>Se reemplazarán tus datos actuales' + (APP.cloud ? ' (también en la nube)' : '') + '</b> por un respaldo con ' + ui2.imp + ' sesiones.<div class="actions"><button class="btn sm" data-act="import-confirm">Reemplazar</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>';
   if (APP.cloud && window.HalterReads) {
-    const rd = window.HalterReads.report(), top = rd.by.filter(x => x[0] !== 'exercises').slice(0, 3).map(x => '<li><span>' + esc(x[0]) + '</span><b>' + fmtNum(x[1], 0) + '</b></li>').join('');
-    h += '<p class="eyebrow">Uso de la nube</p><p class="muted" role="status">Lecturas de hoy en este dispositivo: <b>' + fmtNum(rd.total, 0) + '</b> de 50.000 (' + fmtNum(rd.pctOfQuota, 1) + ' %). El conteo empieza de cero a medianoche, hora del Pacífico, igual que la cuota de Firebase; la cuota es de toda la app, no de este dispositivo.</p>' +
-      (top ? '<ul class="plain reads-top" aria-label="Consultas con más lecturas">' + top + '</ul>' : '');
+    const rd = window.HalterReads.report();
+    h += '<p class="eyebrow">Uso de la nube</p><p class="muted" role="status">Lecturas de hoy en este dispositivo: <b>' + fmtNum(rd.total, 0) + '</b> de 50.000 (' + fmtNum(rd.pctOfQuota, 1) + ' %). El conteo empieza de cero a medianoche, hora del Pacífico, igual que la cuota de Firebase; la cuota es de toda la app, no de este dispositivo.</p>';
   }
   if (window.HalterUpdate) h += window.HalterUpdate.card();
   h += '<div class="row-end"><button class="btn ghost sm" data-act="report-open">Reportar un problema</button></div>';
