@@ -70,7 +70,7 @@ const WEEKS = {
   let d = await docs(), a = d['assignments/' + auid];
   ok(a && a.weekId === 'e1_1' && a.week === 1 && a.stageId === 'e1' && a.planId === 'p1' && a.setBy === cuid, 'quedó asignada la semana 1 (firmada por el entrenador)');
   const ch = await page.evaluate(ms => HalterAssign.pure.chile(ms), a.weekEndsAt);
-  ok(ch.wd === 4 && ch.h === 23 && ch.mi === 59 && a.weekEndsAt > Date.now(), 'el corte es un viernes 23:59 hora de Chile y está en el futuro');
+  ok(ch.wd === 6 && ch.h === 23 && ch.mi === 59 && a.weekEndsAt > Date.now(), 'el corte es un domingo 23:59 hora de Chile y está en el futuro');
   ok(/Semana 1/.test(await txt('#view')), 'el detalle muestra «Semana 1»');
   ok((await page.locator('[data-as="pct"]').count()) === 1, 'solo el 92 % aparece como ajustable (desde 90 %)');
   await page.fill('[data-as="pct"]', '95'); await page.click('[data-act="as-adj-save"]'); await page.waitForTimeout(500);

@@ -70,7 +70,7 @@ const WEEKS = {
   let d = await docs(), a = d['assignments/' + auid];
   ok(a && a.weekId === 'e1_1' && a.week === 1 && a.stageId === 'e1' && a.planId === 'p1' && a.setBy === cuid, 'quedó asignada la semana 1 (firmada por el entrenador)');
   const ch = await page.evaluate(ms => HalterAssign.pure.chile(ms), a.weekEndsAt);
-  ok(ch.wd === 4 && ch.h === 23 && ch.mi === 59 && a.weekEndsAt > Date.now(), 'el corte es un viernes 23:59 hora de Chile y está en el futuro');
+  ok(ch.wd === 6 && ch.h === 23 && ch.mi === 59 && a.weekEndsAt > Date.now(), 'el corte es un domingo 23:59 hora de Chile y está en el futuro');
   ok(/Semana 1/.test(await txt('#view')), 'el detalle muestra «Semana 1»');
   ok((await page.locator('[data-as="pct"]').count()) === 1, 'solo el 92 % aparece como ajustable (desde 90 %)');
   await page.fill('[data-as="pct"]', '95'); await page.click('[data-act="as-adj-save"]'); await page.waitForTimeout(500);
@@ -161,6 +161,15 @@ const WEEKS = {
   await page.selectOption('#asWeek', 'e1_1'); await page.click('[data-act="as-assign"]'); await page.waitForTimeout(600);
   ok(/Cumplida el/.test(await txt('#view')), 'al ver la semana 1 aparecen las sesiones cumplidas con su fecha');
   await shot('06-coach-cumplidas');
+
+  console.log('6b. Asignaciones con corte del viernes (hasta la 4.11): al abrir el entrenador pasan al domingo 23:59');
+  const fri = await page.evaluate(() => { const P = HalterAssign.pure, p = P.chile(P.cutoffFor(Date.now())); return P.chileToMs(p.y, p.m, p.d - 2, 23, 59); });
+  await page.evaluate(({ u, fri }) => { const s = __fake.srv(), x = s.docs['assignments/' + u]; __fake.admin('assignments/' + u, Object.assign({}, x, { weekEndsAt: fri })); }, { u: auid, fri });
+  await page.reload(); await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(1200);
+  d = await docs(); a = d['assignments/' + auid];
+  const chm = await page.evaluate(ms => HalterAssign.pure.chile(ms), a.weekEndsAt);
+  ok(chm.wd === 6 && chm.h === 23 && chm.mi === 59, 'el corte del viernes quedó en el domingo 23:59 de esa semana (' + chm.wd + ')');
+  ok(a.weekId === 'e1_1' && a.setBy === cuid, 'la semana asignada no cambió');
 
   console.log('7. App instalada: abre con el último acceso guardado y, al llegar la conexión, carga la lista de atletas');
   await page.evaluate(() => __fake.setOffline(true)); await page.reload(); await page.waitForSelector('#appRoot:not([hidden])');

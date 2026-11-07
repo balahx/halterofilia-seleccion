@@ -4,30 +4,38 @@ const A = require('../assign.js'), P = require('../plan-import.js');
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ ' : '  ✗ ') + m); };
 const iso = ms => new Date(ms).toISOString();
 
-console.log('1. Corte semanal: viernes 23:59 hora de Chile');
+console.log('1. Corte semanal: domingo 23:59 hora de Chile');
 // Chile en verano (UTC-3) hasta el 4-abr-2026 y en invierno (UTC-4) hasta el 5-sep-2026
 let c = A.cutoffFor(Date.parse('2026-03-30T15:00:00Z'));          // lunes
-ok(iso(c) === '2026-04-04T02:59:00.000Z', 'lunes 30-mar → viernes 3-abr 23:59 (UTC-3) = ' + iso(c));
+ok(iso(c) === '2026-04-06T03:59:00.000Z', 'lunes 30-mar → domingo 5-abr 23:59 (UTC-4, ya en horario de invierno) = ' + iso(c));
 c = A.cutoffFor(Date.parse('2026-04-10T02:00:00Z'));              // jueves 9-abr 22:00 hora de Chile
-ok(iso(c) === '2026-04-11T03:59:00.000Z', 'jueves 9-abr → viernes 10-abr 23:59 (UTC-4) = ' + iso(c));
-c = A.cutoffFor(Date.parse('2026-04-11T03:00:00Z'));              // viernes 10-abr 23:00 Chile: aún es hoy
-ok(iso(c) === '2026-04-11T03:59:00.000Z', 'viernes 23:00 → ese mismo viernes 23:59');
-c = A.cutoffFor(Date.parse('2026-04-11T04:30:00Z'));              // viernes 00:30 UTC sábado = 00:30 sábado Chile (pasó el corte)
-ok(iso(c) === '2026-04-18T03:59:00.000Z', 'sábado 00:30 → viernes siguiente');
+ok(iso(c) === '2026-04-13T03:59:00.000Z', 'jueves 9-abr → domingo 12-abr 23:59 (UTC-4) = ' + iso(c));
+c = A.cutoffFor(Date.parse('2026-04-13T03:00:00Z'));              // domingo 12-abr 23:00 Chile: aún es hoy
+ok(iso(c) === '2026-04-13T03:59:00.000Z', 'domingo 23:00 → ese mismo domingo 23:59');
+c = A.cutoffFor(Date.parse('2026-04-13T04:30:00Z'));              // lunes 00:30 Chile (pasó el corte)
+ok(iso(c) === '2026-04-20T03:59:00.000Z', 'lunes 00:30 → domingo siguiente');
+c = A.cutoffFor(Date.parse('2026-04-11T15:00:00Z'));              // sábado: el fin de semana sigue contando para la semana actual
+ok(iso(c) === '2026-04-13T03:59:00.000Z', 'sábado → el domingo de ese fin de semana');
 c = A.cutoffFor(Date.parse('2026-11-05T19:00:00Z'));              // jueves 5-nov-2026, hoy
-ok(iso(c) === '2026-11-07T02:59:00.000Z', 'jueves 5-nov → viernes 6-nov 23:59 (UTC-3) = ' + iso(c));
-// la semana siguiente del corte
-let prev = Date.parse('2026-04-04T02:59:00Z'), nx = A.nextCutoff(prev), d = nx - prev;
-ok(iso(nx) === '2026-04-11T03:59:00.000Z', 'siguiente corte tras el 3-abr: ' + iso(nx));
+ok(iso(c) === '2026-11-09T02:59:00.000Z', 'jueves 5-nov → domingo 8-nov 23:59 (UTC-3) = ' + iso(c));
+// la semana siguiente del corte (mismo día de la semana, 7 días después)
+let prev = Date.parse('2026-04-06T03:59:00Z'), nx = A.nextCutoff(prev), d = nx - prev;
+ok(iso(nx) === '2026-04-13T03:59:00.000Z', 'siguiente corte tras el 5-abr: ' + iso(nx));
 ok(d >= 604800000 - 7200000 && d <= 604800000 + 7200000, 'diferencia dentro de ±2 h de 7 días (cambio de horario): ' + d / 3600000 + ' h');
-prev = Date.parse('2026-09-05T03:59:00Z'); nx = A.nextCutoff(prev); d = nx - prev;      // viernes 4-sep (UTC-4) → 11-sep (UTC-3)
+prev = Date.parse('2026-08-31T03:59:00Z'); nx = A.nextCutoff(prev); d = nx - prev;      // domingo 30-ago (UTC-4) → domingo 6-sep (UTC-3)
 ok(Math.abs(d - 604800000) <= 7200000, 'cambio de horario de septiembre también dentro de la tolerancia: ' + d / 3600000 + ' h');
+ok(iso(nx) === '2026-09-07T02:59:00.000Z' && A.chile(nx).wd === A.chile(prev).wd, 'el cambio de horario no mueve el día ni la hora: ' + d / 3600000 + ' h');
 const ch = A.chile(A.cutoffFor(Date.parse('2026-06-17T12:00:00Z')));
-ok(ch.wd === 4 && ch.h === 23 && ch.mi === 59, 'el corte siempre cae viernes 23:59 hora de Chile');
+ok(ch.wd === 6 && ch.h === 23 && ch.mi === 59, 'el corte siempre cae domingo 23:59 hora de Chile');
 for (let t = Date.parse('2026-01-01T00:00:00Z'); t < Date.parse('2027-01-01T00:00:00Z'); t += 37 * 3600000) {
-  const x = A.chile(A.cutoffFor(t)); if (!(x.wd === 4 && x.h === 23 && x.mi === 59) || A.cutoffFor(t) < t) { ok(false, 'corte inválido para ' + iso(t)); break; }
+  const x = A.chile(A.cutoffFor(t)); if (!(x.wd === 6 && x.h === 23 && x.mi === 59) || A.cutoffFor(t) < t) { ok(false, 'corte inválido para ' + iso(t)); break; }
+  const y = A.chile(A.nextCutoff(A.cutoffFor(t))); if (!(y.wd === 6 && y.h === 23 && y.mi === 59)) { ok(false, 'siguiente corte inválido para ' + iso(t)); break; }
 }
-ok(true, 'revisado un año entero cada 37 h: siempre viernes 23:59 y nunca en el pasado');
+ok(true, 'revisado un año entero cada 37 h: siempre domingo 23:59 y nunca en el pasado');
+// Asignaciones que quedaron con el corte del viernes (hasta la 4.11) → domingo 23:59 de esa misma semana
+const fri = Date.parse('2026-11-07T02:59:00Z');                  // viernes 6-nov 23:59 (UTC-3)
+ok(A.isFridayCut(fri) && !A.isFridayCut(fri + 2 * 86400000), 'se reconoce el corte del viernes y no el del domingo');
+ok(iso(A.fridayToSunday(fri)) === '2026-11-09T02:59:00.000Z', 'viernes 6-nov 23:59 → domingo 8-nov 23:59 = ' + iso(A.fridayToSunday(fri)));
 
 console.log('2. Ejercicios del catálogo con id propio en la app');
 const slugs = new Set(P.GLOSSARY.map(g => P.slug(g[1].replace(/\s*\(.*\)\s*$/, ''))));

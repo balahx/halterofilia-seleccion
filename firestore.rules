@@ -166,7 +166,7 @@ service cloud.firestore {
     }
 
     // Semana que el entrenador le asigna a cada atleta. El atleta solo puede pasar a la semana siguiente:
-    // después del corte (viernes 23:59 hora de Chile, calculado por la app) y con todas las sesiones de la semana cumplidas.
+    // después del corte (domingo 23:59 hora de Chile, calculado por la app) y con todas las sesiones de la semana cumplidas.
     match /assignments/{uid} {
       allow get: if signedIn() && ((request.auth.uid == uid && isMemberOf(uid)) || isCoach());
       allow list: if isCoach();

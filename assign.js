@@ -3,7 +3,7 @@
      porcentajes desde 90 % (el avance de cada atleta es distinto).
    - Atleta: pestaña «Semana» con las sesiones de su semana (kg calculados con sus máximos), inicio de la
      sesión ya armada, y el botón «Pasar a la semana siguiente».
-   La hora de corte (viernes 23:59, hora de Chile) la calcula la app; las reglas de Firestore comparan
+   La hora de corte (domingo 23:59, hora de Chile) la calcula la app; las reglas de Firestore comparan
    con la hora del servidor (firestore.rules). Sin Cloud Functions.
 
    Firestore:
@@ -28,15 +28,21 @@
     for (let i = 0; i < 4; i++) { const p = chile(g), got = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi); if (got === want) break; g += want - got; }
     return g;
   }
-  /* Próximo viernes a las 23:59 (hora de Chile). Si hoy es viernes y aún no son las 23:59, es hoy. */
+  /* Próximo domingo a las 23:59 (hora de Chile). Si hoy es domingo y aún no son las 23:59, es hoy.
+     (Hasta la 4.11 el corte era el viernes; el domingo deja los fines de semana para recuperar sesiones pendientes.) */
+  const CUT_WD = 6;   // 0 = lunes … 6 = domingo
   function cutoffFor(nowMs) {
-    const p = chile(nowMs), add = (4 - p.wd + 7) % 7;
+    const p = chile(nowMs), add = (CUT_WD - p.wd + 7) % 7;
     let t = chileToMs(p.y, p.m, p.d + add, 23, 59);
     if (t < nowMs) t = chileToMs(p.y, p.m, p.d + add + 7, 23, 59);
     return t;
   }
-  /* Corte de la semana siguiente a otro corte: 7 días después, también un viernes 23:59 de Chile */
-  const nextCutoff = prevMs => cutoffFor(prevMs + 2 * DAY);
+  /* Corte de la semana siguiente a otro corte: 7 días después, a las 23:59 de Chile y en el mismo día de la semana
+     (las reglas exigen entre 6,9 y 7,08 días de diferencia) */
+  const nextCutoff = prevMs => { const p = chile(prevMs); return chileToMs(p.y, p.m, p.d + 7, 23, 59); };
+  /* Asignaciones que quedaron con el corte del viernes (hasta la 4.11): se pasan al domingo siguiente */
+  const isFridayCut = ms => { const p = chile(ms); return p.wd === 4 && p.h === 23 && p.mi === 59; };
+  const fridayToSunday = ms => { const p = chile(ms); return chileToMs(p.y, p.m, p.d + 2, 23, 59); };
 
   /* ---------- Plan → sesión del atleta ---------- */
   /* Ejercicios del catálogo que ya existen en la app del atleta con otro id */
@@ -178,7 +184,7 @@
   const cutFmt = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const fmtCut = ms => cutFmt.format(new Date(ms)) + ' (hora de Chile)';
 
-  const pure = { buildRoutineSession, factorKey, refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
+  const pure = { buildRoutineSession, factorKey, refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, isFridayCut, fridayToSunday, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
   if (!root.document) { root.HalterAssignPure = pure; return; }
 
@@ -220,10 +226,19 @@
   }
   function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(meUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selfPick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0, routines: [] }; A.routines = []; A.rt = null; A.rtDel = ''; }
 
+  /* Una sola vez por sesión del entrenador: las semanas asignadas con corte del viernes pasan al domingo 23:59 */
+  let cutsChecked = false;
+  function migrateCuts(list) {
+    if (cutsChecked) return; cutsChecked = true;
+    list.filter(x => typeof x.weekEndsAt === 'number' && isFridayCut(x.weekEndsAt)).forEach(x => {
+      const d = { planId: x.planId, weekId: x.weekId, week: x.week, stageId: x.stageId, weekEndsAt: fridayToSunday(x.weekEndsAt), setBy: A.uid };
+      Promise.resolve().then(() => H.remote().setAssignment(x.id, d)).catch(() => { /* semana que ya no existe: se corrige al reasignar */ });
+    });
+  }
   /* ---------- Escuchar datos ---------- */
   function startCoach(uid) {
-    reset(); A.uid = uid; A.role = 'coach'; const r = H.remote();
-    unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
+    reset(); cutsChecked = false; A.uid = uid; A.role = 'coach'; const r = H.remote();
+    unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); migrateCuts(list); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
     /* Catálogo: con reads.js se baja una vez por versión del plan y se reutiliza (cloud.js lo pide igual y comparte la misma copia) */
     unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => A.active, list => { setNames(list || []); rerender(); }, () => { /* opcional */ })
       : r.watchCol('exercises', list => { setNames(list); rerender(); }, () => { /* opcional */ }));
