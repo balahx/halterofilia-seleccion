@@ -145,7 +145,9 @@
     (ses.items || []).forEach(p => {
       if (!p.exId) return;
       let e = S.exercises.find(q => q.id === p.exId);
-      if (!e) { e = { id: p.exId, name: p.name || 'Ejercicio', cat: p.cat || 'acc', rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }; S.exercises.push(e); }
+      if (!e) { e = Object.assign({ id: p.exId, name: p.name || 'Ejercicio', cat: p.cat || 'acc', rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }, p.meas ? { meas: p.meas } : {}); S.exercises.push(e); }
+      else if (p.meas && !e.meas) e.meas = p.meas;      // el entrenador definió cómo se mide (tiempo, repeticiones)
+      if (p.desc && !e.desc) e.desc = String(p.desc).slice(0, 140);   // y la descripción del ejercicio
       const fixed = p.kg > 0 ? +p.kg : 0, kg = fixed || (e.max > 0 && p.pct > 0 ? roundTo(e.max * p.pct / 100, rounding) : 0), pct = p.pct > 0 ? p.pct : (fixed && e.max > 0 ? Math.round(fixed / e.max * 1000) / 10 : 0), pr = String(p.reps || '');
       const sets = [];
       for (let k = 0; k < (p.sets > 0 ? p.sets : 1); k++) sets.push(Object.assign({ kg: kg, reps: '', pct: pct, rpe: null, done: false, doneAt: null }, pr ? { pr: pr } : {}));
@@ -580,7 +582,7 @@
         const parts = [(p.sets || 1) + '×' + (p.reps || '?')];
         if (p.pct > 0) parts.push(String(p.pct).replace('.', ',') + ' % del máximo'); if (p.kg > 0) parts.push(String(p.kg).replace('.', ',') + ' kg');
         if (p.pause > 0) parts.push('pausa de ' + p.pause + ' s'); if (p.rest > 0) parts.push('descanso ' + Math.floor(p.rest / 60) + ':' + String(p.rest % 60).padStart(2, '0'));
-        h += `<li><div><b>${esc(p.name || p.exId)}</b><small>${esc(parts.join(' · '))}</small></div></li>`;
+        h += `<li><div><b>${esc(p.name || p.exId)}</b><small>${esc(parts.join(' · '))}</small>${p.desc ? `<small class="edesc">${esc(p.desc)}</small>` : ''}</div></li>`;
       });
       h += '</ul></div>';
     });
@@ -611,7 +613,7 @@
     for (let i = 0; i < R.sessions.length; i++) {
       const d = R.sessions[i], items = (d.items || []).filter(p => p.exId);
       if (!items.length) { H.toast('La sesión ' + (i + 1) + ' no tiene ejercicios: agrégalos o quítala.'); return; }
-      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), day: daysOf(d)[0] || 0, days: daysOf(d).slice().sort((a, b) => a - b), items: items.map(p => ({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), kg: Math.min(Math.max(Math.round((+p.kg || 0) * 10) / 10, 0), 600), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) })) });
+      sessions.push({ name: (d.name || '').trim().slice(0, 40) || ('Sesión ' + (i + 1)), day: daysOf(d)[0] || 0, days: daysOf(d).slice().sort((a, b) => a - b), items: items.map(p => Object.assign({ exId: String(p.exId), name: String(p.name || '').slice(0, 80), cat: String(p.cat || 'acc'), sets: Math.min(Math.max(parseInt(p.sets, 10) || 1, 1), 30), reps: String(p.reps || '').replace(/[^\d+]/g, '').slice(0, 12), pct: Math.min(Math.max(+p.pct || 0, 0), 200), kg: Math.min(Math.max(Math.round((+p.kg || 0) * 10) / 10, 0), 600), rest: Math.min(Math.max(Math.round(+p.rest || 0), 0), 900), pause: Math.min(Math.max(Math.round(+p.pause || 0), 0), 10) }, p.meas === 'reps' || p.meas === 'time' || p.meas === 'kg' ? { meas: p.meas } : {}, String(p.desc || '').trim() ? { desc: String(p.desc).replace(/\s+/g, ' ').trim().slice(0, 140) } : {})) });
     }
     const data = { uid: R.uid, name: name.slice(0, 80), mode: R.mode === 'replace' ? 'replace' : 'extra', sessions: sessions, setBy: A.uid }, note = (R.note || '').trim().slice(0, 400); if (note) data.note = note;
     const id = R.id || (R.uid.slice(0, 12) + '_' + Date.now().toString(36));

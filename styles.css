@@ -649,3 +649,6 @@ input.file { padding: 10px 0; }
 .cp-h { margin: 24px 0 10px; }
 .cp-top { margin: 14px 0 0; }
 .cp-card .lnk.danger { align-self: center; }
+
+/* Descripción breve del ejercicio (4.11.0) */
+.edesc { display: block; margin-top: 2px; color: var(--muted); font: 500 13.5px/1.3 var(--font-body); font-style: normal; white-space: normal; overflow-wrap: anywhere; }

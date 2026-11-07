@@ -68,6 +68,7 @@ const ATH = [
   ok(/Leído a las/.test(await page.locator('.cmp-bar .muted').last().innerText()) && /99/.test(await page.locator('tr', { hasText: 'Ana Rojas' }).innerText()), '«Actualizar» vuelve a leer y trae el cambio');
   await page.click('#nav button[data-tab="mas"]'); await page.waitForTimeout(300); await page.click('.mrow[data-act="settings"]'); await page.waitForTimeout(500);
   ok(/Uso de la nube/i.test(await txt('body')) && /Lecturas de hoy en este dispositivo: \d/.test(await txt('body')), 'Ajustes muestra «Lecturas de hoy»');
+  ok(!(await page.locator('.reads-top li').allInnerTexts()).some(t => /^exercises\b/i.test(t.trim())), 'la lista de fuentes de lecturas no muestra «exercises» (4.11.0)');
   await page.screenshot({ path: path.join(SHOTS, 'marcas-2.png'), fullPage: true });
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'sin scroll horizontal en la página');
   console.log(errors.length ? 'Errores: ' + errors.join(' | ') : 'Sin errores de consola ni de página');

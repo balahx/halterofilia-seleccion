@@ -55,6 +55,7 @@ const WEEKS = {
 
   console.log('1. El entrenador crea una rutina especial para Ana');
   await login('cristian@correo.cl'); await tab('equipo');
+  await page.evaluate(() => HalterApp.commit(S => { Object.assign(S.exercises.find(e => e.id === 'snpull'), { meas: 'time', desc: 'Sostén 3 s arriba' }); }));   // 4.11.0: el entrenador define cómo se mide y la describe
   await page.click('[data-act="as-open"]:near(:text("Ana Rojas"))').catch(() => {});
   if (!/Ana Rojas/.test(await txt('#view h1').catch(() => ''))) { await page.locator('.person', { hasText: 'Ana Rojas' }).locator('[data-act="as-open"]').click(); }
   await page.waitForSelector('[data-act="rt-new"]');
@@ -126,6 +127,11 @@ const WEEKS = {
   ok(ss.length === 1 && ss[0].id === rid.split('/')[1] && ss[0].idx === 0, 'la sesión queda marcada como de la rutina');
   await page.keyboard.press('Escape'); await tab('semana');
   ok(/hecha el/.test(await txt('#view')), 'en «Semana» la sesión aparece como hecha');
+  const it1 = (await docs())[rid].sessions[1].items[0];
+  ok(it1.meas === 'time' && it1.desc === 'Sostén 3 s arriba', '4.11.0: la rutina lleva cómo se mide el ejercicio y su descripción: ' + JSON.stringify([it1.meas, it1.desc]));
+  await page.click('[data-act="rt-start"][data-i="1"]'); await page.waitForSelector('.tick');
+  ok(/Sostén 3 s arriba/.test(await txt('.exc')) && (await page.locator('.sethead.m-time').count()) === 1 && /tiempo/i.test(await txt('.sethead')), 'Ana ve la descripción y el ejercicio se mide en tiempo, como lo definió el entrenador');
+  await page.evaluate(() => HalterApp.commit(S => { S.sessions = S.sessions.filter(s => s.endedAt); })); await tab('semana');
 
   console.log('3b. Complementaria: Ana ve el plan y la rutina; reemplaza: solo la rutina');
   await page.evaluate(({ a, c, W }) => {

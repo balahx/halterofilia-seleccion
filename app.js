@@ -224,9 +224,10 @@ function setRowHTML(i, j, st, it) {
 }
 /* Complejo: ejercicio de la categoría «Complejos» o con «+» en el nombre (p. ej. «Arranque con pausa + tirón»). No tiene máximo propio. */
 const isComplex = e => !!e && (e.cat === 'cmplx' || /\s\+\s/.test(e.en || e.name || ''));
+const descHTML = e => e && e.desc ? '<span class="edesc">' + esc(e.desc) + '</span>' : '';
 function exerciseCard(it, i) {
   const e = ex(it.exId), rpe = S.profile.showRpe, m = measOf(e);
-  return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) +
+  return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) + descHTML(e) +
     (isComplex(e) ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
       : m !== 'kg' ? '<span class="chip-note">' + (m === 'time' ? 'Se mide en tiempo' : 'Solo repeticiones') + '</span>'
       : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') +
@@ -379,7 +380,7 @@ function viewMax() {
     for (const e of list) {
       const est = bestSetE1rm(S.sessions, e.id, since);
       const better = est > e.max + 0.9;
-      h += '<div class="mrow"><button class="mmain" data-act="edit-max" data-ex="' + esc(e.id) + '"><span class="mn">' + esc(nm(e)) + nmSub(e) + '</span><span class="mv">' + (e.max > 0 ? fmtNum(e.max, 1) + '<small> kg</small>' : '<small>definir</small>') + '</span></button>' +
+      h += '<div class="mrow"><button class="mmain" data-act="edit-max" data-ex="' + esc(e.id) + '"><span class="mn">' + esc(nm(e)) + nmSub(e) + descHTML(e) + '</span><span class="mv">' + (e.max > 0 ? fmtNum(e.max, 1) + '<small> kg</small>' : '<small>definir</small>') + '</span></button>' +
         (est > 0 ? '<span class="me">mejor serie ≈ ' + fmtNum(est, 1) + '</span>' : '') +
         (better ? '<button class="btn ghost sm" data-act="use-est" data-ex="' + esc(e.id) + '">Usar ' + fmtNum(roundTo(est, S.profile.rounding), 1) + '</button>' : '') + goalHTML(e) + '</div>';
     }
@@ -820,7 +821,7 @@ function pickList(q) {
   for (const c of CATS) {
     const list = S.exercises.filter(e => e.cat === c[0] && (!q || (e.name + ' ' + (e.en || EN_NAMES[e.id] || '')).toLowerCase().indexOf(q) >= 0));
     if (!list.length) continue;
-    h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(nm(e)) + nmSub(e) + '</span><small' + (e.max > 0 ? '' : ' class="nomax"') + '>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
+    h += '<p class="eyebrow">' + c[1] + '</p><div class="plist">' + list.map(e => '<button class="pick" data-act="pick" data-ex="' + esc(e.id) + '"><span>' + esc(nm(e)) + nmSub(e) + descHTML(e) + '</span><small' + (e.max > 0 ? '' : ' class="nomax"') + '>' + (e.max > 0 ? fmtNum(e.max, 1) + ' kg' : 'sin máximo') + '</small></button>').join('') + '</div>';
   }
   return h || emptyHTML('close', 'Sin coincidencias', 'Revisa la búsqueda o crea el ejercicio desde «Más».');
 }
@@ -846,7 +847,7 @@ function settingsHTML() {
     '<textarea class="txt area" id="impText" rows="2" aria-label="Contenido del respaldo para importar" placeholder="…o pega aquí el contenido del respaldo"></textarea><div class="row-end"><button class="btn ghost sm" data-act="import-run">Importar texto</button></div>';
   if (ui2.imp != null) h += '<div class="note warn"><b>Se reemplazarán tus datos actuales' + (APP.cloud ? ' (también en la nube)' : '') + '</b> por un respaldo con ' + ui2.imp + ' sesiones.<div class="actions"><button class="btn sm" data-act="import-confirm">Reemplazar</button><button class="btn ghost sm" data-act="import-cancel">Cancelar</button></div></div>';
   if (APP.cloud && window.HalterReads) {
-    const rd = window.HalterReads.report(), top = rd.by.slice(0, 3).map(x => '<li><span>' + esc(x[0]) + '</span><b>' + fmtNum(x[1], 0) + '</b></li>').join('');
+    const rd = window.HalterReads.report(), top = rd.by.filter(x => x[0] !== 'exercises').slice(0, 3).map(x => '<li><span>' + esc(x[0]) + '</span><b>' + fmtNum(x[1], 0) + '</b></li>').join('');
     h += '<p class="eyebrow">Uso de la nube</p><p class="muted" role="status">Lecturas de hoy en este dispositivo: <b>' + fmtNum(rd.total, 0) + '</b> de 50.000 (' + fmtNum(rd.pctOfQuota, 1) + ' %). El conteo empieza de cero a medianoche, hora del Pacífico, igual que la cuota de Firebase; la cuota es de toda la app, no de este dispositivo.</p>' +
       (top ? '<ul class="plain reads-top" aria-label="Consultas con más lecturas">' + top + '</ul>' : '');
   }
@@ -872,6 +873,8 @@ function exSheetHTML(id) {
     '<label class="fl"><span>Descanso habitual</span>' + restSelect(e.rest, 'id="exRest"').replace('class="sel"', 'class="sel tall"') + '</label></div>' +
     '<label class="fl"><span>Se mide en</span><select class="sel tall" id="exMeas">' + MEAS.map(c => '<option value="' + c[0] + '"' + (measOf(e) === c[0] ? ' selected' : '') + '>' + c[1] + '</option>').join('') + '</select></label>' +
     '<p class="muted">Movilidad y peso corporal no llevan kilos: anotas solo repeticiones o tiempo. Si es de tiempo, el valor planificado se entiende en segundos.</p>' +
+    '<label class="lab" for="exDesc">Descripción breve (opcional)</label><input class="txt" id="exDesc" maxlength="140" value="' + esc(e.desc || '') + '" placeholder="Ej. Desde sobre la rodilla, sin rebote" autocomplete="off">' +
+    '<p class="muted">Se ve en la sesión y al elegir el ejercicio. Si lo usas en una rutina, tu atleta también la ve.</p>' +
     '<div class="actions"><button class="btn" data-act="ex-save" data-ex="' + (id || '') + '">Guardar</button>' + (id && !e.builtin && !used ? '<button class="btn ghost" data-act="ex-del" data-ex="' + id + '">Eliminar</button>' : '') + '</div>' +
     (id && used && !e.builtin ? '<p class="muted">No se puede eliminar porque ya tiene registros o está en tu plan.</p>' : '') + '</div>';
 }
@@ -1106,7 +1109,7 @@ document.addEventListener('click', e => {
     case 'plan-rm': { const rt = !!t.closest('[data-rt]'); (rt ? RT.days : S.plan.days)[+t.dataset.d].items.splice(+t.dataset.k, 1); if (rt) { if (RT.onChange) RT.onChange(true); } else { save(); render(); } break; }
     case 'rt-add': {
       const di = +t.dataset.d;
-      openSheet('pick', { cb: id => { const e = ex(id); RT.days[di].items.push({ exId: id, name: e.name, cat: e.cat, sets: 3, reps: '3', pct: 70, kg: 0, rest: 0, pause: 0 }); if (RT.onChange) RT.onChange(true); } }); break;
+      openSheet('pick', { cb: id => { const e = ex(id); RT.days[di].items.push(Object.assign({ exId: id, name: e.name, cat: e.cat, meas: measOf(e), sets: 3, reps: '3', pct: 70, kg: 0, rest: 0, pause: 0 }, e.desc ? { desc: e.desc } : {})); if (RT.onChange) RT.onChange(true); } }); break;
     }
     case 'pick': { const cb = ui.sheet && ui.sheet.cb; closeSheet(); if (cb) cb(t.dataset.ex); break; }
     case 'plates-toggle': ui.platesOpen = !ui.platesOpen; render(); break;
@@ -1126,10 +1129,11 @@ document.addEventListener('click', e => {
       const name = $('#exName').value.trim();
       if (!name) { toast('Ponle un nombre al ejercicio.'); break; }
       const cat = $('#exCat').value, meas = $('#exMeas').value, rest = parseNum($('#exRest').value) || S.profile.rest, id = t.dataset.ex, cb = ui.sheet.cb;
-      if (id) { const e = ex(id); e.name = name; e.cat = cat; e.meas = meas; e.rest = rest; save(); closeSheet(); render(); }
+      const desc = ($('#exDesc') ? $('#exDesc').value : '').replace(/\s+/g, ' ').trim().slice(0, 140);
+      if (id) { const e = ex(id); e.name = name; e.cat = cat; e.meas = meas; e.rest = rest; if (desc) e.desc = desc; else delete e.desc; save(); closeSheet(); render(); }
       else {
         const nid = 'x' + uid();
-        S.exercises.push({ id: nid, name: name, cat: cat, meas: meas, rest: rest, max: 0, maxDate: null, builtin: false });
+        S.exercises.push(Object.assign({ id: nid, name: name, cat: cat, meas: meas, rest: rest, max: 0, maxDate: null, builtin: false }, desc ? { desc: desc } : {}));
         save(); closeSheet(); render(); if (cb) cb(nid);
       }
       break;
