@@ -520,11 +520,13 @@ dialog .actions > .lnk { margin: 0 auto; }
 .netbar b { display: block; font-size: 14.5px; }
 .netbar-ic svg { width: 22px; height: 22px; flex: none; }
 .netbar .lnk { color: var(--warn-ink); font-weight: 700; flex: none; }
-.updbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; margin: 0 0 12px; border-radius: 12px; background: var(--gold-bg); color: var(--ink); border-left: 3px solid var(--gold); }
+.updbar, .wknote { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; margin: 0 0 12px; border-radius: 12px; background: var(--gold-bg); color: var(--ink); border-left: 3px solid var(--gold); }
 .updbar[hidden] { display: none; }
-.updbar > div { flex: 1 1 200px; min-width: 0; font-size: 13.5px; line-height: 1.35; }
-.updbar b { display: block; font-size: 14.5px; }
-.updbar .btn, .updbar .lnk { flex: none; }
+.updbar > div, .wknote > div { flex: 1 1 200px; min-width: 0; font-size: 13.5px; line-height: 1.35; }
+.updbar b, .wknote b { display: block; font-size: 14.5px; }
+.updbar .btn, .updbar .lnk, .wknote .btn, .wknote .lnk { flex: none; }
+.wknote.warn { background: var(--warn-bg); color: var(--warn-ink); border-left-color: transparent; }
+.wknote.warn .btn.ghost { color: var(--warn-ink); }
 .gate .big-ico.is-warn { border-color: var(--bad); color: var(--bad); }
 
 /* ===== Escritorio (≥ 1024 px): barra lateral y contenido en columnas ===== */

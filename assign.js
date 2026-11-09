@@ -214,7 +214,7 @@
   let weekKey = '';   // semana que se está escuchando como atleta
   function init(helpers) {
     H = helpers; if (root.HalterReport) root.HalterReport.init(helpers);
-    document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } if (t && t.dataset && t.dataset.as === 'selfweek') { A.selfPick = t.value; } });
+    document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'rtuid' && A.rt) { A.rt.uid = t.value; A.rt.dirty = true; } if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } if (t && t.dataset && t.dataset.as === 'selfweek') { A.selfPick = t.value; } });
     document.addEventListener('input', e => {
       const t = e.target; if (t && t.dataset && A.rt && t.dataset.as === 'rtmode') { if (t.checked) { A.rt.mode = t.value === 'replace' ? 'replace' : 'extra'; A.rt.dirty = true; } return; }
       if (t && t.dataset && A.rt && (t.dataset.as === 'rtname' || t.dataset.as === 'rtnote')) { if (t.dataset.as === 'rtname') A.rt.name = t.value; else A.rt.note = t.value; A.rt.dirty = true; return; }
@@ -384,6 +384,41 @@
     if (w.kind !== 'transition') h += `<div class="actions"><button class="btn block${done ? ' ghost' : ''}" data-act="as-start" data-i="${si}">${done ? 'Registrar de nuevo' : '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/></svg><span>Iniciar esta sesión</span>'}</button></div>`;
     return h + '</div>';
   }
+  /* ---------- Avisos de semana (4.14.0) ----------
+     En «Hoy» (y arriba de «Semana»): 1) el entrenador asignó una semana nueva; 2) ya se puede pasar a la semana siguiente;
+     3) ya pasó el corte pero faltan sesiones. Solo con la app abierta (sin servidor no hay avisos con la app cerrada).
+     La última semana vista se guarda en el dispositivo; la primera vez (o tras actualizar la app) se toma la actual sin avisar. */
+  const seenKey = () => 'halterofilia.weekSeen.' + A.uid;
+  const asgId = a => a ? a.planId + '_' + a.weekId : '';
+  const markSeen = a => LS.set(seenKey(), asgId(a));
+  const lowerFirst = t => t ? t.charAt(0).toLowerCase() + t.slice(1) : '';
+  const noticeBox = (title, text, acts, warn) => `<div class="wknote${warn ? ' warn' : ''}" role="status"><div><b>${esc(title)}</b>${esc(text)}</div>${acts || ''}</div>`;
+  /* ¿Hay una semana asignada que este dispositivo aún no mostró? (y deja registro la primera vez) */
+  function isNewWeek() {
+    if (!H || !A.uid || A.role === 'coach') return false;
+    const a = A.me.asg; if (a === undefined) return false;
+    const seen = LS.get(seenKey());
+    if (seen === null || !a) { if (seen !== asgId(a)) markSeen(a); return false; }   // sin semana se guarda '' para avisar la próxima que llegue
+    return seen !== asgId(a);
+  }
+  function weekNotice(where) {
+    if (!H || !A.uid || A.role === 'coach' || replacing()) return '';
+    const m = A.me, a = m.asg, hoy = where === 'hoy';
+    if (!a) { isNewWeek(); return ''; }
+    if (isNewWeek()) {
+      if (!hoy) return '';   // en «Semana» ya se ve la semana: athleteView la marca como vista
+      const st = stageName(a.stageId);
+      return noticeBox('Tu entrenador te asignó la semana ' + a.week, (st ? st + '. ' : '') + 'Revisa sus sesiones en «Semana».',
+        '<button class="btn sm" data-act="tab" data-tab="semana">Ver mi semana</button><button class="lnk" data-act="wk-seen">Entendido</button>');
+    }
+    const w = m.week; if (!w) return '';
+    const now = Date.now(), st = advanceState(a, w, m.done, now);
+    if (st.ok) return noticeBox('Ya puedes pasar a la semana siguiente', 'Cumpliste las sesiones de la semana ' + a.week + ' y ya pasó el corte.',
+      `<button class="btn sm" data-act="as-advance"${A.busy ? ' disabled' : ''}>${esc(A.busy || 'Pasar a la semana siguiente')}</button>`);
+    if (w.next && now >= a.weekEndsAt && st.why) return noticeBox('Aún no puedes cambiar de semana', 'Ya pasó el corte de la semana ' + a.week + ', pero ' + lowerFirst(st.why),
+      hoy ? '<button class="btn sm ghost" data-act="tab" data-tab="semana">Ver mi semana</button>' : '', true);
+    return '';
+  }
   function athleteView() {
     const m = A.me, a = m.asg;
     let h = '<h1>Mi semana</h1>';
@@ -400,6 +435,7 @@
     if (!w && m.weekErr) return h + window.HalterApp.errorBox('No se pudo leer tu semana (' + m.weekErr + ').', { retry: 'sync-now' });
     if (!w && m.weekMissing) return h + window.HalterApp.errorBox('La semana que tienes asignada ya no existe en el plan activo. ' + (A.role === 'coach' ? 'Elige otra semana más abajo.' : 'Pídele a tu entrenador que te la asigne de nuevo.'), { title: 'Semana no encontrada' }) + (A.role === 'coach' ? selfPicker(a) : '');
     if (!w) return h + '<div class="card sec"><p class="muted">Cargando la semana…</p></div>';
+    if (!coach) { if (isNewWeek()) markSeen(a); h += weekNotice('semana'); }   // al abrir «Semana» la semana nueva queda vista
     h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
       (w.kind === 'transition' ? '<p class="muted">Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.</p>' : '') +
       (w.notes && w.notes.length && w.kind !== 'transition' ? '<ul class="plain">' + w.notes.map(n => `<li><small>${esc(n)}</small></li>`).join('') + '</ul>' : '') +
@@ -478,6 +514,7 @@
       const nx = await H.remote().getDoc('plans/' + a.planId + '/weeks/' + w.next);
       if (!nx) throw new Error('No se encontró la semana siguiente');
       await H.remote().advanceAssignment(A.uid, { weekId: w.next, week: nx.week, stageId: nx.stageId, weekEndsAt: nextCutoff(a.weekEndsAt) });
+      LS.set(seenKey(), a.planId + '_' + w.next);   // la avanzó el propio atleta: no se le avisa como semana nueva
       H.toast('Ahora estás en la semana ' + nx.week);
     } catch (e) { A.err = H.err(e); }
     A.busy = ''; rerender();
@@ -580,7 +617,7 @@
     const list = A.routines.filter(x => x.uid === uid);
     let h = '<div class="card sec"><span class="eyebrow">Rutinas especiales</span>';
     h += list.length ? list.map(r => `<div class="person"><div class="who-row"><div><b>${esc(r.name)}</b><small>${(r.sessions || []).length} ${(r.sessions || []).length === 1 ? 'sesión' : 'sesiones'} · ${nEx(r)} ejercicios · ${r.mode === 'replace' ? 'reemplaza el plan semanal' : 'complementa el plan semanal'}${rtDays(r) ? ' · ' + rtDays(r) : ''}</small></div></div><div class="acts">` +
-      `<button class="btn sm" data-act="rt-edit" data-id="${esc(r.id)}">Editar</button><button class="btn ghost sm" data-act="rt-view" data-id="${esc(r.id)}">Ver como atleta</button><button class="btn ghost sm" data-act="rt-del" data-id="${esc(r.id)}">${A.rtDel === r.id ? 'Confirmar' : 'Quitar'}</button></div></div>`).join('')
+      `<button class="btn sm" data-act="rt-edit" data-id="${esc(r.id)}">Editar</button><button class="btn ghost sm" data-act="rt-view" data-id="${esc(r.id)}">Ver como atleta</button><button class="btn ghost sm" data-act="rt-dup" data-id="${esc(r.id)}">Duplicar</button><button class="btn ghost sm" data-act="rt-del" data-id="${esc(r.id)}">${A.rtDel === r.id ? 'Confirmar' : 'Quitar'}</button></div></div>`).join('')
       : '<p class="muted">Sin rutinas especiales. Crea una cuando necesites algo distinto a la semana del plan: el atleta la ve en «Semana».</p>';
     return h + `<div class="stack"><button class="btn${list.length ? ' ghost' : ''}" data-act="rt-new" data-uid="${esc(uid)}">+ Crear rutina</button></div></div>`;
   }
@@ -607,9 +644,17 @@
   function rtOpen(rt) { A.rt = rt; root.HalterApp.rt.bind(A.rt.sessions, redraw => { A.rt.dirty = true; if (redraw) rerender(); }); rerender(); window.scrollTo(0, 0); }
   function rtEditorHTML() {
     const R = A.rt, ha = root.HalterApp;
-    let h = `<p><button class="lnk" data-act="rt-cancel">← ${esc(memberName(R.uid))}</button></p><h1>${R.id ? 'Editar rutina' : 'Nueva rutina'}</h1>` +
-      `<p class="muted">Para <b>${esc(memberName(R.uid))}</b>. Se arma igual que tu plan semanal: series, repeticiones y % del máximo (los kilos los calcula cada atleta con su propio máximo) o, si prefieres, kilos fijos. Cada ejercicio también lleva su descanso y la pausa en el movimiento (0 a 10 s). A cada sesión puedes ponerle un día de entrenamiento.</p>`;
+    const back = A.sel || R.uid;
+    let h = `<p><button class="lnk" data-act="rt-cancel">← ${esc(memberName(back))}</button></p><h1>${R.id ? 'Editar rutina' : R.dup ? 'Duplicar rutina' : 'Nueva rutina'}</h1>` +
+      `<p class="muted">${R.id ? `Para <b>${esc(memberName(R.uid))}</b>. ` : ''}Se arma igual que tu plan semanal: series, repeticiones y % del máximo (los kilos los calcula cada atleta con su propio máximo) o, si prefieres, kilos fijos. Cada ejercicio también lleva su descanso y la pausa en el movimiento (0 a 10 s). A cada sesión puedes ponerle un día de entrenamiento.</p>`;
     if (A.err) h += ha.errorBox(A.err, { retry: 'sync-now' });
+    if (!R.id) {   // rutina nueva o copia: se elige para qué atleta (por defecto, el que está abierto)
+      const ms = (H.members() || []).slice().sort((x, y) => String(x.name || '').localeCompare(String(y.name || ''), 'es'));
+      if (!ms.some(x => x.id === R.uid)) ms.unshift({ id: R.uid, name: memberName(R.uid) });
+      h += `<div class="card sec"><label class="lab" for="rtUid">Para qué atleta</label><select class="sel tall" id="rtUid" data-as="rtuid">` +
+        ms.map(x => `<option value="${esc(x.id)}"${x.id === R.uid ? ' selected' : ''}>${esc(x.name || x.id)}</option>`).join('') + '</select>' +
+        (R.dup ? '<small class="muted">Es una copia: la rutina original no cambia. Revisa los días y el modo antes de guardar.</small>' : '') + '</div>';
+    }
     h += `<div class="card sec"><label class="lab" for="rtName">Nombre de la rutina</label><input class="txt" id="rtName" data-as="rtname" maxlength="80" placeholder="Ej.: Rehabilitación de hombro" value="${esc(R.name)}"></div>`;
     const md = R.mode === 'replace' ? 'replace' : 'extra';
     h += `<div class="card sec"><span class="eyebrow">¿Cómo se usa esta rutina?</span><label class="opt"><input type="radio" name="rtmode" data-as="rtmode" value="extra"${md === 'extra' ? ' checked' : ''}><span><b>Complementa el plan semanal</b><small>El atleta ve su semana del plan y, además, esta rutina. Puede entrenar una, otra o ambas.</small></span></label>` +
@@ -632,12 +677,13 @@
     }
     const data = { uid: R.uid, name: name.slice(0, 80), mode: R.mode === 'replace' ? 'replace' : 'extra', sessions: sessions, setBy: A.uid }, note = (R.note || '').trim().slice(0, 400); if (note) data.note = note;
     const id = R.id || (R.uid.slice(0, 12) + '_' + Date.now().toString(36));
-    guard(async () => { await H.remote().setRoutine(id, data); A.rt = null; }, 'Rutina guardada');
+    guard(async () => { await H.remote().setRoutine(id, data); A.rt = null; }, R.uid !== A.sel && A.sel ? 'Rutina guardada para ' + memberName(R.uid) : 'Rutina guardada');
   }
   function rtAct(act, el) {
     switch (act) {
       case 'rt-new': rtOpen({ id: null, uid: el.dataset.uid || A.sel, name: '', note: '', mode: 'extra', sessions: [{ name: 'Sesión 1', items: [] }], dirty: false }); return true;
       case 'rt-edit': { const r = A.routines.find(x => x.id === el.dataset.id); if (r) rtOpen({ id: r.id, uid: r.uid, name: r.name, note: r.note || '', mode: r.mode === 'replace' ? 'replace' : 'extra', sessions: clone(r.sessions || []), dirty: false }); return true; }
+      case 'rt-dup': { const r = A.routines.find(x => x.id === el.dataset.id); if (r) rtOpen({ id: null, dup: true, uid: r.uid, name: (r.name + ' (copia)').slice(0, 80), note: r.note || '', mode: r.mode === 'replace' ? 'replace' : 'extra', sessions: clone(r.sessions || []), dirty: true }); return true; }
       case 'rt-view': A.rtPrev = el.dataset.id; rerender(); window.scrollTo(0, 0); return true;
       case 'rt-view-close': A.rtPrev = ''; rerender(); return true;
       case 'rt-cancel': A.rt = null; A.err = ''; rerender(); return true;
@@ -668,7 +714,8 @@
       case 'as-start': startSession(+el.dataset.i); return true;
       case 'as-self': assignSelf(); return true;
       case 'as-advance': advance(); return true;
-      case 'rt-new': case 'rt-edit': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': return rtAct(act, el);
+      case 'wk-seen': markSeen(A.me.asg); rerender(); return true;
+      case 'rt-new': case 'rt-edit': case 'rt-dup': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': return rtAct(act, el);
       case 'rp-toggle': case 'rp-refresh': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': return !!root.HalterReport && root.HalterReport.onAct(act, el, reportCtx());
       case 'as-adj-save': {
         const a = A.asg[A.sel]; if (!a) return true;
@@ -684,7 +731,7 @@
   }
 
   root.HalterAssign = {
-    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, replaceDays: replaceDays, onFinish: onFinish, onDelete: onDelete, flush: flush,
+    init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, weekNotice: weekNotice, replaceDays: replaceDays, onFinish: onFinish, onDelete: onDelete, flush: flush,
     selected: () => A.sel, detail: detailHTML, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -184,7 +184,7 @@ function viewHoy() {
   else if (dayOn) { title = day.name || 'Entrenamiento'; sub = day.items.length ? day.items.length + (day.items.length === 1 ? ' ejercicio' : ' ejercicios') + ' en el plan' : 'Este día aún no tiene ejercicios.'; }
   else { title = 'Día de descanso'; sub = 'No tienes sesión planificada hoy.'; }
   let h = '<section class="sec"><p class="eyebrow">' + esc(cap(fmtDay.format(now))) + '</p><h1>' + esc(title) + '</h1><p class="muted">' + esc(sub) + '</p>' + weekStrip() + '</section>';
-  h += asg;
+  h += (APP.hoyNotice ? APP.hoyNotice() : '') + asg;   // avisos de la semana asignada (semana nueva, cambio de semana)
   if (dayOn) {
     h += '<section class="card sec hoy-plan">' + (day.items.length ? planItemsList(day) : emptyHTML('plan', 'Este día no tiene ejercicios', 'Arma la sesión en tu plan semanal.')) +
       '<div class="actions go"><button class="btn block" data-act="start" data-d="' + di + '">' + svg('play') + '<span>Iniciar entrenamiento</span></button>' +
@@ -1189,7 +1189,7 @@ function start(opts) {
   opts = opts || {};
   applyZoom();
   KEY = opts.storageKey || 'halterofilia.v1.local';
-  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, replaceDays: opts.replaceDays || null, cloud: !!opts.cloud };
+  APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, hoyNotice: opts.hoyNotice || null, replaceDays: opts.replaceDays || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
   if (saved) S = normalize(saved);

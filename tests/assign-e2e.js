@@ -111,7 +111,7 @@ const WEEKS = {
   ok(d['users/' + auid + '/completions/p1_e1_1_0'] && d['users/' + auid + '/completions/p1_e1_1_0'].sessionIdx === 0, 'quedó registrada la sesión cumplida (hora del servidor)');
   await page.keyboard.press('Escape'); await tab('semana');
   ok(/Cumplida/.test(await txt('#view')), 'la semana marca la sesión como cumplida');
-  ok(await page.locator('[data-act="as-advance"]').isDisabled(), 'todavía no puede pasar de semana');
+  ok(await page.locator('.card [data-act="as-advance"]').isDisabled(), 'todavía no puede pasar de semana');
   ok(/Falta cumplir una sesión de la semana|Faltan \d+ sesiones/.test(await txt('#view')), 'explica por qué: faltan sesiones');
   await shot('04-atleta-cumplida');
 
@@ -139,7 +139,7 @@ const WEEKS = {
   d = await docs();
   ok(!!d['users/' + auid + '/completions/p1_e1_1_1'], 'la segunda sesión (la última) quedó cumplida');
   await page.keyboard.press('Escape'); await tab('semana');
-  ok(await page.locator('[data-act="as-advance"]').isEnabled(), 'el botón «Pasar a la semana siguiente» se habilita');
+  ok(await page.locator('.card [data-act="as-advance"]').isEnabled(), 'el botón «Pasar a la semana siguiente» se habilita');
   await shot('05-atleta-avanzar');
   await page.click('[data-act="as-advance"]'); await page.waitForTimeout(700); 
   d = await docs(); a = d['assignments/' + auid];

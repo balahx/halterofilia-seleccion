@@ -402,7 +402,8 @@
         : (window.HalterAssign ? [{ id: 'semana', label: 'Semana', icon: 'semana', render: window.HalterAssign.athleteView }] : []).concat(compTab()),
       nav: role === 'coach' ? [['equipo'], ['planual'], ['semana', 'Mi semana'], ['hoy', 'Mi sesión'], ['mas']] : [['hoy'], ['semana'], ['prog'], ['max'], ['mas']],
       replaceDays: () => (window.HalterAssign ? window.HalterAssign.replaceDays() : null),
-      more: moreInfo, hoyHTML: () => (window.HalterComp ? window.HalterComp.nextCardHTML() : '') + (window.HalterAssign ? window.HalterAssign.todayHTML() : ''),
+      more: moreInfo, hoyNotice: () => (window.HalterAssign && window.HalterAssign.weekNotice ? window.HalterAssign.weekNotice('hoy') : ''),
+      hoyHTML: () => (window.HalterComp ? window.HalterComp.nextCardHTML() : '') + (window.HalterAssign ? window.HalterAssign.todayHTML() : ''),
       accountHTML: accountHTML, onAct: onAct, onSave: () => { if (C.sync) C.sync.onSave(); },
       onFinish: s => { if (window.HalterAssign) window.HalterAssign.onFinish(s); },
       onDelete: s => { if (window.HalterAssign) window.HalterAssign.onDelete(s); }
@@ -517,7 +518,7 @@
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;
       case 'pl-publish': case 'pl-cancel': case 'pl-template': case 'pl-activate': case 'pl-delete': if (window.HalterPlan) window.HalterPlan.onAct(act, el); break;
-      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'as-adj-save': case 'as-adj-clear': case 'rt-new': case 'rt-edit': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': case 'rp-toggle': case 'rp-refresh': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
+      case 'as-open': case 'as-back': case 'as-assign': case 'as-start': case 'as-self': case 'as-advance': case 'wk-seen': case 'as-adj-save': case 'as-adj-clear': case 'rt-new': case 'rt-edit': case 'rt-dup': case 'rt-view': case 'rt-view-close': case 'rt-cancel': case 'rt-ses-add': case 'rt-ses-rm': case 'rt-save': case 'rt-del': case 'rt-start': case 'rp-toggle': case 'rp-refresh': case 'rp-mode': case 'rp-copy': case 'rp-share': case 'rp-print': if (window.HalterAssign) window.HalterAssign.onAct(act, el); window.HalterApp.render(); break;
       case 'bk-run': if (window.HalterBackup) window.HalterBackup.onAct(act); break;
       case 'cp-new': case 'cp-edit': case 'cp-cancel': case 'cp-save': case 'cp-del': if (window.HalterComp) window.HalterComp.onAct(act, el); window.HalterApp.render(); break;
       case 'cmp-sex': case 'cmp-cat': case 'cmp-refresh': case 'cmp-open': if (window.HalterCompare) window.HalterCompare.onAct(act, el); window.HalterApp.render(); break;
