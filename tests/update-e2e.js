@@ -46,13 +46,13 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   card = await txt('#updCard');
   ok(/versión nueva/i.test(card) && /Versión 99\.0\.0(?!\d)/.test(card), 'avisa que hay una versión nueva y cuál es');
   ok(/se conservan/.test(card), 'aclara que los datos y la cuenta se conservan');
-  ok(await page.locator('[data-act="upd-apply"]').count() === 1, 'aparece «Actualizar ahora»');
+  ok(await page.locator('#updCard [data-act="upd-apply"]').count() === 1, 'aparece «Actualizar ahora»');
   ok(await page.evaluate(() => document.documentElement.hasAttribute('data-upd')), 'el engranaje muestra un punto de aviso');
   await shot('02-version-nueva');
 
   console.log('3. Actualizar ahora conserva la sesión');
   await page.unroute(/version\.js\?t=/);
-  await Promise.all([page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }), page.click('[data-act="upd-apply"]')]);
+  await Promise.all([page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }), page.click('#updCard [data-act="upd-apply"]')]);
   await page.waitForTimeout(1200);
   ok(await page.locator('#appRoot:not([hidden])').count() === 1 && !(await page.locator('#gForm').isVisible()), 'tras actualizar sigue dentro de la cuenta, sin volver a ingresar');
   ok(/Camila Rojas/.test(await page.evaluate(() => document.body.innerText)) || await page.locator('#nav').count() === 1, 'la app vuelve a abrir con el menú');
@@ -64,6 +64,31 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   await page.click('[data-act="upd-check"]'); await page.waitForTimeout(700);
   ok(/Sin conexión|No se pudo comprobar/.test(await txt('#updCard')), 'sin internet avisa claramente y no se rompe');
   await ctx.setOffline(false);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  ok(await page.locator('#updBar').isHidden(), 'sin versión nueva (o sin conexión) no aparece el aviso arriba');
+
+  console.log('5. Aviso al abrir la app, sin ir a Ajustes');
+  const NEW = r => r.fulfill({ status: 200, contentType: 'text/javascript', body: "const V = { n: '99.0.0', v: '2099.01.01.1', date: '2099-01-01' };" });
+  await page.route(/version\.js\?t=/, NEW);
+  await page.reload(); await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForSelector('#updBar:not([hidden])', { timeout: 6000 });
+  let bar = await txt('#updBar');
+  ok(/versión nueva/i.test(bar) && /Versión 99\.0\.0(?!\d)/.test(bar), 'al entrar aparece el aviso con la versión nueva');
+  ok(/se conservan/.test(bar) && await page.locator('#updBar [data-act="upd-apply"]').count() === 1 && await page.locator('#updBar [data-act="upd-later"]').count() === 1, 'el aviso ofrece «Actualizar ahora» y «Más tarde»');
+  ok(!(await page.locator('#dlg[open]').count()), 'no hace falta abrir Ajustes');
+  await shot('03-aviso-al-entrar');
+  await page.click('#updBar [data-act="upd-later"]'); await page.waitForTimeout(200);
+  ok(await page.locator('#updBar').isHidden(), '«Más tarde» oculta el aviso');
+  ok(await page.evaluate(() => document.documentElement.hasAttribute('data-upd')), 'el punto del engranaje sigue marcando que hay versión nueva');
+  await page.click('#gear'); await page.waitForSelector('#dlg[open] #updCard'); await page.waitForTimeout(300);
+  ok(/versión nueva/i.test(await txt('#updCard')), 'Ajustes sigue ofreciendo la actualización');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  ok(await page.locator('#updBar').isHidden(), 'tras «Más tarde» el aviso no vuelve en la misma apertura');
+  await page.reload(); await page.waitForSelector('#updBar:not([hidden])', { timeout: 6000 });
+  ok(true, 'al volver a abrir la app el aviso aparece otra vez');
+  await page.unroute(/version\.js\?t=/);
+  await Promise.all([page.waitForNavigation({ waitUntil: 'load', timeout: 15000 }), page.click('#updBar [data-act="upd-apply"]')]);
+  await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(2200);
+  ok(!(await page.locator('#gForm').isVisible()) && await page.locator('#updBar').isHidden(), '«Actualizar ahora» desde el aviso recarga sin pedir ingresar y el aviso desaparece');
 
   await br.close(); srv.close();
   ok(errors.length === 0, 'sin errores en consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));

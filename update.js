@@ -1,6 +1,8 @@
 /* Halterofilia · Selección — «Buscar actualización» (Ajustes) y versión de la app.
    Compara la versión que corre con la publicada (version.js, siempre pedida a la red). Si hay una nueva, «Actualizar ahora»
    renueva el service worker y recarga la página: la sesión de la cuenta y los datos guardados se conservan (no hay que ingresar otra vez).
+   Al abrir la app (y al volver a ella tras un rato) se comprueba sola: si hay versión nueva, aparece un aviso arriba (#updBar)
+   con «Actualizar ahora» y «Más tarde» (lo oculta hasta la próxima vez que se abra la app).
    Parte pura (parseVersion, newer) probada con Node: node tests/update-unit.js */
 (function (root) {
   'use strict';
@@ -35,7 +37,7 @@
   const versionText = () => 'Versión ' + label(current());
 
   /* ---------- Estado y acciones (solo navegador) ---------- */
-  const U = { state: 'idle', remote: null, at: 0, msg: '' };   // idle | checking | latest | new | applying | error
+  const U = { state: 'idle', remote: null, at: 0, msg: '', later: false };   // idle | checking | latest | new | applying | error
   const hasDom = typeof document !== 'undefined';
 
   async function check(force) {
@@ -95,14 +97,36 @@
     return '<p class="eyebrow">Aplicación</p><div id="updCard" class="upd">' + inner() + '</div>';
   }
   function footer() { return '<p class="ver-line" id="verLine"><span class="credit">Created &amp; Developed by Felipe González</span></p>'; }
-  function paint() { if (!hasDom) return; const el = document.getElementById('updCard'); if (el) el.innerHTML = inner(); }
+  function paint() { if (!hasDom) return; const el = document.getElementById('updCard'); if (el) el.innerHTML = inner(); paintBar(); }
+  /* Aviso arriba de la pantalla cuando hay una versión nueva (sin entrar a Ajustes) */
+  function barHTML() {
+    if (U.state === 'applying') return '<div><b>Actualizando…</b>La app se reinicia sola. No necesitas volver a entrar.</div>';
+    return '<div><b>Hay una versión nueva: Versión ' + esc(label(U.remote)) + '</b>Tus datos y tu cuenta se conservan.</div>' +
+      '<button class="btn sm" data-act="upd-apply">Actualizar ahora</button><button class="lnk" data-act="upd-later">Más tarde</button>';
+  }
+  function paintBar() {
+    if (!hasDom) return; const el = document.getElementById('updBar'); if (!el) return;
+    const show = U.state === 'applying' || (U.state === 'new' && !U.later);
+    if (show) { el.innerHTML = barHTML(); el.hidden = false; } else { el.hidden = true; el.innerHTML = ''; }
+  }
   function onAct(act) {
     if (act === 'upd-check') { check(true); return true; }
     if (act === 'upd-apply') { apply(); return true; }
+    if (act === 'upd-later') { U.later = true; paintBar(); return true; }
     return false;
   }
-  /* Comprobación silenciosa poco después de abrir la app: si hay versión nueva, el engranaje muestra un punto */
-  function checkSoon() { if (hasDom) setTimeout(() => check(false), 6000); }
+  /* Comprobación al abrir la app: si hay versión nueva, aparece el aviso arriba y el engranaje muestra un punto.
+     También al volver a la app (desde otra app o pestaña) si pasaron 15 min desde la última comprobación. */
+  const AGAIN = 15 * 60000;
+  let watching = false;
+  function checkSoon() {
+    if (!hasDom) return;
+    setTimeout(() => check(false), 1500);
+    if (watching) return; watching = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && U.state !== 'new' && (!U.at || Date.now() - U.at > AGAIN)) check(true);
+    });
+  }
 
   const api = { parseVersion: parseVersion, newer: newer, isNewer: isNewer, label: label, dateText: dateText, versionText: versionText, card: card, footer: footer, onAct: onAct, check: check, apply: apply, checkSoon: checkSoon, state: U };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
