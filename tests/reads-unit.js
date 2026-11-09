@@ -26,6 +26,7 @@ function fakeRemote() {
   r.getDoc = async path => {
     net(); r.reads += 1;
     if (path === 'plans/P') return Object.assign({}, db.plan);
+    if (path === 'plans/P/fast/all') return db.fast ? Object.assign({}, db.fast) : null;
     const m = /^plans\/P\/weeks\/(.+)$/.exec(path); if (m) return db.weeks[m[1]] ? Object.assign({}, db.weeks[m[1]]) : null;
     return null;
   };
@@ -34,6 +35,8 @@ function fakeRemote() {
     if (path === 'plans/P/weeks') l = Object.values(db.weeks); else if (path === 'plans/P/stages') l = db.stages; else if (path === 'exercises') l = db.exercises; else if (path === 'members') l = db.members;
     r.reads += Math.max(1, l.length); return l.map(x => Object.assign({}, x));
   };
+  r.fastWrites = 0;
+  r.setFast = async (id, d) => { net(); r.fastWrites++; db.fast = Object.assign({}, d); };
   r.getRecordsSince = async (uid, since) => {
     net(); const l = db.records.filter(x => x.at >= since); r.reads += Math.max(1, l.length); return l.map(x => Object.assign({}, x));
   };
@@ -217,6 +220,62 @@ const nextSession = () => R._forgetMeta();   // equivale a cerrar y volver a abr
     const rep = R.report();
     assert.strictEqual(rep.total, 235); assert.deepStrictEqual(rep.by[0], ['exercises', 205]);
     assert.strictEqual(rep.pctOfQuota, 0.5);
+  });
+
+  /* ---------- 4.15.0: plan en un solo documento ---------- */
+  const coachParts = r => ({ weeks: Object.values(r.db.weeks).map(x => Object.assign({}, x)), stages: r.db.stages.map(x => Object.assign({}, x)) });
+  await test('entrenador: arma el documento único una vez; si nada cambió, solo lo compara (1 lectura)', async () => {
+    R.useFast(false); const r = fakeRemote();
+    assert.strictEqual(await R.ensureFast(r, 'P', coachParts(r), r.db.exercises), 'written');
+    assert.strictEqual(r.fastWrites, 1); assert.strictEqual(r.db.fast.enc, 'gzip'); assert.ok(r.db.fast.z.length < 4000, 'comprimido: ' + r.db.fast.z.length);
+    assert.strictEqual(await R.ensureFast(r, 'P', coachParts(r), r.db.exercises), 'done', 'en la misma sesión no vuelve a mirar');
+    nextSession(); r.reads = 0;
+    assert.strictEqual(await R.ensureFast(r, 'P', coachParts(r), r.db.exercises), 'same');
+    assert.strictEqual(r.fastWrites, 1); assert.strictEqual(r.reads, 2, 'ficha del plan + documento único');
+  });
+  await test('entrenador: si cambia el contenido (p. ej. editado en la consola) o la versión, lo vuelve a escribir', async () => {
+    R.useFast(false); const r = fakeRemote();
+    await R.ensureFast(r, 'P', coachParts(r), r.db.exercises);
+    r.db.weeks.w2.label = 'editada'; nextSession();
+    assert.strictEqual(await R.ensureFast(r, 'P', coachParts(r), r.db.exercises), 'written'); assert.strictEqual(r.fastWrites, 2);
+    r.db.plan.createdAt = 2000; nextSession();
+    assert.strictEqual(await R.ensureFast(r, 'P', coachParts(r), r.db.exercises), 'written'); assert.strictEqual(r.fastWrites, 3);
+    assert.ok(r.db.fast.v.indexOf('|2000|') > 0);
+  });
+  await test('atleta: semana, etapas y catálogo con 1 lectura del documento único (en vez de ~200)', async () => {
+    const r = fakeRemote(); R.useFast(false); await R.ensureFast(r, 'P', coachParts(r), r.db.exercises);
+    R.useFast(true); nextSession(); r.reads = 0;
+    let wk = null, st = null, cat = null;
+    const offs = [R.feedWeek(r, 'P', 'w2', d => { wk = d; }), R.feedStages(r, 'P', d => { st = d; }), R.feedCatalog(r, () => 'P', d => { cat = d; })];
+    await tick(); await tick(); offs.forEach(f => f());
+    assert.strictEqual(wk.week, 2); assert.ok(!('id' in wk), 'la semana llega igual que con getDoc (sin id)');
+    assert.strictEqual(st.length, 2); assert.strictEqual(cat.length, 200);
+    assert.strictEqual(r.reads, 2, 'ficha del plan + documento único: ' + r.reads);
+    nextSession(); r.reads = 0;
+    await R.week(r, 'P', 'w3'); assert.strictEqual(r.reads, 1, 'otra semana: sale de la copia (solo la ficha)');
+    R.useFast(false);
+  });
+  await test('atleta: sin documento único, con otra versión o ilegible se lee como antes', async () => {
+    const r = fakeRemote(); R.useFast(true); r.reads = 0;
+    let wk = await R.week(r, 'P', 'w1'); assert.strictEqual(wk.week, 1); assert.strictEqual(r.reads, 3, 'ficha + intento del documento único + semana');
+    R.useFast(false); await R.ensureFast(r, 'P', coachParts(r), r.db.exercises); R.useFast(true);
+    r.db.plan.createdAt = 5000; nextSession(); r.reads = 0;   // plan republicado: el documento único quedó viejo
+    wk = await R.week(r, 'P', 'w1'); assert.strictEqual(wk.week, 1); assert.strictEqual(r.reads, 3);
+    r.db.plan.createdAt = 1000; r.db.fast.z = 'no es gzip'; R._useStore(R._memStore()); nextSession(); r.reads = 0;
+    wk = await R.week(r, 'P', 'w1'); assert.strictEqual(wk.week, 1, 'dato dañado: se lee la semana sola');
+    R.useFast(false);
+  });
+  await test('atleta: la red de seguridad de 24 h también renueva el documento único', async () => {
+    const r = fakeRemote(); R.useFast(false); await R.ensureFast(r, 'P', coachParts(r), r.db.exercises); R.useFast(true);
+    const real = Date.now; await R.stages(r, 'P'); nextSession(); r.reads = 0;
+    try { Date.now = () => real() + 25 * 3600000; await R.stages(r, 'P'); } finally { Date.now = real; }
+    assert.strictEqual(r.reads, 2, 'pasadas 24 h: ficha + documento único otra vez');
+    R.useFast(false);
+  });
+  await test('sin compresión disponible se guarda como texto', async () => {
+    const real = globalThis.CompressionStream; globalThis.CompressionStream = undefined;
+    try { const e = await R.encodeFast('{"a":1}'); assert.deepStrictEqual(e, { enc: 'json', z: '{"a":1}' }); assert.strictEqual(await R.decodeFast(e), '{"a":1}'); }
+    finally { globalThis.CompressionStream = real; }
   });
 
   await test('clear() borra las copias (cierre de sesión)', async () => {

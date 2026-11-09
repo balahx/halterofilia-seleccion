@@ -118,6 +118,18 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
   await denied(ana.doc('competitions/c1').delete(), 'ni elimina');
   await succeeds(coach.doc('competitions/c1').delete(), 'el entrenador elimina');
 
+  console.log('7. Plan en un solo documento (4.15)');
+  const fast = (o) => Object.assign({ v: 'p1|1|2', h: 'abcd1234:100', enc: 'gzip', z: 'H4sIAAAA', at: TS() }, o || {});
+  await succeeds(coach.doc('plans/p1/fast/all').set(fast()), 'el entrenador arma el documento único');
+  await succeeds(ana.doc('plans/p1/fast/all').get(), 'una atleta aprobada lo lee');
+  await denied(carla.doc('plans/p1/fast/all').get(), 'una cuenta sin aprobar no lo lee');
+  await denied(ana.doc('plans/p1/fast/all').set(fast()), 'una atleta no lo escribe');
+  await denied(coach.doc('plans/p1/fast/otro').set(fast()), 'solo existe el documento «all»');
+  await denied(coach.doc('plans/p1/fast/all').set(fast({ extra: 1 })), 'sin campos de más');
+  await denied(coach.doc('plans/p1/fast/all').set(fast({ enc: 'zip' })), 'solo gzip o json');
+  await denied(coach.doc('plans/p1/fast/all').set(fast({ at: new Date(0) })), 'con la hora del servidor');
+  await succeeds(coach.doc('plans/p1/fast/all').delete(), 'el entrenador lo elimina (al borrar el plan)');
+
   await env.cleanup();
   console.log(fails ? 'FALLAS: ' + fails : 'Todo bien'); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

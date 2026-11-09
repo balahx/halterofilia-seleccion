@@ -102,6 +102,7 @@
       if (depth === 2) return keysOnly(data, ['name', 'year', 'format', 'stages', 'weeks', 'createdAt']) && typeof data.name === 'string' && data.name.length > 0;
       const hasNested = o => Array.isArray(o) ? o.some(x => Array.isArray(x) || hasNested(x)) : (o && typeof o === 'object' ? Object.keys(o).some(k => hasNested(o[k])) : false);
       if (hasNested(data)) return false;   // Firestore no admite listas dentro de listas
+      if (path.split('/')[2] === 'fast') return path.split('/')[3] === 'all' && keysOnly(data, ['v', 'h', 'enc', 'z', 'at']) && typeof data.v === 'string' && typeof data.h === 'string' && (data.enc === 'gzip' || data.enc === 'json') && typeof data.z === 'string' && data.z.length <= 1000000;
       return path.split('/')[2] === 'stages' ? keysOnly(data, ['name', 'order']) : (keysOnly(data, ['stageId', 'week', 'label', 'kind', 'notes', 'sessions', 'next']) && typeof data.next === 'string');
     }
     if (col === 'members') {
@@ -164,6 +165,7 @@
     async signOut() { if (window.HalterReads) window.HalterReads.clear(); setUser(null); }
     watchDoc(path, cb, onErr) { const w = { path, cb, err: onErr }; watchers.push(w); later(emit); return () => { const i = watchers.indexOf(w); if (i >= 0) watchers.splice(i, 1); }; }
     async getCol(path, filters) {
+      window.__fake.gets = window.__fake.gets || {}; window.__fake.gets[path] = (window.__fake.gets[path] || 0) + 1;   // qué se pidió (para las pruebas de lecturas)
       if (offline()) throw err('unavailable'); if (!allowed('list', path + '/x', null)) throw err('permission-denied');
       const s = rd(); window.__fake.reads = (window.__fake.reads || 0);
       return Object.keys(s.docs).filter(k => k.startsWith(path + '/') && k.split('/').length === path.split('/').length + 1 && matches(s.docs[k], filters)).map(k => Object.assign({ id: k.split('/').pop() }, s.docs[k]));
@@ -193,9 +195,10 @@
       mutate('create', base, Object.assign({}, p.meta, { createdAt: Date.now() }));
       if (window.HalterReads) { window.HalterReads.invalidatePlan(p.planId); inv('plans'); }
     }
+    async setFast(planId, d) { window.__fake.fastWrites = (window.__fake.fastWrites || 0) + 1; mutate('create', 'plans/' + planId + '/fast/all', Object.assign({}, d, { at: Date.now() })); }
     async setBackupStamp(counts, reads) { mutate('create', 'config/backup', { at: Date.now(), by: curUser().uid, counts: counts || {}, reads: reads || 0 }); }
     async setActivePlan(id) { mutate('create', 'config/plan', { activePlanId: id, at: Date.now() }); }
-    async getDoc(path) { if (offline()) throw err('unavailable'); if (!allowed('get', path)) throw err('permission-denied'); const d = rd().docs[path]; return d ? Object.assign({}, d) : null; }
+    async getDoc(path) { window.__fake.gets = window.__fake.gets || {}; window.__fake.gets[path] = (window.__fake.gets[path] || 0) + 1; if (offline()) throw err('unavailable'); if (!allowed('get', path)) throw err('permission-denied'); const d = rd().docs[path]; return d ? Object.assign({}, d) : null; }
     async setAssignment(uid, d) { mutate('create', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }
     async advanceAssignment(uid, d) { mutate('update', 'assignments/' + uid, Object.assign({}, d, { at: Date.now() })); }
     async setCompletion(uid, id, d) { window.__fake.completions.push(id); mutate('create', 'users/' + uid + '/completions/' + id, Object.assign({}, d, { completedAt: Date.now() })); }

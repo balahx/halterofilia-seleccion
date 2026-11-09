@@ -152,6 +152,8 @@
       await this._commit([{ ref: this._doc(base), data: Object.assign({}, p.meta, { createdAt: this.m.fs.serverTimestamp() }) }]);
       invPlan(p.planId); inv('plans');   // el plan nuevo/actualizado se vuelve a bajar una vez (reads.js)
     }
+    /* Plan en un solo documento (4.15.0): lo arma la app del entrenador (reads.js ensureFast) */
+    setFast(planId, d) { return this.m.fs.setDoc(this._doc('plans/' + planId + '/fast/all'), Object.assign({}, d, { at: this.m.fs.serverTimestamp() })); }
     setBackupStamp(counts, reads) { return this.m.fs.setDoc(this._doc('config/backup'), { at: this.m.fs.serverTimestamp(), by: this.auth.currentUser.uid, counts: counts || {}, reads: reads || 0 }); }
     setActivePlan(id) { return this.m.fs.setDoc(this._doc('config/plan'), { activePlanId: id, at: this.m.fs.serverTimestamp() }); }
     /* Semana asignada (fase 4) */
@@ -170,7 +172,7 @@
     deleteCompetition(id) { return this.m.fs.deleteDoc(this._doc('competitions/' + id)).then(r => { inv('competitions'); return r; }); }
     async deletePlan(id, wasActive) {
       const { getDocs, collection } = this.m.fs, ops = [];
-      for (const sub of ['weeks', 'stages']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
+      for (const sub of ['weeks', 'stages', 'fast']) { const snap = await getDocs(collection(this.db, 'plans', id, sub)); snap.forEach(d => ops.push({ ref: d.ref, del: true })); }
       if (wasActive) ops.push({ ref: this._doc('config/plan'), del: true });
       ops.push({ ref: this._doc('plans/' + id), del: true });
       await this._commit(ops);

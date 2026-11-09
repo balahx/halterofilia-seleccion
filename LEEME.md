@@ -81,6 +81,7 @@ node tests/report-unit.js  # armado de los informes: planificado vs realizado, e
 node tests/assign-e2e.js   # asignar semana, ajustar %, cumplir sesiones y pasar de semana (con las reglas)
 node tests/routines-e2e.js # rutinas especiales: el entrenador las crea (con descanso y pausa en el movimiento) y el atleta las entrena
 node tests/weeknotice-e2e.js # avisos de semana en «Hoy» (semana nueva, ya puede pasar, faltan sesiones) y «Duplicar» rutinas
+node tests/fastplan-e2e.js # plan en un solo documento: lo arma sola la app del entrenador y el atleta lo lee con 1 lectura
 ```
 
 ## Plan anual (fase 3): cargar el Excel cada año
@@ -102,6 +103,7 @@ La app muestra una revisión antes de publicar: una muestra de la primera semana
 - **Cambio de semana:** el botón **Pasar a la semana siguiente** se habilita desde el domingo a las 23:59 (hora de Chile) de la semana asignada y con la **última sesión de la semana cumplida**; una semana de transición no exige sesiones. Solo avanza de a una semana. Todo lo demás (mover de semana o de etapa) lo hace el entrenador.
 - **Avisos de semana (4.14.0):** con la app abierta, «Hoy» avisa cuando el entrenador asigna o cambia la semana («Tu entrenador te asignó la semana N», con «Ver mi semana» y «Entendido»), cuando ya se puede pasar a la semana siguiente (con el botón ahí mismo) y cuando ya pasó el corte pero faltan sesiones. La última semana vista se guarda en el dispositivo. Sin avisos con la app cerrada (requeriría un servidor).
 - **Duplicar rutinas (4.14.0):** en la ficha del atleta, cada rutina especial tiene «Duplicar»: abre la copia en el editor («(copia)» en el nombre) y deja elegir para qué atleta se guarda. La original no cambia.
+- **Plan en un solo documento (4.15.0):** la app del entrenador arma sola `plans/{id}/fast/all` (semanas, etapas y catálogo, comprimido con gzip) con lo que ya descargó; no hay botón. La compara con 1 lectura al abrir y la reescribe solo si falta, cambió la versión del plan o cambió el contenido (p. ej. una edición en la consola de Firebase, que llega con la red de seguridad de 24 h). Los atletas la bajan con 1 lectura y la guardan en el dispositivo (también se renueva a las 24 h). Si falta, quedó vieja o no se puede leer, se lee como antes. Regla nueva en `firestore.rules` (`plans/{id}/fast/{docId}`).
 - **Qué impiden las reglas** (`firestore.rules`): que el atleta se asigne una semana, falsee la fecha de una sesión, registre una de otra semana, reescriba una cumplida, cambie sus ajustes o avance antes del corte o sin la última sesión. No pueden impedir que marque como hecha una sesión que no entrenó; para eso están los informes del entrenador.
 - **Sin conexión:** la última semana vista queda guardada en el dispositivo; las sesiones cumplidas se envían al volver la conexión.
 - **Datos:** `assignments/{uid}` (semana asignada y hora de corte), `users/{uid}/completions/{plan_semana_n}` (sesiones cumplidas, solo se crean) y `adjustments/{uid}_{plan}_{semana}` (ajustes de %). Cada semana del plan guarda `next` (la semana siguiente), por eso un plan publicado antes de la fase 4 debe volver a cargarse.

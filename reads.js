@@ -8,6 +8,9 @@
    - Almacén local (IndexedDB; respaldo en memoria) para guardar lo descargado.
    - Plan y catálogo «con versión»: la versión de un plan es su id + la hora de publicación (plans/{id}.createdAt).
      Por abrir la app se lee 1 documento (la ficha del plan) y solo si la versión cambió se vuelve a bajar todo.
+   - Plan en un solo documento (4.15.0): la app del entrenador arma sola `plans/{id}/fast/all` (semanas, etapas y catálogo,
+     comprimido) a partir de lo que ya descargó; los atletas lo bajan con 1 lectura en vez de cientos. Si falta, no coincide
+     con la versión del plan o no se puede leer, se lee como antes. La red de seguridad de 24 h se mantiene (también para él).
    - Registros de un atleta «incrementales»: la primera vez se baja el historial; después solo lo escrito desde
      la última lectura (campo `at`, hora del servidor).
    - Listas «con vigencia» (miembros, planes, rutinas): se reutilizan durante un tiempo y se renuevan solas al
@@ -100,6 +103,7 @@
   const on = (name, fn) => { (subs[name] = subs[name] || new Set()).add(fn); return () => { if (subs[name]) subs[name].delete(fn); }; };
   const fire = name => { Array.from(subs[name] || []).forEach(fn => { try { fn(); } catch (e) { /* un aviso fallido no debe frenar a los demás */ } }); };
   const metaMem = {};   // planId → { t, v }
+  const metaWait = {};  // planId → lectura en curso
 
   /* Borra lo guardado bajo `name` (y bajo `name:…`) y avisa a quien lo escucha para que lo vuelva a pedir */
   async function invalidate(name) {
@@ -111,7 +115,7 @@
   }
   async function invalidatePlan(planId) {
     delete metaMem[planId];
-    await Promise.all([invalidate('plan:' + planId), invalidate('stages:' + planId), invalidate('week:' + planId), invalidate('catalog')]);
+    await Promise.all([invalidate('plan:' + planId), invalidate('stages:' + planId), invalidate('week:' + planId), invalidate('catalog'), invalidate('fast:' + planId)]);
   }
   const poke = name => fire('poke:' + name);   // «mira si hay algo nuevo» sin borrar nada
   async function clear() { Object.keys(metaMem).forEach(k => delete metaMem[k]); try { await store().clear(); } catch (e) { /* sin almacén */ } }
@@ -120,10 +124,14 @@
   async function planMeta(remote, planId, force) {
     const m = metaMem[planId];
     if (!force && m && Date.now() - m.t < META_TTL) return m.v;
-    const d = await remote.getDoc('plans/' + planId);
-    const v = { exists: !!d, version: d ? planId + '|' + (d.createdAt || 0) + '|' + (d.weeks || 0) : null, meta: d };
-    metaMem[planId] = { t: Date.now(), v: v };
-    return v;
+    if (metaWait[planId]) return metaWait[planId];   // varias piezas a la vez (semana, etapas, catálogo) comparten la misma lectura
+    metaWait[planId] = (async () => {
+      const d = await remote.getDoc('plans/' + planId);
+      const v = { exists: !!d, version: d ? planId + '|' + (d.createdAt || 0) + '|' + (d.weeks || 0) : null, meta: d };
+      metaMem[planId] = { t: Date.now(), v: v };
+      return v;
+    })().finally(() => { delete metaWait[planId]; });
+    return metaWait[planId];
   }
   /* Entrega primero lo guardado (fromCache: true), confirma la versión con 1 lectura y solo baja de nuevo si cambió */
   async function byVersion(remote, planId, key, fetchFn, cb, force, maxAge) {
@@ -134,17 +142,85 @@
     try { pm = await planMeta(remote, planId, force); } catch (e) { if (hit) return hit.value; throw e; }
     if (!pm.exists) { await del(key); if (cb) cb(null, { fromCache: false, missing: true }); return null; }
     if (hit && hit.version === pm.version) { if (cb) cb(hit.value, { fromCache: false }); return hit.value; }
-    const value = await fetchFn();
+    const value = await fetchFn(pm.version);
     await set(key, { version: pm.version, value: value, t: Date.now() });
     if (cb) cb(value, { fromCache: false });
     return value;
   }
-  const planParts = (remote, id, cb, force) => byVersion(remote, id, 'plan:' + id, async () => {
+  /* ---------- Plan en un solo documento (4.15.0) ---------- */
+  const FAST_PATH = id => 'plans/' + id + '/fast/all';
+  const FAST_MAX = 900000;            // tope del texto guardado (Firestore admite ~1 MiB por documento)
+  let fastOn = false;                 // solo los atletas leen el documento único; el entrenador lee las piezas (y con ellas lo arma)
+  const useFast = v => { fastOn = !!v; };
+  const byId = (a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
+  /* Texto estable (mismo contenido → mismo texto → misma huella) */
+  function fastJSON(parts, cat) {
+    return JSON.stringify({ weeks: (parts.weeks || []).slice().sort(byId), stages: (parts.stages || []).slice().sort(byId), catalog: (cat || []).slice().sort(byId) });
+  }
+  function hashOf(str) {   // FNV-1a de 32 bits, en hexadecimal (solo para saber si cambió algo)
+    let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return ('0000000' + h.toString(16)).slice(-8) + ':' + str.length;
+  }
+  const b64 = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return root.btoa(s); };
+  const unb64 = str => { const s = root.atob(str), out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out; };
+  async function pipe(bytes, stream) { const r = new Response(new Blob([bytes]).stream().pipeThrough(stream)); return new Uint8Array(await r.arrayBuffer()); }
+  async function encodeFast(json) {
+    if (typeof root.CompressionStream === 'function' && root.btoa) { try { return { enc: 'gzip', z: b64(await pipe(new TextEncoder().encode(json), new root.CompressionStream('gzip'))) }; } catch (e) { /* se guarda sin comprimir */ } }
+    return { enc: 'json', z: json };
+  }
+  async function decodeFast(d) {
+    if (d.enc === 'json') return d.z;
+    if (d.enc !== 'gzip' || typeof root.DecompressionStream !== 'function') throw new Error('formato no admitido');
+    return new TextDecoder().decode(await pipe(unb64(d.z), new root.DecompressionStream('gzip')));
+  }
+  const fastWait = {};
+  /* Atleta: el plan completo con 1 lectura (o null → se lee como antes). Se guarda decodificado; se renueva con la versión o a las 24 h */
+  async function fastBundle(remote, planId, version) {
+    if (!fastOn || !planId || !version) return null;
+    const k = 'fast:' + planId, hit = await get(k);
+    if (hit && hit.version === version && Date.now() - (hit.t || 0) <= MAX_AGE) return hit.value;
+    const w = k + '|' + version;
+    if (!fastWait[w]) fastWait[w] = (async () => {
+      try {
+        const d = await remote.getDoc(FAST_PATH(planId));
+        if (!d || d.v !== version || typeof d.z !== 'string') return null;
+        const value = JSON.parse(await decodeFast(d));
+        if (!value || !Array.isArray(value.weeks) || !Array.isArray(value.stages) || !Array.isArray(value.catalog)) return null;
+        await set(k, { version: version, value: value, t: Date.now() });
+        return value;
+      } catch (e) { return null; }
+    })().finally(() => { delete fastWait[w]; });
+    return fastWait[w];
+  }
+  /* Entrenador: arma o renueva el documento único con lo que su app ya descargó (semanas, etapas y catálogo confirmados por el servidor).
+     1 lectura por apertura para comparar la huella; escribe solo si falta, si cambió la versión del plan o si cambió el contenido
+     (p. ej. una edición en la consola de Firebase que llegó con la red de seguridad de 24 h). Sin botón: Cristian no hace nada. */
+  const fastChecked = {};
+  async function ensureFast(remote, planId, parts, cat) {
+    if (!planId || !remote || typeof remote.setFast !== 'function' || !parts || !Array.isArray(parts.weeks) || !parts.weeks.length || !Array.isArray(cat) || !cat.length) return 'skip';
+    let pm; try { pm = await planMeta(remote, planId); } catch (e) { return 'error'; }
+    if (!pm.exists) return 'skip';
+    const json = fastJSON(parts, cat), h = hashOf(json), key = planId + '|' + pm.version + '|' + h;
+    if (fastChecked[key]) return 'done';
+    fastChecked[key] = true;
+    try {
+      const d = await remote.getDoc(FAST_PATH(planId));
+      if (d && d.v === pm.version && d.h === h) return 'same';
+      const e = await encodeFast(json);
+      if (e.z.length > FAST_MAX) return 'big';
+      await remote.setFast(planId, { v: pm.version, h: h, enc: e.enc, z: e.z });
+      return 'written';
+    } catch (e) { delete fastChecked[key]; return 'error'; }
+  }
+  const noId = w => { if (!w) return null; const o = Object.assign({}, w); delete o.id; return o; };
+
+  const planParts = (remote, id, cb, force) => byVersion(remote, id, 'plan:' + id, async v => {
+    const b = await fastBundle(remote, id, v); if (b) return { weeks: b.weeks, stages: b.stages };
     const r = await Promise.all([remote.getCol('plans/' + id + '/weeks'), remote.getCol('plans/' + id + '/stages')]);
     return { weeks: r[0], stages: r[1] };
   }, cb, force);
-  const stages = (remote, id, cb, force) => byVersion(remote, id, 'stages:' + id, () => remote.getCol('plans/' + id + '/stages'), cb, force);
-  const week = (remote, id, weekId, cb, force) => byVersion(remote, id, 'week:' + id + ':' + weekId, () => remote.getDoc('plans/' + id + '/weeks/' + weekId), cb, force);
+  const stages = (remote, id, cb, force) => byVersion(remote, id, 'stages:' + id, async v => { const b = await fastBundle(remote, id, v); return b ? b.stages : remote.getCol('plans/' + id + '/stages'); }, cb, force);
+  const week = (remote, id, weekId, cb, force) => byVersion(remote, id, 'week:' + id + ':' + weekId, async v => { const b = await fastBundle(remote, id, v); return b ? noId(b.weeks.find(w => w.id === weekId)) : remote.getDoc('plans/' + id + '/weeks/' + weekId); }, cb, force);
   /* Catálogo de ejercicios: con plan activo se versiona con ese plan; sin plan se sirve lo guardado (o se baja una vez) */
   async function catalog(remote, planId, cb, force) {
     if (planId) {
@@ -153,7 +229,7 @@
       if (h0 && h0.version === null && Date.now() - h0.t < 10 * MIN) {
         try { const pm = await planMeta(remote, planId, force); if (pm.exists) { h0.version = pm.version; await set('catalog', h0); } } catch (e) { /* se resuelve abajo */ }
       }
-      return byVersion(remote, planId, 'catalog', () => remote.getCol('exercises'), cb, force, CATALOG_MAX_AGE);
+      return byVersion(remote, planId, 'catalog', async v => { const b = await fastBundle(remote, planId, v); return b ? b.catalog : remote.getCol('exercises'); }, cb, force, CATALOG_MAX_AGE);
     }
     const hit = await get('catalog');
     if (hit && !force) { if (cb) cb(hit.value, { fromCache: true }); return hit.value; }
@@ -210,9 +286,9 @@
   const api = {
     count: count, labelOf: labelOf, report: report, print: print, resetCounter: resetCounter,
     invalidate: invalidate, invalidatePlan: invalidatePlan, poke: poke, clear: clear, on: on,
-    planMeta: planMeta, planParts: planParts, stages: stages, week: week, catalog: catalog, records: records, swr: swr,
+    planMeta: planMeta, planParts: planParts, useFast: useFast, ensureFast: ensureFast, fastBundle: fastBundle, fastJSON: fastJSON, hashOf: hashOf, encodeFast: encodeFast, decodeFast: decodeFast, FAST_PATH: FAST_PATH, stages: stages, week: week, catalog: catalog, records: records, swr: swr,
     feed: feed, feedCatalog: feedCatalog, feedPlan: feedPlan, feedStages: feedStages, feedWeek: feedWeek,
-    _useStore: s => { S = s; }, _memStore: memStore, _forgetMeta: () => { Object.keys(metaMem).forEach(k => delete metaMem[k]); }   // _…: solo para las pruebas
+    _useStore: s => { S = s; }, _memStore: memStore, _forgetMeta: () => { Object.keys(metaMem).forEach(k => delete metaMem[k]); Object.keys(fastChecked).forEach(k => delete fastChecked[k]); }   // _…: solo para las pruebas
   };
   root.HalterReads = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

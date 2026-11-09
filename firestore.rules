@@ -136,6 +136,18 @@ service cloud.firestore {
           && request.resource.data.name is string && request.resource.data.name.size() <= 160 && request.resource.data.order is int;
         allow delete: if isCoach();
       }
+      // Plan en un solo documento (4.15.0): semanas, etapas y catálogo comprimidos; lo arma sola la app del entrenador
+      match /fast/{docId} {
+        allow read: if canReadPlan();
+        allow create, update: if isCoach() && docId == 'all'
+          && request.resource.data.keys().hasOnly(['v', 'h', 'enc', 'z', 'at'])
+          && request.resource.data.v is string && request.resource.data.v.size() <= 200
+          && request.resource.data.h is string && request.resource.data.h.size() <= 40
+          && request.resource.data.enc in ['gzip', 'json']
+          && request.resource.data.z is string && request.resource.data.z.size() <= 1000000
+          && request.resource.data.at == request.time;
+        allow delete: if isCoach();
+      }
       match /weeks/{weekId} {
         allow read: if canReadPlan();
         allow create, update: if isCoach()

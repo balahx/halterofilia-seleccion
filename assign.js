@@ -238,9 +238,10 @@
   /* ---------- Escuchar datos ---------- */
   function startCoach(uid) {
     reset(); cutsChecked = false; A.uid = uid; A.role = 'coach'; const r = H.remote();
+    if (root.HalterReads && root.HalterReads.useFast) root.HalterReads.useFast(false);   // el entrenador lee las piezas del plan y con ellas arma el documento único
     unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); migrateCuts(list); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
     /* Catálogo: con reads.js se baja una vez por versión del plan y se reutiliza (cloud.js lo pide igual y comparte la misma copia) */
-    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => A.active, list => { setNames(list || []); rerender(); }, () => { /* opcional */ })
+    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => A.active, (list, m) => { setNames(list || []); if (list && !(m && m.fromCache)) { fast.cat = list; fast.catPlan = A.active; tryFast(); } rerender(); }, () => { /* opcional */ })
       : r.watchCol('exercises', list => { setNames(list); rerender(); }, () => { /* opcional */ }));
     unsub.push(r.watchDoc('config/plan', d => { watchPlan(d ? d.activePlanId : null); }, () => { /* sin plan activo */ }));
     const onRoutines = list => { A.routines = list.slice().sort((a, b) => (tsMs(b.at) - tsMs(a.at))); rerender(); }, onRoutinesErr = e => { A.err = H.err(e); rerender(); };
@@ -262,16 +263,25 @@
           A.stages = (parts.stages || []).slice().sort((a, b) => a.order - b.order);
           A.weeks = (parts.weeks || []).slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week);
         } else { A.stages = []; A.weeks = []; }
-        A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */; rerender();
+        A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */;
+        if (parts && A.weeksOk) { fast.parts = parts; fast.plan = planId; tryFast(); }
+        rerender();
       }, () => { /* sin permiso o sin conexión */ }));
       return;
     }
     weekUnsub.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { A.weeks = list.slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week); A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */; rerender(); }, () => { /* sin permiso o sin conexión */ }));
     weekUnsub.push(r.watchCol('plans/' + planId + '/stages', list => { A.stages = list.slice().sort((a, b) => a.order - b.order); rerender(); }, () => { /* idem */ }));
   }
+  /* Plan en un solo documento (4.15.0): con las semanas, etapas y catálogo que el servidor confirmó, reads.js lo arma o lo renueva solo */
+  const fast = { parts: null, plan: null, cat: null, catPlan: null };
+  function tryFast() {
+    const RD = root.HalterReads;
+    if (!RD || !RD.ensureFast || A.role !== 'coach' || !A.active || fast.plan !== A.active || fast.catPlan !== A.active) return;
+    RD.ensureFast(H.remote(), A.active, fast.parts, fast.cat).catch(() => { /* sin conexión: se intenta la próxima vez */ });
+  }
   const stageOrder = id => { const s = A.stages.find(x => x.id === id); return s ? s.order : 0; };
 
-  function startAthlete(uid, offline) { reset(); A.uid = uid; A.role = 'athlete'; selfStart(uid, offline, false); }
+  function startAthlete(uid, offline) { reset(); A.uid = uid; A.role = 'athlete'; if (root.HalterReads && root.HalterReads.useFast) root.HalterReads.useFast(true); selfStart(uid, offline, false); }
   /* Mi propia semana (atleta, y el entrenador cuando entrena el plan). noEx: el entrenador ya escucha los ejercicios */
   function selfStart(uid, offline, noEx) {
     try { const c = JSON.parse(LS.get(cacheKey()) || 'null'); if (c && (c.asg || (c.routines && c.routines.length))) { A.me = { asg: c.asg || null, week: c.week || null, adj: c.adj || {}, done: c.done || {}, savedAt: c.savedAt || 0, routines: c.routines || [] }; A.names = c.names || {}; A.stages = c.stages || []; } } catch (e) { /* caché dañada */ }
