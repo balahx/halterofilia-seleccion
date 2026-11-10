@@ -1192,7 +1192,7 @@ function start(opts) {
   APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, hoyNotice: opts.hoyNotice || null, replaceDays: opts.replaceDays || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
-  if (saved) S = normalize(saved);
+  if (saved) { S = normalize(saved); if (trimPlanSets(S)) save(true); }
   else if (opts.demo) { S = demoState(); save(true); }
   else { S = freshState(); if (opts.name) S.profile.name = opts.name; save(true); }
   if (opts.sex && (opts.sex === 'F' || opts.sex === 'M') && !S.profile.sex) { S.profile.sex = opts.sex; S.profile.cat = ''; save(true); }
@@ -1218,10 +1218,30 @@ function stop() {
   S = null; ui.sheet = null; ui.tab = 'hoy';
   try { const d = $('#dlg'); if (d.open) d.close(); } catch (e) { /* sin diálogo */ }
 }
+/* Sesiones armadas con un plan mal leído (4.17.1): antes de 4.16.1 una celda del Excel podía generar 100 o más series
+   («X2100»). Se quitan las series sin tocar (sin marcar y sin repeticiones anotadas) que pasan de 10 por ejercicio, y lo
+   planificado (p, skip) queda en 10 como máximo, así el cumplimiento no se hunde. Lo que el atleta hizo no se toca. */
+const MAX_PLAN_SETS = 10;
+function trimPlanSets(st) {
+  let changed = false;
+  (st.sessions || []).forEach(s => {
+    (s.items || []).forEach(it => {
+      if (it.p > MAX_PLAN_SETS) { it.p = MAX_PLAN_SETS; changed = true; }
+      const sets = it.sets || [];
+      if (sets.length <= MAX_PLAN_SETS) return;
+      let room = MAX_PLAN_SETS - sets.filter(x => !untouched(x)).length;
+      const keep = sets.filter(x => { if (!untouched(x)) return true; if (room > 0) { room--; return true; } return false; });
+      if (keep.length !== sets.length) { it.sets = keep; changed = true; }
+    });
+    (s.skip || []).forEach(k => { if (k.p > MAX_PLAN_SETS) { k.p = MAX_PLAN_SETS; changed = true; } });
+  });
+  return changed;
+}
+function untouched(x) { return !x.done && !x.fail && !(String(x.reps || '').trim()) && !(x.secs > 0) && !(x.rpe > 0); }
 /* Lo usa sync.js: leer el estado, el estado inicial y aplicar cambios que llegan de la nube */
 function commit(fn) {
   if (!S) return;
-  fn(S); S = normalize(S);
+  fn(S); S = normalize(S); trimPlanSets(S);
   S.sessions.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
   save(true); softRefresh();
 }

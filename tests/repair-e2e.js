@@ -92,6 +92,24 @@ const WEEKS = {
   const ses = await page.evaluate(() => { const S = HalterApp.state(); const s = S.sessions.find(x => !x.endedAt) || S.active || null; return s ? s.items.map(i => i.sets.length) : null; });
   ok(ses && ses.join(',') === '2,3,2,3', 'la sesión trae 2 + 3 + 2 + 3 series (sin el opcional y sin las 170): ' + JSON.stringify(ses));
 
+
+  console.log('3. Una sesión ya iniciada con el plan viejo (2100 series) se limpia sola al abrir la app (4.17.1)');
+  await page.evaluate(() => {
+    const S = HalterApp.state(), act = S.sessions.find(x => !x.endedAt); if (act) act.endedAt = Date.now();
+    const mk = (done) => ({ kg: 50, reps: done ? '4' : '', pct: 60, rpe: null, done: done, doneAt: done ? Date.now() : null, pr: '4' });
+    const big = Array.from({ length: 2100 }, (_, k) => mk(k < 3));
+    S.sessions.push({ id: 'viejo', date: '2026-11-10', name: 'Martes', startedAt: Date.now(), endedAt: null, notes: '', items: [{ exId: 'sn', rest: 120, sets: big, p: 2100 }, { exId: 'x2', rest: 120, sets: [mk(false), mk(false)], p: 2 }], plan: { planId: 'p1', weekId: 'e1_28', idx: 0 } });
+    S.sessions.push({ id: 'hecha', date: '2026-11-09', name: 'Lunes', startedAt: Date.now() - 86400000, endedAt: Date.now() - 80000000, notes: '', items: [{ exId: 'sn', rest: 120, sets: [mk(true)], p: 170 }], skip: [{ exId: 'q', p: 270 }] });
+  });
+  await page.reload(); await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(800);
+  const after = await page.evaluate(() => { const S = HalterApp.state(), v = S.sessions.find(x => x.id === 'viejo'), h = S.sessions.find(x => x.id === 'hecha'); return { n: v.items[0].sets.length, done: v.items[0].sets.filter(x => x.done).length, p: v.items[0].p, n2: v.items[1].sets.length, hp: h.items[0].p, sk: h.skip[0].p }; });
+  ok(after.n === 10 && after.done === 3 && after.p === 10, 'la sesión en curso queda con 10 series y conserva las 3 ya hechas: ' + JSON.stringify(after));
+  ok(after.n2 === 2, 'los ejercicios normales no cambian');
+  ok(after.hp === 10 && after.sk === 10, 'en el historial lo planificado queda en 10 (el cumplimiento no se hunde)');
+  await page.waitForTimeout(4000);
+  const cloud = await page.evaluate(u => { const d = __fake.srv().docs['users/' + u + '/records/s_viejo']; return d ? JSON.parse(d.d).items[0].sets.length : -1; }, auid);
+  ok(cloud === 10, 'la copia de la nube también queda limpia (' + cloud + ')');
+
   await br.close(); srv.close();
   ok(errors.length === 0, 'sin errores en consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

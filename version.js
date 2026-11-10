@@ -3,7 +3,7 @@
    el del medio (Y) con funciones nuevas, el primero (X) con cambios grandes. v (AAAA.MM.DD.n) nombra el caché y se mantiene por compatibilidad. */
 (function (root) {
   'use strict';
-  const V = { n: '4.17.0', v: '2026.11.10.3', date: '2026-11-10' };   // n: lo que se muestra («Versión 4.1.4»); v: identifica el caché
+  const V = { n: '4.17.1', v: '2026.11.10.4', date: '2026-11-10' };   // n: lo que se muestra («Versión 4.1.4»); v: identifica el caché
   root.HALTER_VERSION = V;
   if (typeof module !== 'undefined' && module.exports) module.exports = V;
 })(typeof self !== 'undefined' ? self : globalThis);
