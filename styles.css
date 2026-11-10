@@ -525,6 +525,8 @@ dialog .actions > .lnk { margin: 0 auto; }
 .updbar > div, .wknote > div { flex: 1 1 200px; min-width: 0; font-size: 13.5px; line-height: 1.35; }
 .updbar b, .wknote b { display: block; font-size: 14.5px; }
 .updbar .btn, .updbar .lnk, .wknote .btn, .wknote .lnk { flex: none; }
+.person small.err-txt { display: block; margin-top: 4px; color: var(--bad); font-weight: 600; }
+.plan-tag { margin: 4px 0 8px; }
 .wknote.warn { background: var(--warn-bg); color: var(--warn-ink); border-left-color: transparent; }
 .wknote.warn .btn.ghost { color: var(--warn-ink); }
 .gate .big-ico.is-warn { border-color: var(--bad); color: var(--bad); }

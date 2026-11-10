@@ -49,7 +49,7 @@ const WEEKS = {
   console.log('1. Se asigna su propia semana');
   await tab('semana');
   await page.waitForSelector('#myWeek');
-  ok(/Elige una semana del plan/.test(await txt('#view')), 'sin semana, le ofrece asignársela');
+  ok(/Elige un plan y una semana/.test(await txt('#view')), 'sin semana, le ofrece asignársela');
   ok((await page.locator('#myWeek option').allInnerTexts()).join('|') === 'Semana 1|Semana 2', 'lista las semanas del plan activo');
   await page.selectOption('#myWeek', 'e1_2'); await page.click('[data-act="as-self"]'); await page.waitForTimeout(500);
   let d = await docs(), a = d['assignments/' + cuid];

@@ -6,7 +6,7 @@
      plans/{planId}                   { name, year, format, stages, weeks, createdAt }
      plans/{planId}/stages/{stageId}  { name, order }
      plans/{planId}/weeks/{weekId}    { stageId, week, label, kind, notes[], sessions[], next }   next = id de la semana siguiente ('' en la última)
-     config/plan                      { activePlanId, at }        plan que ven los atletas (lo cambia solo el entrenador)
+     config/plan                      { activePlanId, at }        (hasta 4.15) plan activo; desde 4.16.0 no se usa: cada atleta tiene su plan en assignments/{uid}.planId
    Firestore no admite listas dentro de listas: «alts» se guarda como [{ p: [partes] }]. */
 (function () {
   'use strict';
@@ -82,6 +82,8 @@
         sets: it.sets, inline: it.inline || null, alts: it.alts.map(a => ({ p: a.map(p => ({ src: p.src, ex: p.exId, mult: p.mult, max: !!p.max, hold: p.hold, dropPct: p.dropPct })) })) })) })) });
   }
   async function publish() {
+    const A = window.HalterAssign, max = (A && A.MAX_PLANS) || 6;
+    if (P.plans.length >= max) { P.err = 'Ya hay ' + P.plans.length + ' planes publicados (máximo ' + max + '). Elimina uno que no tenga atletas antes de publicar otro.'; H.render(); return; }
     const I = window.PlanImport, pv = P.preview; if (!pv || P.busy) return;
     const name = (P.planName || '').trim().slice(0, 60); if (!name) { H.toast('Escribe un nombre para el plan'); return; }
     P.busy = 'Publicando…'; P.err = ''; H.render();
@@ -96,10 +98,8 @@
       const planId = 'p' + (new Date()).getFullYear() + '-' + Date.now().toString(36);
       await H.remote().publishPlan({ planId: planId, meta: { name: name, year: (new Date()).getFullYear(), format: pv.format, stages: pv.stages.length, weeks: pv.weeks.length },
         stages: pv.stages.map(s => ({ id: s.id, data: { name: String(s.name).slice(0, 160), order: s.order } })), weeks: pv.weeks.map((w, i) => ({ id: w.id, data: weekDoc(w, i + 1 < pv.weeks.length ? pv.weeks[i + 1].id : '') })), exercises: exDocs });
-      const first = !P.active;
       P.preview = null; P.file = ''; P.names = {};
-      if (first) await H.remote().setActivePlan(planId);
-      H.toast('Plan «' + name + '» publicado' + (first ? ' y activado' : ''));
+      H.toast('Plan «' + name + '» publicado. Asígnalo a los atletas desde «Equipo».');
     } catch (e) { P.err = H.err(e); }
     P.busy = ''; H.render();
   }
@@ -145,29 +145,34 @@
     if (!P.plansReady) h += '<p class="muted">Cargando…</p>';
     else if (!P.plans.length) h += window.HalterApp.empty('plan', 'Aún no hay un plan', 'Sube el Excel de Cristian o la plantilla simple.');
     else h += P.plans.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map(p => {
-      const on = P.active === p.id;
-      return `<div class="person"><div><b>${esc(p.name)}</b><small>${p.weeks || 0} semanas · ${p.stages || 0} etapas${on ? ' · <span class="badge gd">Activo</span>' : ''}</small></div><div class="row-end">` +
-        (on ? '' : `<button class="btn sm" data-act="pl-activate" data-id="${esc(p.id)}">Activar</button>`) +
-        `<button class="btn ghost sm" data-act="pl-delete" data-id="${esc(p.id)}">${P.confirm === 'del' + p.id ? 'Confirmar' : 'Eliminar'}</button></div></div>`;
+      const users = usage(p.id), n = users.length;
+      return `<div class="person"><div><b>${esc(p.name)}</b><small>${p.weeks || 0} semana${p.weeks === 1 ? '' : 's'} · ${p.stages || 0} etapa${p.stages === 1 ? '' : 's'} · ${n ? n + (n === 1 ? ' atleta' : ' atletas') : 'sin atletas'}</small>` +
+        (P.blocked === p.id ? `<small class="err-txt">No se puede eliminar: lo tiene${n === 1 ? '' : 'n'} asignado ${esc(users.join(', '))}. ${n === 1 ? 'Muévelo' : 'Muévelos'} a otro plan desde «Equipo».</small>` : '') +
+        `</div><div class="row-end"><button class="btn ghost sm" data-act="pl-delete" data-id="${esc(p.id)}">${P.confirm === 'del' + p.id ? 'Confirmar' : 'Eliminar'}</button></div></div>`;
     }).join('');
     h += '</div>';
     if (P.preview) return h + previewHTML();
     h += `<div class="card sec"><span class="eyebrow">Cargar un plan</span>
-      <p class="muted">Sube el Excel del año: la planilla de Cristian o la plantilla simple. Verás una revisión antes de publicar y nada cambia para los atletas hasta que actives el plan.</p>
+      <p class="muted">Sube el Excel: la planilla de Cristian o la plantilla simple. Verás una revisión antes de publicar. Puedes tener hasta 6 planes (por ejemplo, uno por nivel); nada cambia para un atleta hasta que le asignes el plan en «Equipo».</p>
       <label class="btn block" for="plFile" role="button">${P.busy || 'Elegir archivo Excel'}</label>
       <input id="plFile" data-pl="file" type="file" accept=".xlsx,.xlsm,.xls" hidden>
       <div class="stack"><button class="lnk" data-act="pl-template">Descargar plantilla simple (con la lista de ejercicios conocidos)</button></div></div>`;
     return h;
   }
 
+  /* Atletas (y el entrenador) con una semana de este plan */
+  const usage = id => { const A = window.HalterAssign; return A && A.planUsage ? A.planUsage(id) : []; };
+  /* El catálogo se versiona con el plan publicado más reciente */
+  const ms = t => (t && typeof t.toMillis === 'function' ? t.toMillis() : +t || 0);
+  const newest = () => { const l = P.plans.slice().sort((a, b) => ms(b.createdAt) - ms(a.createdAt)); return l.length ? l[0].id : null; };
   function onAct(act, el) {
-    const id = el && el.dataset ? el.dataset.id : null, prev = P.confirm; P.confirm = null;
+    const id = el && el.dataset ? el.dataset.id : null, prev = P.confirm; P.confirm = null; P.blocked = null;
     switch (act) {
       case 'pl-publish': publish(); return true;
       case 'pl-cancel': P.preview = null; P.file = ''; P.names = {}; H.render(); return true;
       case 'pl-template': downloadTemplate(); return true;
-      case 'pl-activate': H.remote().setActivePlan(id).then(() => H.toast('Plan activado'), e => { P.err = H.err(e); H.render(); }); return true;
       case 'pl-delete':
+        if (usage(id).length) { P.blocked = id; H.render(); return true; }   // un plan con atletas no se elimina (4.16.0)
         if (prev !== 'del' + id) { P.confirm = 'del' + id; H.render(); return true; }
         H.remote().deletePlan(id, P.active === id).then(() => H.toast('Plan eliminado'), e => { P.err = H.err(e); H.render(); }); return true;
     }
@@ -187,6 +192,7 @@
     init: init, view: view, onAct: onAct, state: P,
     setPlans(list) { P.plans = list; P.plansReady = true; },
     setActive(d) { P.active = d ? d.activePlanId : null; },
+    newest: () => newest(),
     setExercises(list) { P.exercises = list; },
     reset() { P.plans = []; P.active = null; P.exercises = []; P.preview = null; P.plansReady = false; P.err = ''; P.busy = ''; }
   };

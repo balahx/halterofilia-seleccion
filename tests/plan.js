@@ -95,13 +95,14 @@ function cristianGrid() {
   await page.fill('[data-plname="0"][data-k="es"]', 'Levantamiento especial');
   await page.fill('#plName', 'Plan 2026 prueba');
   await page.click('[data-act="pl-publish"]');
-  await page.waitForFunction(() => /Plan 2026 prueba/.test(document.querySelector('#view').innerText) && /Activo/.test(document.querySelector('#view').innerText));
+  await page.waitForFunction(() => /Plan 2026 prueba/.test(document.querySelector('#view').innerText) && /sin atletas/.test(document.querySelector('#view').innerText));
   const d = await docs(), keys = Object.keys(d);
   const planId = keys.find(k => /^plans\/[^/]+$/.test(k)).split('/')[1];
   ok(d['plans/' + planId].weeks === 3 && d['plans/' + planId].stages === 1, 'ficha del plan: 1 etapa, 2 semanas');
   ok(keys.filter(k => k.startsWith('plans/' + planId + '/weeks/')).length === 3, 'se guardaron las 3 semanas');
   ok(d['plans/' + planId + '/weeks/e1_3'].kind === 'transition', 'la semana 3 se guarda como transición');
-  ok(d['config/plan'] && d['config/plan'].activePlanId === planId, 'el primer plan queda activo');
+  ok(!d['config/plan'], 'desde 4.16.0 no hay «plan activo»: se asigna a cada atleta en «Equipo»');
+  ok(!(await page.locator('[data-act="pl-activate"]').count()) && !/Activo/.test(await txt('#view')), 'sin botón «Activar»');
   const w1 = d['plans/' + planId + '/weeks/e1_1'];
   ok(w1.label === 'intro' && w1.sessions.length === 2, 'semana 1 «intro» con 2 sesiones (lunes y martes)');
   const lunes = w1.sessions[0];
@@ -118,7 +119,7 @@ function cristianGrid() {
   ok(d['exercises/snatch'] && d['exercises/snatch'].en === 'Snatch', 'el catálogo incluye los ejercicios del glosario');
   await shot('03-publicado');
 
-  console.log('4. Segundo plan: el catálogo ya reconoce lo anterior, el activo no cambia');
+  console.log('4. Segundo plan: el catálogo ya reconoce lo anterior');
   await page.setInputFiles('#plFile', { name: 'plan2.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(JSON.stringify(cristianGrid())) });
   await page.waitForSelector('[data-act="pl-publish"]');
   v = await txt('#view');
@@ -126,10 +127,7 @@ function cristianGrid() {
   await page.fill('#plName', 'Plan 2027'); await page.click('[data-act="pl-publish"]');
   await page.waitForFunction(() => /Plan 2027/.test(document.querySelector('#view').innerText) && !document.querySelector('[data-act="pl-publish"]'));
   const d2 = await docs(), plans = Object.keys(d2).filter(k => /^plans\/[^/]+$/.test(k));
-  ok(plans.length === 2 && d2['config/plan'].activePlanId === planId, 'hay 2 planes y el activo sigue siendo el primero');
-  await page.click('[data-act="pl-activate"]');
-  await page.waitForFunction(() => document.querySelectorAll('.badge').length >= 1 && /Plan 2027[\s\S]*Activo/.test(document.querySelector('#view').innerText));
-  ok((await docs())['config/plan'].activePlanId !== planId, 'activar cambia el plan activo');
+  ok(plans.length === 2, 'hay 2 planes publicados a la vez');
 
   console.log('5. Eliminar un plan (con confirmación)');
   await page.click('[data-act="pl-delete"] >> nth=0');

@@ -208,13 +208,25 @@
   const unwatch = list => { list.splice(0).forEach(u => { try { u(); } catch (e) { /* ya cerrado */ } }); };
   const lang = () => { const S = window.HalterApp.state(); return (S && S.profile && S.profile.exLang) || 'en'; };
   const dayLabel = d => ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][d] || '';
-  const stageName = id => { const s = A.stages.find(x => x.id === id); return s ? s.name : ''; };
+  /* Varios planes a la vez (4.16.0): el entrenador elige el plan de cada atleta. A.plans[planId] = { weeks, stages, ok } (solo entrenador) */
+  const MAX_PLANS = 6;
+  const planOf = pid => (pid && A.plans[pid]) || { weeks: [], stages: [], ok: false };
+  const stageName = (id, pid) => { const list = pid && A.plans[pid] ? A.plans[pid].stages : A.stages; const s = list.find(x => x.id === id); return s ? s.name : ''; };
+  const planName = pid => { const p = (A.planList || []).find(x => x.id === pid); return p ? p.name || '' : ''; };
+  const plansSorted = () => (A.planList || []).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { numeric: true }));
+  /* Quiénes tienen asignada una semana de un plan (para «Planes»: no se elimina un plan en uso) */
+  const planUsage = pid => Object.keys(A.asg || {}).filter(uid => A.asg[uid] && A.asg[uid].planId === pid).map(uid => uid === A.uid ? 'tú' : memberName(uid));
+  function planOpts(sel) {
+    const list = plansSorted();
+    return (sel ? '' : '<option value="" selected disabled>Elige un plan</option>') + list.map(p => `<option value="${esc(p.id)}"${p.id === sel ? ' selected' : ''}>${esc(p.name || p.id)}</option>`).join('');
+  }
   const weekTitle = w => 'Semana ' + w.week + (w.kind === 'transition' ? ' · Transición' : '');
 
   let weekKey = '';   // semana que se está escuchando como atleta
   function init(helpers) {
     H = helpers; if (root.HalterReport) root.HalterReport.init(helpers);
-    document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'rtuid' && A.rt) { A.rt.uid = t.value; A.rt.dirty = true; } if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } if (t && t.dataset && t.dataset.as === 'selfweek') { A.selfPick = t.value; } });
+    document.addEventListener('change', e => { const t = e.target; if (t && t.dataset && t.dataset.as === 'rtuid' && A.rt) { A.rt.uid = t.value; A.rt.dirty = true; } if (t && t.dataset && t.dataset.as === 'week') { A.pick = t.value; } if (t && t.dataset && t.dataset.as === 'selfweek') { A.selfPick = t.value; }
+      if (t && t.dataset && t.dataset.as === 'plan') { A.planPick = t.value; A.pick = ''; rerender(); } if (t && t.dataset && t.dataset.as === 'selfplan') { A.selfPlan = t.value; A.selfPick = ''; rerender(); } });
     document.addEventListener('input', e => {
       const t = e.target; if (t && t.dataset && A.rt && t.dataset.as === 'rtmode') { if (t.checked) { A.rt.mode = t.value === 'replace' ? 'replace' : 'extra'; A.rt.dirty = true; } return; }
       if (t && t.dataset && A.rt && (t.dataset.as === 'rtname' || t.dataset.as === 'rtnote')) { if (t.dataset.as === 'rtname') A.rt.name = t.value; else A.rt.note = t.value; A.rt.dirty = true; return; }
@@ -224,7 +236,7 @@
       const b = document.querySelector('[data-act="as-adj-save"]'); if (b) b.disabled = !adjDirty() || !!A.busy;   // el botón se habilita al escribir
     });
   }
-  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(meUnsub); unwatch(selUnsub); unwatch(adjUnsub); A.uid = null; A.role = null; A.active = null; A.names = {}; A.weeks = []; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selfPick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0, routines: [] }; A.routines = []; A.rt = null; A.rtDel = ''; }
+  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(meUnsub); unwatch(selUnsub); unwatch(adjUnsub); Object.keys(planFeeds).forEach(id => { unwatch(planFeeds[id]); delete planFeeds[id]; }); lastNewest = null; fast.parts = {}; fast.cat = null; fast.catPlan = null; A.uid = null; A.role = null; A.plans = {}; A.planList = []; A.planListOk = false; A.planPick = ''; A.selfPlan = ''; A.names = {}; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selfPick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0, routines: [] }; A.routines = []; A.rt = null; A.rtDel = ''; }
 
   /* Una sola vez por sesión del entrenador: las semanas asignadas con corte del viernes pasan al domingo 23:59 */
   let cutsChecked = false;
@@ -241,50 +253,61 @@
     if (root.HalterReads && root.HalterReads.useFast) root.HalterReads.useFast(false);   // el entrenador lee las piezas del plan y con ellas arma el documento único
     unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); migrateCuts(list); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
     /* Catálogo: con reads.js se baja una vez por versión del plan y se reutiliza (cloud.js lo pide igual y comparte la misma copia) */
-    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => A.active, (list, m) => { setNames(list || []); if (list && !(m && m.fromCache)) { fast.cat = list; fast.catPlan = A.active; tryFast(); } rerender(); }, () => { /* opcional */ })
+    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => newestPlan(), (list, m) => { setNames(list || []); if (list && !(m && m.fromCache)) { fast.cat = list; fast.catPlan = newestPlan(); Object.keys(A.plans).forEach(tryFast); } rerender(); }, () => { /* opcional */ })
       : r.watchCol('exercises', list => { setNames(list); rerender(); }, () => { /* opcional */ }));
-    unsub.push(r.watchDoc('config/plan', d => { watchPlan(d ? d.activePlanId : null); }, () => { /* sin plan activo */ }));
+    /* Todos los planes publicados (hasta 6): cada uno con su copia local por versión; ya no hay «plan activo» */
+    const onPlans = list => { A.planList = (list || []).slice(); A.planListOk = true; watchPlans(A.planList.map(x => x.id)); rerender(); };
+    unsub.push(root.HalterReads ? root.HalterReads.feed('plans', { ttl: 10 * 60000, fetch: () => r.getCol('plans'), cb: onPlans, err: () => { A.planListOk = true; rerender(); } })
+      : r.watchCol('plans', onPlans, () => { A.planListOk = true; rerender(); }));
     const onRoutines = list => { A.routines = list.slice().sort((a, b) => (tsMs(b.at) - tsMs(a.at))); rerender(); }, onRoutinesErr = e => { A.err = H.err(e); rerender(); };
     unsub.push(root.HalterReads ? root.HalterReads.feed('routines', { ttl: 10 * 60000, fetch: () => r.getCol('routines'), cb: onRoutines, err: onRoutinesErr })   // se renueva al guardar o quitar una rutina
       : r.watchCol('routines', onRoutines, onRoutinesErr));
     selfStart(uid, false, true);   // el entrenador también entrena el plan: su propia semana
   }
   const setNames = list => { A.names = {}; list.forEach(x => { A.names[x.id] = { en: x.en, es: x.es }; }); };
-  function watchPlan(planId) {
-    if (planId === A.active && weekUnsub.length) return;
-    unwatch(weekUnsub); A.active = planId; A.weeks = []; A.weeksOk = false; A.stages = [];
-    if (root.HalterReads) root.HalterReads.poke('catalog');   // el catálogo se versiona con el plan activo
-    if (!planId) { rerender(); return; }
+  /* El catálogo de ejercicios es uno solo para todos los planes: se versiona con el plan publicado más reciente */
+  const newestPlan = () => { const l = (A.planList || []).slice().sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)); return l.length ? l[0].id : null; };
+  const planFeeds = {};   // planId → [unsub]
+  let lastNewest = null;
+  function watchPlans(ids) {
+    Object.keys(planFeeds).forEach(id => { if (ids.indexOf(id) < 0) { unwatch(planFeeds[id]); delete planFeeds[id]; delete A.plans[id]; } });
+    const nw = newestPlan(); if (nw !== lastNewest) { lastNewest = nw; if (root.HalterReads) root.HalterReads.poke('catalog'); }
     const r = H.remote();
-    if (root.HalterReads) {
-      /* Semanas y etapas del año: una copia local por versión del plan; por abrir la app solo se lee la ficha del plan (1 documento) */
-      weekUnsub.push(root.HalterReads.feedPlan(r, planId, (parts, m) => {
-        if (parts) {
-          A.stages = (parts.stages || []).slice().sort((a, b) => a.order - b.order);
-          A.weeks = (parts.weeks || []).slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week);
-        } else { A.stages = []; A.weeks = []; }
-        A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */;
-        if (parts && A.weeksOk) { fast.parts = parts; fast.plan = planId; tryFast(); }
-        rerender();
-      }, () => { /* sin permiso o sin conexión */ }));
-      return;
-    }
-    weekUnsub.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { A.weeks = list.slice().sort((a, b) => stageOrder(a.stageId) - stageOrder(b.stageId) || a.week - b.week); A.weeksOk = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */; rerender(); }, () => { /* sin permiso o sin conexión */ }));
-    weekUnsub.push(r.watchCol('plans/' + planId + '/stages', list => { A.stages = list.slice().sort((a, b) => a.order - b.order); rerender(); }, () => { /* idem */ }));
+    ids.forEach(planId => {
+      if (planFeeds[planId]) return;
+      const arr = planFeeds[planId] = []; A.plans[planId] = { weeks: [], stages: [], ok: false };
+      const put = (stages, weeks, ok) => {
+        const st = (stages || []).slice().sort((a, b) => a.order - b.order), ord = id => { const x = st.find(y => y.id === id); return x ? x.order : 0; };
+        A.plans[planId] = { stages: st, weeks: (weeks || []).slice().sort((a, b) => ord(a.stageId) - ord(b.stageId) || a.week - b.week), ok: ok };
+      };
+      if (root.HalterReads) {
+        /* Semanas y etapas de cada plan: una copia local por versión; por abrir la app solo se lee la ficha del plan (1 documento) */
+        arr.push(root.HalterReads.feedPlan(r, planId, (parts, m) => {
+          const ok = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */;
+          put(parts && parts.stages, parts && parts.weeks, ok);
+          if (parts && ok) { fast.parts[planId] = parts; tryFast(planId); }
+          rerender();
+        }, () => { /* sin permiso o sin conexión */ }));
+        return;
+      }
+      let wk = [], sg = [];
+      arr.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { wk = list; put(sg, wk, !(m && m.fromCache)); rerender(); }, () => { /* sin permiso o sin conexión */ }));
+      arr.push(r.watchCol('plans/' + planId + '/stages', list => { sg = list; put(sg, wk, A.plans[planId].ok); rerender(); }, () => { /* idem */ }));
+    });
   }
-  /* Plan en un solo documento (4.15.0): con las semanas, etapas y catálogo que el servidor confirmó, reads.js lo arma o lo renueva solo */
-  const fast = { parts: null, plan: null, cat: null, catPlan: null };
-  function tryFast() {
+  /* Plan en un solo documento (4.15.0; desde 4.16.0 uno por cada plan publicado): con las semanas, etapas y catálogo que el servidor
+     confirmó, reads.js lo arma o lo renueva solo */
+  const fast = { parts: {}, cat: null, catPlan: null };
+  function tryFast(planId) {
     const RD = root.HalterReads;
-    if (!RD || !RD.ensureFast || A.role !== 'coach' || !A.active || fast.plan !== A.active || fast.catPlan !== A.active) return;
-    RD.ensureFast(H.remote(), A.active, fast.parts, fast.cat).catch(() => { /* sin conexión: se intenta la próxima vez */ });
+    if (!RD || !RD.ensureFast || A.role !== 'coach' || !planId || !fast.parts[planId] || !fast.cat || fast.catPlan !== newestPlan()) return;
+    RD.ensureFast(H.remote(), planId, fast.parts[planId], fast.cat).catch(() => { /* sin conexión: se intenta la próxima vez */ });
   }
-  const stageOrder = id => { const s = A.stages.find(x => x.id === id); return s ? s.order : 0; };
 
   function startAthlete(uid, offline) { reset(); A.uid = uid; A.role = 'athlete'; if (root.HalterReads && root.HalterReads.useFast) root.HalterReads.useFast(true); selfStart(uid, offline, false); }
   /* Mi propia semana (atleta, y el entrenador cuando entrena el plan). noEx: el entrenador ya escucha los ejercicios */
   function selfStart(uid, offline, noEx) {
-    try { const c = JSON.parse(LS.get(cacheKey()) || 'null'); if (c && (c.asg || (c.routines && c.routines.length))) { A.me = { asg: c.asg || null, week: c.week || null, adj: c.adj || {}, done: c.done || {}, savedAt: c.savedAt || 0, routines: c.routines || [] }; A.names = c.names || {}; A.stages = c.stages || []; } } catch (e) { /* caché dañada */ }
+    try { const c = JSON.parse(LS.get(cacheKey()) || 'null'); if (c && (c.asg || (c.routines && c.routines.length))) { A.me = { asg: c.asg || null, week: c.week || null, adj: c.adj || {}, done: c.done || {}, savedAt: c.savedAt || 0, routines: c.routines || [], planName: c.planName || '' }; A.names = c.names || {}; A.stages = c.stages || []; } } catch (e) { /* caché dañada */ }
     if (offline) return;
     const r = H.remote();
     unsub.push(r.watchDoc('assignments/' + uid, (d, m) => {
@@ -314,6 +337,9 @@
     const onWeekErr = e => { A.me.weekErr = H.err(e); rerender(); };
     if (A.role !== 'coach') meUnsub.push(RDw ? RDw.feedStages(r, a.planId, onStages, () => { /* sin conexión: queda la copia guardada */ })
       : r.watchCol('plans/' + a.planId + '/stages', onStages, () => { /* sin conexión: queda la copia guardada */ }));
+    /* Nombre del plan para «Hoy» y «Semana» (4.16.0): sale de la ficha del plan, que ya se lee para saber su versión */
+    if (A.role !== 'coach') Promise.resolve(RDw && RDw.planMeta ? RDw.planMeta(r, a.planId).then(pm => pm && pm.meta) : r.getDoc('plans/' + a.planId))
+      .then(d => { const n = (d && d.name) || ''; if (n !== A.me.planName) { A.me.planName = n; saveCache(); rerender(); } }).catch(() => { /* sin conexión: queda el guardado */ });
     meUnsub.push(RDw ? RDw.feedWeek(r, a.planId, a.weekId, onWeek, onWeekErr) : r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, onWeek, onWeekErr));
     meUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
     // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
@@ -325,7 +351,7 @@
   function saveCache() {
     if (!A.role || !(A.me.asg || (A.me.routines && A.me.routines.length))) return;
     A.me.savedAt = Date.now();
-    LS.set(cacheKey(), JSON.stringify({ asg: A.me.asg, week: A.me.week, adj: A.me.adj, done: A.me.done, routines: A.me.routines, names: A.names, stages: A.stages, savedAt: A.me.savedAt }));
+    LS.set(cacheKey(), JSON.stringify({ asg: A.me.asg, week: A.me.week, adj: A.me.adj, done: A.me.done, routines: A.me.routines, names: A.names, stages: A.stages, savedAt: A.me.savedAt, planName: A.me.planName || '' }));
   }
 
   /* ---------- Sesiones cumplidas (se envían con la hora del servidor; si no hay conexión quedan en cola) ---------- */
@@ -417,8 +443,8 @@
     if (!a) { isNewWeek(); return ''; }
     if (isNewWeek()) {
       if (!hoy) return '';   // en «Semana» ya se ve la semana: athleteView la marca como vista
-      const st = stageName(a.stageId);
-      return noticeBox('Tu entrenador te asignó la semana ' + a.week, (st ? st + '. ' : '') + 'Revisa sus sesiones en «Semana».',
+      const st = stageName(a.stageId), pn = m.planName;
+      return noticeBox('Tu entrenador te asignó la semana ' + a.week + (pn ? ' de «' + pn + '»' : ''), (st ? st + '. ' : '') + 'Revisa sus sesiones en «Semana».',
         '<button class="btn sm" data-act="tab" data-tab="semana">Ver mi semana</button><button class="lnk" data-act="wk-seen">Entendido</button>');
     }
     const w = m.week; if (!w) return '';
@@ -435,7 +461,7 @@
     if (A.err) h += window.HalterApp.errorBox(A.err, { retry: 'sync-now' });
     if (a === undefined) return h + '<div class="card sec"><p class="muted">Cargando…</p></div>';
     const coach = A.role === 'coach';
-    if (!a && coach) return h + '<p class="muted">Elige una semana del plan activo para entrenarla tú también. Tus sesiones y tus marcas quedan solo en tu cuenta; no entran en las comparaciones del equipo.</p>' + selfPicker(null);
+    if (!a && coach) return h + '<p class="muted">Elige un plan y una semana para entrenarla tú también. Tus sesiones y tus marcas quedan solo en tu cuenta; no entran en las comparaciones del equipo.</p>' + selfPicker(null);
     const rts = coach ? '' : routinesHTML(), rep = !coach && replacing();
     if (!a && rts) return h + rts + (rep ? '' : '<p class="muted">Aún no tienes una semana del plan asignada; mientras tanto, entrena con la rutina de tu entrenador.</p>');
     if (!a) return h + window.HalterApp.empty('semana', 'Aún no tienes semana asignada', 'Tu entrenador aún no te asigna una semana del plan. Mientras tanto puedes registrar tus sesiones en «Hoy».', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
@@ -443,10 +469,11 @@
     if (rep) return h + '<div class="card sec"><span class="eyebrow">Plan semanal</span><p class="muted">Tu entrenador reemplazó tu plan semanal por la rutina de arriba. Tu semana asignada queda guardada y vuelve a verse cuando él quite la rutina o la deje como complementaria.</p></div>';
     const w = m.week;
     if (!w && m.weekErr) return h + window.HalterApp.errorBox('No se pudo leer tu semana (' + m.weekErr + ').', { retry: 'sync-now' });
-    if (!w && m.weekMissing) return h + window.HalterApp.errorBox('La semana que tienes asignada ya no existe en el plan activo. ' + (A.role === 'coach' ? 'Elige otra semana más abajo.' : 'Pídele a tu entrenador que te la asigne de nuevo.'), { title: 'Semana no encontrada' }) + (A.role === 'coach' ? selfPicker(a) : '');
+    if (!w && m.weekMissing) return h + window.HalterApp.errorBox('La semana que tienes asignada ya no existe en su plan. ' + (A.role === 'coach' ? 'Elige otra semana más abajo.' : 'Pídele a tu entrenador que te la asigne de nuevo.'), { title: 'Semana no encontrada' }) + (A.role === 'coach' ? selfPicker(a) : '');
     if (!w) return h + '<div class="card sec"><p class="muted">Cargando la semana…</p></div>';
     if (!coach) { if (isNewWeek()) markSeen(a); h += weekNotice('semana'); }   // al abrir «Semana» la semana nueva queda vista
-    h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc(weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId) || '')}</p>` +
+    const pn = coach ? planName(a.planId) : m.planName;
+    h += `<div class="card sec wk-card"><span class="eyebrow gd">${esc((pn ? pn + ' · ' : '') + weekTitle(w))}</span><p class="lead">${esc(stageName(w.stageId, a.planId) || '')}</p>` +
       (w.kind === 'transition' ? '<p class="muted">Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.</p>' : '') +
       (w.notes && w.notes.length && w.kind !== 'transition' ? '<ul class="plain">' + w.notes.map(n => `<li><small>${esc(n)}</small></li>`).join('') + '</ul>' : '') +
       (coach ? '' : `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small>`) + '</div>';
@@ -458,17 +485,30 @@
     return h;
   }
   /* El entrenador elige su propia semana (sin corte ni requisitos: es su plan personal) */
+  /* Plan elegido en un selector: el que se tocó, o el de la semana asignada, o el único publicado */
+  const pickedPlan = (touched, a) => { const ok = id => id && (A.planList || []).some(p => p.id === id); return ok(touched) ? touched : ok(a && a.planId) ? a.planId : (A.planList || []).length === 1 ? A.planList[0].id : ''; };
+  /* Selector de plan + semana (ficha del atleta y «Mi semana» del entrenador) */
+  function planWeekPicker(o) {
+    if (!A.planListOk) return '<p class="muted">Cargando los planes…</p>';
+    if (!(A.planList || []).length) return window.HalterApp.empty('plan', 'Todavía no hay planes', 'Publica uno en «Planes».');
+    const pid = o.pid, P = planOf(pid);
+    let h = `<label class="lab" for="${o.planEl}">Plan</label><select class="sel tall" id="${o.planEl}" data-f="asx" data-as="${o.planAs}">${planOpts(pid)}</select>`;
+    if (!pid) return h + '<p class="muted">Elige el plan para ver sus semanas.</p>';
+    if (!P.weeks.length) return h + '<p class="muted">Cargando las semanas del plan…</p>';
+    const sel = o.week || (o.a && o.a.planId === pid ? o.a.weekId : '') || P.weeks[0].id;
+    return h + `<label class="lab" for="${o.weekEl}">Semana</label><select class="sel tall" id="${o.weekEl}" data-f="asx" data-as="${o.weekAs}">${weekOpts(sel, pid)}</select>` +
+      `<div class="stack"><button class="btn${o.ghost ? ' ghost' : ''}" data-act="${o.act}"${A.busy ? ' disabled' : ''}>${A.busy || o.label}</button></div>`;
+  }
   function selfPicker(a) {
-    if (!A.active) return window.HalterApp.empty('plan', 'Todavía no hay un plan activo', 'Publica y activa uno en «Planes».');
-    if (!A.weeks.length) return '<div class="card sec"><p class="muted">Cargando las semanas del plan…</p></div>';
-    const sel = A.selfPick || (a && a.weekId) || '';
-    return `<div class="card sec"><span class="eyebrow">${a ? 'Cambiar de semana' : 'Mi semana'}</span><label class="lab" for="myWeek">${a ? 'Ir a otra semana' : 'Asignarme semana'}</label><select class="sel tall" id="myWeek" data-f="asx" data-as="selfweek">${weekOpts(sel)}</select>` +
-      `<div class="stack"><button class="btn${a ? ' ghost' : ''}" data-act="as-self"${A.busy ? ' disabled' : ''}>${A.busy || (a ? 'Ir a esta semana' : 'Asignarme')}</button></div></div>`;
+    const pid = pickedPlan(A.selfPlan, a), change = a && pid !== a.planId;
+    return `<div class="card sec"><span class="eyebrow">${a ? 'Cambiar de semana o de plan' : 'Mi semana'}</span>` +
+      planWeekPicker({ pid: pid, a: a, week: A.selfPick, planEl: 'myPlan', planAs: 'selfplan', weekEl: 'myWeek', weekAs: 'selfweek', act: 'as-self', ghost: !!a, label: change ? 'Cambiar a este plan' : a ? 'Ir a esta semana' : 'Asignarme' }) + '</div>';
   }
   function assignSelf() {
-    const wid = A.selfPick || (A.me.asg && A.me.asg.weekId) || (A.weeks[0] && A.weeks[0].id), w = A.weeks.find(x => x.id === wid);
-    if (!w || !A.active || A.role !== 'coach') return;
-    guard(() => H.remote().setAssignment(A.uid, { planId: A.active, weekId: w.id, week: w.week, stageId: w.stageId, weekEndsAt: cutoffFor(Date.now()), setBy: A.uid }), 'Estás en la semana ' + w.week);
+    const a = A.me.asg, pid = pickedPlan(A.selfPlan, a), P = planOf(pid);
+    const wid = A.selfPick || (a && a.planId === pid ? a.weekId : '') || (P.weeks[0] && P.weeks[0].id), w = P.weeks.find(x => x.id === wid);
+    if (!w || !pid || A.role !== 'coach') return;
+    guard(async () => { await H.remote().setAssignment(A.uid, { planId: pid, weekId: w.id, week: w.week, stageId: w.stageId, weekEndsAt: cutoffFor(Date.now()), setBy: A.uid }); A.selfPlan = ''; A.selfPick = ''; }, 'Estás en la semana ' + w.week + (planName(pid) ? ' de «' + planName(pid) + '»' : ''));
   }
   function startRoutine(rid, i) {
     const rt = (A.me.routines || []).find(x => x.id === rid); if (!rt) return;
@@ -503,6 +543,7 @@
     // con una rutina que reemplaza el plan semanal, el plan no se muestra ningún día de la semana (4.10.3)
     if (!coach && !replacing() && a && w && w.kind !== 'transition') (w.sessions || []).forEach((s, i) => { if (s.day === todayNo) plan += sessionCard(w, i, s); });
     if (!rep && !ext && !plan) return '';
+    if (plan) plan = `<p class="eyebrow gd plan-tag">${esc((m.planName ? m.planName + ' · ' : '') + weekTitle(w))}</p>` + plan;
     return rep + plan + ext;
   }
   /* ¿El plan semanal está reemplazado por una rutina? → null si no; si sí, [lun…dom] con true en los días que la rutina marca para entrenar */
@@ -532,12 +573,17 @@
 
   /* ---------- Entrenador ---------- */
   /* La semana asignada ya no existe en el plan activo (por ejemplo, se volvió a subir el plan): el atleta no puede ver su semana */
-  const isStale = (uid) => { const a = A.asg[uid]; return !!(a && A.weeksOk && A.active && a.planId === A.active && !A.weeks.some(w => w.id === a.weekId)); };
+  /* La semana asignada ya no existe en su plan (se volvió a subir el plan o se eliminó): el atleta no puede ver su semana */
+  const isStale = (uid) => {
+    const a = A.asg[uid]; if (!a) return false;
+    if (A.planListOk && A.planList.length && !A.planList.some(p => p.id === a.planId)) return true;
+    const P = A.plans[a.planId]; return !!(P && P.ok && !P.weeks.some(w => w.id === a.weekId));
+  };
   const staleList = (uids) => (uids || Object.keys(A.asg)).filter(isStale);
-  const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; return 'Semana ' + a.week + (stageName(a.stageId) ? ' · ' + stageName(a.stageId) : '') + (isStale(uid) ? ' · ya no existe en el plan' : ''); };
+  const asgLine = (uid) => { const a = A.asg[uid]; if (!a) return 'Sin semana asignada'; const pn = planName(a.planId); return (pn ? pn + ' · ' : '') + 'Semana ' + a.week + (stageName(a.stageId, a.planId) ? ' · ' + stageName(a.stageId, a.planId) : '') + (isStale(uid) ? ' · ya no existe en el plan' : ''); };
   function select(uid) {
     if (root.HalterReport) root.HalterReport.reset();
-    unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.rtPrev = ''; A.selDone = {}; A.selDoneKey = ''; A.selAdj = null; A.draft = null; A.pick = ''; A.selAdjKey = '';
+    unwatch(selUnsub); unwatch(adjUnsub); A.sel = uid; A.rtPrev = ''; A.selDone = {}; A.selDoneKey = ''; A.selAdj = null; A.draft = null; A.pick = ''; A.planPick = ''; A.selAdjKey = '';
     if (!uid) { rerender(); return; }
     watchAdj(); watchDone(); rerender();
   }
@@ -555,18 +601,17 @@
     adjUnsub.push(H.remote().watchDoc('adjustments/' + k, d => { A.selAdj = (d && d.pcts) || {}; if (!A.draft) A.draft = Object.assign({}, A.selAdj); rerender(); }, () => { A.selAdj = {}; }));
   }
   const memberName = uid => { const m = (H.members() || []).find(x => x.id === uid); return m ? m.name : uid; };
-  function weekOptions() { const cur = A.asg[A.sel]; return weekOpts(A.pick || (cur && cur.weekId) || ''); }
-  function weekOpts(sel) {
+  function weekOpts(sel, pid) {
     let h = '', last = null;
-    A.weeks.forEach(w => {
-      if (w.stageId !== last) { if (last !== null) h += '</optgroup>'; h += `<optgroup label="${esc(stageName(w.stageId) || w.stageId)}">`; last = w.stageId; }
+    planOf(pid).weeks.forEach(w => {
+      if (w.stageId !== last) { if (last !== null) h += '</optgroup>'; h += `<optgroup label="${esc(stageName(w.stageId, pid) || w.stageId)}">`; last = w.stageId; }
       h += `<option value="${esc(w.id)}"${w.id === sel ? ' selected' : ''}>Semana ${w.week}${w.kind === 'transition' ? ' · transición' : ''}</option>`;
     });
     return h + (last !== null ? '</optgroup>' : '');
   }
   const adjDirty = () => JSON.stringify(A.draft || {}) !== JSON.stringify(A.selAdj || {});
   function adjustHTML(a) {
-    const w = A.weeks.find(x => x.id === a.weekId); if (!w) return '';
+    const w = planOf(a.planId).weeks.find(x => x.id === a.weekId); if (!w) return '';
     let rows = '';
     (w.sessions || []).forEach((s, si) => (s.items || []).forEach((it, ii) => {
       (it.sets || []).forEach((p, k) => {
@@ -598,13 +643,13 @@
     if (A.err) h += window.HalterApp.errorBox(A.err, { retry: 'sync-now' });
     h += `<div class="card sec"><span class="eyebrow">Semana asignada</span><p class="lead">${esc(asgLine(uid))}</p>` +
       (a ? `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small>` : '');
-    if (!A.active) h += window.HalterApp.empty('plan', 'Todavía no hay un plan activo', 'Publica y activa uno en «Planes».');
-    else if (!A.weeks.length) h += '<p class="muted">Cargando las semanas del plan…</p>';
-    else h += `<label class="lab" for="asWeek">${a ? 'Mover a otra semana' : 'Asignar semana'}</label><select class="sel tall" id="asWeek" data-f="asx" data-as="week">${weekOptions()}</select>` +
-      `<div class="stack"><button class="btn" data-act="as-assign"${A.busy ? ' disabled' : ''}>${A.busy || (a ? 'Mover' : 'Asignar')}</button></div>`;
+    const pid = pickedPlan(A.planPick, a), change = a && pid && pid !== a.planId;
+    h += `<h3>${a ? 'Mover de semana o cambiar de plan' : 'Asignar plan y semana'}</h3>` +
+      planWeekPicker({ pid: pid, a: a, week: A.pick, planEl: 'asPlan', planAs: 'plan', weekEl: 'asWeek', weekAs: 'week', act: 'as-assign', label: change ? 'Cambiar a este plan' : a ? 'Mover' : 'Asignar' }) +
+      (change ? '<small class="muted">Al cambiar de plan, su historial y sus marcas se conservan; las sesiones cumplidas y los ajustes de la semana anterior quedan con el plan anterior.</small>' : '');
     h += '</div>';
     if (a) {
-      const w = A.weeks.find(x => x.id === a.weekId);
+      const w = planOf(a.planId).weeks.find(x => x.id === a.weekId);
       if (w) {
         h += '<div class="card sec"><span class="eyebrow">Sesiones de esta semana</span><ul class="plain">' + (w.sessions || []).map((s, i) => {
           const at = A.selDone[a.planId + '_' + a.weekId + '_' + i];
@@ -614,7 +659,7 @@
       h += `<div class="card sec"><span class="eyebrow">Ajustes para este atleta</span>${adjustHTML(a)}</div>`;
     }
     h += rtListHTML(uid);
-    if (root.HalterReport && A.active && A.weeks.length) h += root.HalterReport.html(reportCtx());
+    if (root.HalterReport && a && planOf(a.planId).weeks.length) h += root.HalterReport.html(reportCtx());
     return h;
   }
 
@@ -709,12 +754,13 @@
     }
     return false;
   }
-  const reportCtx = () => ({ uid: A.sel, name: memberName(A.sel), weeks: A.weeks, stages: A.stages, names: A.names, asg: A.asg[A.sel] || null, planId: A.active, done: A.selDone, lang: lang() });
+  const reportCtx = () => { const a = A.asg[A.sel] || null, P = planOf(a && a.planId); return { uid: A.sel, name: memberName(A.sel), weeks: P.weeks, stages: P.stages, names: A.names, asg: a, planId: a && a.planId, done: A.selDone, lang: lang() }; };
   async function guard(fn, ok) { A.err = ''; A.busy = 'Guardando…'; rerender(); try { await fn(); if (ok) H.toast(ok); } catch (e) { A.err = H.err(e); } A.busy = ''; rerender(); }
   function assign() {
-    const wid = A.pick || (A.asg[A.sel] && A.asg[A.sel].weekId) || (A.weeks[0] && A.weeks[0].id), w = A.weeks.find(x => x.id === wid);
-    if (!w || !A.active) return;
-    guard(() => H.remote().setAssignment(A.sel, { planId: A.active, weekId: w.id, week: w.week, stageId: w.stageId, weekEndsAt: cutoffFor(Date.now()), setBy: A.uid }), 'Semana ' + w.week + ' asignada');
+    const a = A.asg[A.sel], pid = pickedPlan(A.planPick, a), P = planOf(pid);
+    const wid = A.pick || (a && a.planId === pid ? a.weekId : '') || (P.weeks[0] && P.weeks[0].id), w = P.weeks.find(x => x.id === wid);
+    if (!w || !pid) return;
+    guard(async () => { await H.remote().setAssignment(A.sel, { planId: pid, weekId: w.id, week: w.week, stageId: w.stageId, weekEndsAt: cutoffFor(Date.now()), setBy: A.uid }); A.planPick = ''; A.pick = ''; }, (planName(pid) ? '«' + planName(pid) + '» · ' : '') + 'Semana ' + w.week + ' asignada');
   }
   function onAct(act, el) {
     switch (act) {
@@ -742,6 +788,6 @@
 
   root.HalterAssign = {
     init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, weekNotice: weekNotice, replaceDays: replaceDays, onFinish: onFinish, onDelete: onDelete, flush: flush,
-    selected: () => A.sel, detail: detailHTML, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
+    selected: () => A.sel, detail: detailHTML, planUsage: planUsage, MAX_PLANS: MAX_PLANS, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);

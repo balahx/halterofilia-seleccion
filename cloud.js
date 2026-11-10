@@ -332,12 +332,12 @@
       const HP = window.HalterPlan;
       if (RDm) {
         C.unsub.push(RDm.feed('plans', { ttl: 10 * 60000, fetch: () => r.getCol('plans'), cb: list => { HP.setPlans(list); window.HalterApp.render(); }, err: e => { HP.state.err = dataErr(e); HP.setPlans([]); window.HalterApp.render(); } }));
-        C.unsub.push(RDm.feedCatalog(r, () => HP.state.active, list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
+        C.unsub.push(RDm.feedCatalog(r, () => HP.newest(), list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
       } else {
         C.unsub.push(r.watchCol('plans', list => { HP.setPlans(list); window.HalterApp.render(); }, e => { HP.state.err = dataErr(e); HP.setPlans([]); window.HalterApp.render(); }));
         C.unsub.push(r.watchCol('exercises', list => { HP.setExercises(list); }, () => { /* el catálogo es opcional */ }));
       }
-      C.unsub.push(r.watchDoc('config/plan', d => { HP.setActive(d); if (RDm) RDm.poke('catalog'); window.HalterApp.render(); }, () => { /* sin plan activo */ }));
+      // desde 4.16.0 no hay «plan activo»: cada atleta tiene el suyo (config/plan ya no se escucha)
     }
   }
   function decide() { // devuelve { role, definitive } o { phase }
