@@ -253,6 +253,7 @@
           const rc = resolveCell(t, D);
           const it = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold, dropPct: p.dropPct }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
           if (rc.inline) it.inline = rc.inline;
+          { const tot = it.sets.reduce((n, p) => n + (p.sets > 0 ? p.sets : 1), 0); if (tot > 10) warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» suma ' + tot + ' series; en la app se muestran 10 como máximo (revisa «' + (cur ? cur.raw : '') + '»)'); }
           if (!cur) { nNoPresc++; warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» no tiene series ni % arriba'); }
           rc.alts.forEach(a => a.forEach(p => collect(p, num, c, r)));
           items.push(it); nItems++;

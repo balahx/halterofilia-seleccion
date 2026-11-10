@@ -49,6 +49,13 @@ sets = A.expandSets(item, { [A.adjKey(0, 2, 1)]: 95.5 }, 0, 2);
 ok(sets[3].pct === 95.5 && sets[3].adjusted && sets[3].basePct === 92, 'el ajuste reemplaza el % de esa prescripción');
 sets = A.expandSets(item, { [A.adjKey(0, 2, 0)]: 80 }, 0, 2);
 ok(sets[0].pct === 70, 'bajo 90 % no se ajusta aunque venga un valor');
+// 4.17.0: tope de 10 series por ejercicio (p. ej. % mal escritos en el Excel que se leían como 100 o más series)
+const big = { alts: [{ p: [{ src: 'AA', ex: 'snatch' }] }], sets: [{ pct: 70, reps: '3', sets: 80 }, { pct: 75, reps: '2', sets: 40 }] };
+ok(A.MAX_PLAN_SETS === 10 && A.expandSets(big, {}, 0, 0).length === 10, 'una prescripción de 120 series se limita a 10');
+ok(A.expandSets(big, {}, 0, 0).every(x => x.pct === 70), 'se conservan las primeras series en su orden');
+const many = { alts: [{ p: [{ src: 'AA', ex: 'snatch' }] }], sets: Array.from({ length: 14 }, (_, k) => ({ pct: 50 + k, reps: '1', sets: null })) };
+ok(A.expandSets(many, {}, 0, 0).length === 10, '14 porcentajes sueltos (1 serie cada uno) también quedan en 10');
+ok(A.expandSets(item, {}, 0, 2).length === 6, 'un ejercicio normal no cambia');
 
 console.log('4. Sesión armada');
 const S = { profile: { rounding: 1, rest: 120, bw: 80 }, exercises: [{ id: 'snatch', name: 'Arranque', max: 100, rest: 120 }, { id: 'snpull', name: 'Tirón', max: 0, rest: 90 }] };
@@ -80,6 +87,10 @@ r2 = A.refMax(S2(), 'power-snatch'); ok(r2.kg === 100 && r2.how === 'derived', '
 r2 = A.refMax(S2(), 'snatch-pull'); ok(r2.kg === 0 && r2.how === 'none', 'un tirón sin máximo ni derivado no inventa kilos');
 const wk2 = { sessions: [{ day: 1, name: 'Lunes', items: [{ alts: [{ p: [{ src: 'OHS', ex: 'overhead-squat' }] }], sets: [{ pct: 70, reps: '3', sets: 1 }] },
   { alts: [{ p: [{ src: 'AA', ex: 'snatch' }, { src: 'AASQ', ex: 'overhead-squat' }, { src: 'balance', ex: 'snatch-balance' }] }], sets: [{ pct: 60, reps: '1', sets: 1 }] }] }] };
+{ const S3 = { profile: { rest: 120, rounding: 1 }, exercises: [{ id: 'sn', name: 'Arranque', max: 100 }] };
+  const wk3 = { sessions: [{ day: 1, name: 'Lunes', items: [{ alts: [{ p: [{ src: 'AA', ex: 'snatch' }] }], sets: [{ pct: 70, reps: '3', sets: 8 }] }, { alts: [{ p: [{ src: 'AA', ex: 'snatch' }] }], sets: [{ pct: 80, reps: '2', sets: 8 }] }] }] };
+  const b3 = A.buildSession(S3, wk3, 0, { planId: 'p', weekId: 'w' });
+  ok(b3.items.length === 1 && b3.items[0].sets.length === 10, 'el mismo ejercicio repetido en la sesión (8 + 8) también queda en 10 series'); }
 let b2 = A.buildSession(S2(), wk2, 0, { planId: 'p', weekId: 'w' });
 ok(b2.items[0].sets[0].kg === 84, 'sentadilla de arranque 70 % sin máximo propio = 84 kg');
 b2 = A.buildSession(S3, wk2, 0, { planId: 'p', weekId: 'w' });

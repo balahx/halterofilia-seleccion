@@ -86,13 +86,16 @@
   const partId = p => p.ex || slugOf(p.src);
 
   const adjKey = (si, ii, k) => 's' + si + '_i' + ii + '_k' + k;
-  /* Una fila por serie: la prescripción k repetida `sets` veces (1 si no trae series). Desde 90 % el % se puede ajustar. */
+  /* Tope de series que arma el plan por ejercicio (4.17.0): una celda mal escrita en el Excel (p. ej. % leídos como series) llegaba a
+     generar 100 o más. El atleta igual puede agregar o quitar series en la sesión («+ Serie» / «− Serie»). */
+  const MAX_PLAN_SETS = 10;
+  /* Una fila por serie: la prescripción k repetida `sets` veces (1 si no trae series), hasta MAX_PLAN_SETS en total. Desde 90 % el % se puede ajustar. */
   function expandSets(item, adj, si, ii) {
     const out = [];
     (item.sets || []).forEach((p, k) => {
       const key = adjKey(si, ii, k), ov = adj && adj[key], n = p.sets > 0 ? p.sets : 1;
       const pct = p.adjustable && typeof ov === 'number' && ov > 0 ? ov : p.pct;
-      for (let j = 0; j < n; j++) out.push({ k: k, key: key, pct: pct, basePct: p.pct, reps: p.reps || '', adjustable: !!p.adjustable, max: !!p.max, orMore: !!p.orMore, adjusted: pct !== p.pct });
+      for (let j = 0; j < n && out.length < MAX_PLAN_SETS; j++) out.push({ k: k, key: key, pct: pct, basePct: p.pct, reps: p.reps || '', adjustable: !!p.adjustable, max: !!p.max, orMore: !!p.orMore, adjusted: pct !== p.pct });
     });
     return out;
   }
@@ -136,7 +139,7 @@
       });
       if (!sets.length) sets.push({ kg: 0, reps: '', pct: 0, rpe: null, done: false, doneAt: null });
       const prev = items.find(q => q.exId === e.id);
-      if (prev) prev.sets = prev.sets.concat(sets); else items.push({ exId: e.id, rest: e.rest || S.profile.rest || 120, sets: sets });
+      if (prev) prev.sets = prev.sets.concat(sets).slice(0, MAX_PLAN_SETS); else items.push({ exId: e.id, rest: e.rest || S.profile.rest || 120, sets: sets });
     });
     const dt = new Date();
     return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'),
@@ -184,7 +187,7 @@
   const cutFmt = new Intl.DateTimeFormat('es-CL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const fmtCut = ms => cutFmt.format(new Date(ms)) + ' (hora de Chile)';
 
-  const pure = { buildRoutineSession, factorKey, refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, isFridayCut, fridayToSunday, chile, chileToMs, localIdFor, expandSets, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
+  const pure = { buildRoutineSession, factorKey, refMax, refFor, DERIVED, both, cutoffFor, nextCutoff, isFridayCut, fridayToSunday, chile, chileToMs, localIdFor, expandSets, MAX_PLAN_SETS, buildSession, advanceState, exerciseFor, adjKey, LOCAL, slugOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
   if (!root.document) { root.HalterAssignPure = pure; return; }
 
