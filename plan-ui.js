@@ -113,7 +113,7 @@
     const w = pv.weeks.filter(x => x.sessions.length)[0]; if (!w) return '';
     const s = w.sessions[0], nm = p => (p.exId && pv.exercises[p.exId] ? pv.exercises[p.exId].en : p.src) + (p.mult > 1 ? ' ×' + p.mult : '') + (p.hold ? ' (' + p.hold + ' s isométrico)' : '') + (p.dropPct ? ' (a ' + p.dropPct + '%)' : '');
     const rows = s.items.slice(0, 8).map(it => {
-      const sets = it.sets.length ? it.sets.map(x => x.max ? 'máximo (100% o nuevo 100%)' : (x.pct != null ? x.pct + '% ' : '') + (x.reps ? x.reps + ' × ' + x.sets : '')).join(' · ') : '<i>sin prescripción</i>';
+      const sets = it.sets.length ? it.sets.map(x => (x.opt ? 'opcional ' : '') + (x.max ? 'máximo (100% o nuevo 100%)' : (x.pct != null ? x.pct + '% ' : '') + (x.reps ? x.reps + ' × ' + x.sets : ''))).join(' · ') : '<i>sin prescripción</i>';
       return `<li><b>${esc(it.alts.map(a => a.map(nm).join(' + ')).join(' / '))}</b><small>${sets}</small></li>`;
     }).join('');
     return `<div class="card sec"><span class="eyebrow">Muestra · semana ${w.week}, ${esc(s.name)}</span><ul class="plain">${rows}</ul>

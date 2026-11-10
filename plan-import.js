@@ -172,17 +172,90 @@
 
   /* ---------- Prescripción ---------- */
   const PRESC = /^(?:max|mac)$|^\(?\s*(max\s*\d+k\)?\s*)?\d+(\.\d+)?(\s*-\s*\d+|\s+\d+)*\s*%|^\(\d+k\s*max\)|^\d+\s*[xX]\s*\d|^\(\d+%/i;
-  const SEG = /(\d+(?:[.,]\d+)?)\s*%\s*(\d+(?:\s*-\s*\d+)?)\s*(?:reps?|r)?\s*[xX]\s*(\d+)/gi;
+  /* «85%2repsX3»: % · repeticiones · series. Las series son 1 a 10 (4.17.0): «X2100 105…» = 2 series y sigue otra prescripción,
+     «X170%» = 1 serie y luego 70 % (en el Excel el número de series quedaba pegado al % siguiente y se leían 2100 o 170 series). */
+  const SEG = /(\d+(?:[.,]\d+)?)\s*%\s*(\d+(?:\s*-\s*\d+)*)-?\s*(?:reps?|r)?\s*[xX]\s*(10|[1-9])/y;
+  /* «100 105 110%x2 1 1 x1»: varios % del máximo, sus repeticiones (una para todos o una por %) y las series de cada uno (4.17.0) */
+  const LIST = /(\d{2,3}(?:[.,]\d+)?(?:\s+\d{2,3}(?:[.,]\d+)?)+)\s*%?\s*[xX]?\s*(\d+(?:\s+\d+)*)\s*(?:reps?|r)?\s*[xX]\s*(10|[1-9])(?!\d)/y;
   const isPresc = t => PRESC.test(t.trim());
+  const numOf = x => parseFloat(String(x).replace(',', '.'));
+  function scanPresc(t, out, opt) {
+    let i = 0, m;
+    while (i < t.length) {
+      SEG.lastIndex = i; m = SEG.exec(t);
+      if (m) { out.push(Object.assign({ pct: numOf(m[1]), reps: m[2].replace(/\s/g, ''), sets: +m[3] }, opt ? { opt: true } : {})); i = SEG.lastIndex; continue; }
+      LIST.lastIndex = i; m = LIST.exec(t);
+      if (m) {
+        const pcts = m[1].trim().split(/\s+/).map(numOf), reps = m[2].trim().split(/\s+/);
+        pcts.forEach((pc, j) => out.push(Object.assign({ pct: pc, reps: reps.length === pcts.length ? reps[j] : reps[0], sets: +m[3] }, opt ? { opt: true } : {})));
+        i = LIST.lastIndex; continue;
+      }
+      i++; while (i < t.length && /\d/.test(t[i]) && /\d/.test(t[i - 1])) i++;   // no empezar en medio de un número
+    }
+  }
   function parsePresc(t) {
-    const out = []; let m; SEG.lastIndex = 0;
+    t = String(t || ''); const out = []; let m;
     if (/^(max|mac)$/i.test(t.trim())) return [{ pct: 100, reps: '', sets: null, max: true, adjustable: true }];   // «max»: el máximo, 100 % o un nuevo 100 %
-    while ((m = SEG.exec(t))) out.push({ pct: parseFloat(m[1].replace(',', '.')), reps: m[2].replace(/\s/g, ''), sets: +m[3] });
+    // «(65% 3X2)»: entre paréntesis = opcional (p. ej. si no puede el 70 %): se muestra, pero no es serie planificada
+    t.split(/(\([^)]*\))/).forEach(ch => { if (/^\(.*\)$/.test(ch)) scanPresc(ch.slice(1, -1), out, true); else scanPresc(ch, out, false); });
+    if (out.length && out.every(o => o.opt)) out.forEach(o => { delete o.opt; });
     if (!out.length) {                                   // «90% 95% 100 o más»: solo porcentajes, sin repeticiones ni series
       const re = /(\d+(?:[.,]\d+)?)\s*%/g; while ((m = re.exec(t))) out.push({ pct: parseFloat(m[1].replace(',', '.')), reps: '', sets: null });
       if (out.length && /[|1l]00\s*o\s*m[aá]s/i.test(t)) out.push({ pct: 100, reps: '', sets: null, orMore: true });
     }
     out.forEach(o => { if (o.pct >= 90) o.adjustable = true; });   // desde 90% el entrenador lo ajusta según el avance de cada atleta
+    return out;
+  }
+  /* Ejercicio con prescripción (4.17.0). Sirve al leer el Excel y para corregir planes ya publicados (se guarda el texto «presc»):
+     - «A / B» en el ejercicio y «X / Y» en la prescripción: el primero es un complejo y el segundo un ejercicio aparte; se hacen ambos,
+       cada uno con su parte de la prescripción. Sin «/» en la prescripción, «A / B» siguen siendo variantes (alternativas).
+     - «X2100 105…» con dos ejercicios: falta el «/» (el número de series quedó pegado a la lista de % del segundo).
+     Devuelve uno o más ejercicios (mismo formato del que recibe). */
+  const splitSlash = t => String(t).split(/\/(?![^()]*\))/).map(x => x.trim()).filter(Boolean);
+  function reparseItem(it) {
+    if (!it || !it.presc) return [it];
+    const n = (it.alts || []).length;
+    let pr = String(it.presc);
+    if (n > 1 && !/\//.test(pr)) pr = pr.replace(/([xX]\s*[1-9])(?=\d{2,3}\s+\d{2,3})/, '$1 / ');
+    pr = pr.replace(/([xX]\s*[1-9])(?=\d{2,3}(?:\s|%|$))/g, '$1 ');
+    const parts = splitSlash(pr);
+    if (n > 1 && parts.length === n) {
+      const raws = splitSlash(it.raw || ''), one = raws.length === n;
+      return parts.map((p, k) => { const o = Object.assign({}, it, { alts: [it.alts[k]], sets: parsePresc(p), presc: p, raw: one ? raws[k] : it.raw }); if (k > 0) delete o.inline; return o; });
+    }
+    return [Object.assign({}, it, { sets: parsePresc(parts.length > 1 ? parts[0] : pr) })];
+  }
+  /* Texto estable (las claves de Firestore pueden volver en otro orden) */
+  const stable = v => Array.isArray(v) ? '[' + v.map(stable).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v);
+  /* Semana ya publicada → semana con el lector corregido. map[sesión][ejercicio anterior] = { old, to: [índices nuevos], parts } */
+  function reparseWeek(w) {
+    const map = [];
+    const sessions = (w.sessions || []).map(s => {
+      const items = [], m = [];
+      (s.items || []).forEach(it => { const parts = reparseItem(it), to = []; parts.forEach(p => { to.push(items.length); items.push(p); }); m.push({ old: it, to: to, parts: parts }); });
+      map.push(m);
+      return Object.assign({}, s, { items: items });
+    });
+    const changed = stable(sessions) !== stable(w.sessions || []);
+    const data = JSON.parse(JSON.stringify({ stageId: w.stageId, week: w.week, label: w.label || '', kind: w.kind || '', notes: w.notes || [], sessions: sessions, next: w.next || '' }));
+    return { id: w.id, changed: changed, data: data, map: map };
+  }
+  /* Ajustes del entrenador (claves «s0_i3_k1»): siguen al mismo ejercicio y al mismo % aunque cambie su posición */
+  function remapAdj(pcts, map) {
+    const out = {};
+    Object.keys(pcts || {}).forEach(key => {
+      const mm = /^s(\d+)_i(\d+)_k(\d+)$/.exec(key);
+      if (!mm) { out[key] = pcts[key]; return; }
+      const si = +mm[1], oi = +mm[2], k = +mm[3], e = map[si] && map[si][oi];
+      if (!e) { out[key] = pcts[key]; return; }
+      const os = (e.old.sets || [])[k];
+      for (let j = 0; j < e.parts.length; j++) {
+        const ss = e.parts[j].sets || [];
+        let nk = os ? ss.findIndex((x, q) => x.pct === os.pct && String(x.reps || '') === String(os.reps || '') && out['s' + si + '_i' + e.to[j] + '_k' + q] === undefined) : -1;
+        if (nk < 0 && e.parts.length === 1 && ss[k]) nk = k;
+        if (nk >= 0) { out['s' + si + '_i' + e.to[j] + '_k' + nk] = pcts[key]; return; }
+      }
+    });
     return out;
   }
 
@@ -251,12 +324,14 @@
           if (isPresc(t)) { cur = { raw: t, sets: parsePresc(t) }; if (!cur.sets.length) warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): no se pudo interpretar «' + t + '»'); continue; }
           block = blockOf(Cc(r)) || blockOf(Cc(r - 1)) || block;
           const rc = resolveCell(t, D);
-          const it = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold, dropPct: p.dropPct }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
-          if (rc.inline) it.inline = rc.inline;
-          { const tot = it.sets.reduce((n, p) => n + (p.sets > 0 ? p.sets : 1), 0); if (tot > 10) warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» suma ' + tot + ' series; en la app se muestran 10 como máximo (revisa «' + (cur ? cur.raw : '') + '»)'); }
+          const it0 = { block: block, tag: rc.tag, raw: t, alts: rc.alts.map(a => a.map(p => ({ src: p.src, exId: p.entry ? p.entry.exId : null, mult: p.mult, max: p.max, hold: p.hold, dropPct: p.dropPct }))), sets: cur ? cur.sets : [], presc: cur ? cur.raw : '' };
+          if (rc.inline) it0.inline = rc.inline;
           if (!cur) { nNoPresc++; warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» no tiene series ni % arriba'); }
           rc.alts.forEach(a => a.forEach(p => collect(p, num, c, r)));
-          items.push(it); nItems++;
+          reparseItem(it0).forEach(it => {   // con «/» en el ejercicio y en la prescripción: dos ejercicios (4.17.0)
+            { const tot = it.sets.reduce((n, p) => n + (p.sets > 0 ? p.sets : 1), 0); if (tot > 10) warnings.push('Semana ' + num + ' ' + DAY_NAMES[c - 3] + ' (fila ' + (r + 1) + '): «' + t + '» suma ' + tot + ' series; en la app se muestran 10 como máximo (revisa «' + (cur ? cur.raw : '') + '»)'); }
+            items.push(it); nItems++;
+          });
         }
         if (items.length) wk.sessions.push({ day: c - 2, name: DAY_NAMES[c - 3], items: items });
       }
@@ -343,6 +418,6 @@
     return created;
   }
 
-  const api = { GLOSSARY: GLOSSARY, TEMPLATE_HEAD: TEMPLATE_HEAD, parsePlan: parsePlan, applyNames: applyNames, makeDictionary: makeDictionary, slug: slug, norm: norm, parsePresc: parsePresc };
+  const api = { GLOSSARY: GLOSSARY, TEMPLATE_HEAD: TEMPLATE_HEAD, parsePlan: parsePlan, applyNames: applyNames, makeDictionary: makeDictionary, slug: slug, norm: norm, parsePresc: parsePresc, reparseItem: reparseItem, reparseWeek: reparseWeek, remapAdj: remapAdj };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PlanImport = api;
 })(typeof window !== 'undefined' ? window : globalThis);

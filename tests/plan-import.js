@@ -93,4 +93,33 @@ ok(sq.alts[0][0].exId === 'squat' && sq.sets[0].max === true, '«max» arriba de
 ok(c6.weeks[0].sessions[0].items.length === 2, 'las filas de movilidad ya no quedan en la semana anterior');
 const tw6 = c6.weeks[1];
 ok(tw6.kind === 'transition' && tw6.sessions.length === 5 && tw6.sessions[0].items[0].alts[0][0].exId === 'mobility-and-massage', 'esas filas pasan a la semana de transición: movilidad y masajes de lunes a viernes');
+// ---------- 4.17.0: lector corregido ----------
+const st = a => a.map(x => (x.opt ? 'o' : '') + x.pct + '/' + x.reps + '/' + x.sets).join(' ');
+ok(st(P.parsePresc('60% 4 repsX2100 105 110%x2 1 1 x1')) === '60/4/2 100/2/1 105/1/1 110/1/1', '«X2100 105…»: 2 series y luego la lista de % (antes 2100 series)');
+ok(st(P.parsePresc('85% 4repsX170% 8repsX1')) === '85/4/1 70/8/1', '«X170%»: 1 serie y luego 70 % (antes 170 series)');
+ok(st(P.parsePresc('70% 2 repsX23')) === '70/2/2', '«X23»: 2 series (antes 23)');
+ok(st(P.parsePresc('80%3-4-repx4 85% 2-3repsX270% 8repsX1')) === '80/3-4/4 85/2-3/2 70/8/1', '«3-4-rep» y «X270%»');
+ok(st(P.parsePresc('80 85 90%1X1 OPCIONAL')) === '80/1/1 85/1/1 90/1/1', '«80 85 90%1X1» = tres % de 1 × 1');
+ok(st(P.parsePresc('(65% 3X2) 70% 2 repsX2')) === 'o65/3/2 70/2/2', '«(65% 3X2)» entre paréntesis = opcional');
+ok(st(P.parsePresc('(70% 3X3)')) === '70/3/3', 'si todo está entre paréntesis no queda opcional');
+ok(st(P.parsePresc('70% 8-10repsX3')) === '70/8-10/3' && st(P.parsePresc('70% 3X10')) === '70/3/10', 'lo de siempre no cambia (incluidas 10 series)');
+const jb = { raw: 'jerk balance+jerk / desliz jerk', presc: '(65% 3X2) 70% 2 repsX2 /100 105 110%x2 1 1 x1', alts: [{ p: [{ ex: 'jerk-balance' }, { ex: 'jerk' }] }, { p: [{ ex: 'split-jerk' }] }], sets: [] };
+const two = P.reparseItem(jb);
+ok(two.length === 2 && two[0].alts.length === 1 && two[1].alts[0].p[0].ex === 'split-jerk', '«A / B» con prescripción «X / Y» = dos ejercicios, ambos se hacen');
+ok(st(two[0].sets) === 'o65/3/2 70/2/2' && st(two[1].sets) === '100/2/1 105/1/1 110/1/1' && two[1].raw === 'desliz jerk', 'cada uno con su parte de la prescripción');
+const glued = P.reparseItem({ raw: 'droptosplit+jerk/ desliz jerk', presc: '60% 4 repsX2100 105 110%x2 1 1 x1', alts: [{ p: [{ ex: 'a' }] }, { p: [{ ex: 'b' }] }], sets: [] });
+ok(glued.length === 2 && st(glued[0].sets) === '60/4/2' && st(glued[1].sets) === '100/2/1 105/1/1 110/1/1', 'sin «/» pero con la lista pegada y dos ejercicios: se separan igual');
+ok(P.reparseItem({ raw: 'jerk / power jerk', presc: '70% 3X3', alts: [{ p: [] }, { p: [] }], sets: [] }).length === 1, 'sin «/» en la prescripción, «A / B» siguen siendo variantes');
+ok(P.reparseItem({ raw: 'x', presc: '', alts: [], sets: [{ pct: 70, reps: '3', sets: 3 }] })[0].sets[0].pct === 70, 'sin texto de prescripción (plantilla simple) no se toca');
+const wk = { id: 'e1_28', stageId: 'e1', week: 28, sessions: [{ day: 4, name: 'Jueves', items: [
+  { raw: 'AA', presc: '85%2x1 90%2rx1 95%1x1', alts: [{ p: [{ ex: 'snatch' }] }], sets: [{ reps: '2', pct: 85, sets: 1 }, { sets: 1, pct: 90, reps: '2', adjustable: true }, { pct: 95, reps: '1', sets: 1, adjustable: true }] },
+  Object.assign({}, jb, { sets: [{ pct: 65, reps: '3', sets: 2 }, { pct: 70, reps: '2', sets: 2 }] }),
+  { raw: 'clean speed pull', presc: '85%2x1 90%2rx1 95%1x1', alts: [{ p: [{ ex: 'csp' }] }], sets: [{ pct: 85, reps: '2', sets: 1 }, { pct: 90, reps: '2', sets: 1, adjustable: true }, { pct: 95, reps: '1', sets: 1, adjustable: true }] }] }] };
+const rw = P.reparseWeek(wk);
+ok(rw.changed && rw.data.sessions[0].items.length === 4 && !('id' in rw.data), 'la semana publicada se corrige: 3 → 4 ejercicios');
+ok(!P.reparseWeek({ id: 'x', sessions: [{ items: [wk.sessions[0].items[0]] }] }).changed, 'una semana sin errores no cambia (el orden de las claves no importa)');
+ok(!P.reparseWeek(Object.assign({ id: 'e1_28' }, rw.data)).changed, 'volver a corregir una semana ya corregida no cambia nada');
+const adj = P.remapAdj({ s0_i0_k2: 97, s0_i2_k1: 92, s0_i2_k2: 93, f_jerk: 125 }, rw.map);
+ok(adj.s0_i0_k2 === 97 && adj.s0_i3_k1 === 92 && adj.s0_i3_k2 === 93 && adj.f_jerk === 125 && !('s0_i2_k1' in adj), 'los ajustes de % siguen a su ejercicio aunque baje una posición');
+
 console.log(fails ? '\n' + fails + ' fallo(s)' : '\nTodo bien'); process.exit(fails ? 1 : 0);

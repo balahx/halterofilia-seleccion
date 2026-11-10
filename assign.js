@@ -93,6 +93,7 @@
   function expandSets(item, adj, si, ii) {
     const out = [];
     (item.sets || []).forEach((p, k) => {
+      if (p.opt) return;   // «(65% 3X2)»: opcional, no es serie planificada (se muestra aparte)
       const key = adjKey(si, ii, k), ov = adj && adj[key], n = p.sets > 0 ? p.sets : 1;
       const pct = p.adjustable && typeof ov === 'number' && ov > 0 ? ov : p.pct;
       for (let j = 0; j < n && out.length < MAX_PLAN_SETS; j++) out.push({ k: k, key: key, pct: pct, basePct: p.pct, reps: p.reps || '', adjustable: !!p.adjustable, max: !!p.max, orMore: !!p.orMore, adjusted: pct !== p.pct });
@@ -239,7 +240,7 @@
       const b = document.querySelector('[data-act="as-adj-save"]'); if (b) b.disabled = !adjDirty() || !!A.busy;   // el botón se habilita al escribir
     });
   }
-  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(meUnsub); unwatch(selUnsub); unwatch(adjUnsub); Object.keys(planFeeds).forEach(id => { unwatch(planFeeds[id]); delete planFeeds[id]; }); lastNewest = null; fast.parts = {}; fast.cat = null; fast.catPlan = null; A.uid = null; A.role = null; A.plans = {}; A.planList = []; A.planListOk = false; A.planPick = ''; A.selfPlan = ''; A.names = {}; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selfPick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0, routines: [] }; A.routines = []; A.rt = null; A.rtDel = ''; }
+  function reset() { if (root.HalterReport) root.HalterReport.reset(); weekKey = ''; unwatch(unsub); unwatch(weekUnsub); unwatch(meUnsub); unwatch(selUnsub); unwatch(adjUnsub); Object.keys(planFeeds).forEach(id => { unwatch(planFeeds[id]); delete planFeeds[id]; }); Object.keys(repairing).forEach(id => { delete repairing[id]; }); lastNewest = null; fast.parts = {}; fast.cat = null; fast.catPlan = null; A.uid = null; A.role = null; A.plans = {}; A.planList = []; A.planListOk = false; A.planPick = ''; A.selfPlan = ''; A.names = {}; A.stages = []; A.asg = {}; A.sel = null; A.selDone = {}; A.selAdj = null; A.draft = null; A.pick = ''; A.selfPick = ''; A.ready = false; A.err = ''; A.busy = ''; A.me = { asg: undefined, week: null, adj: {}, done: {}, savedAt: 0, routines: [] }; A.routines = []; A.rt = null; A.rtDel = ''; }
 
   /* Una sola vez por sesión del entrenador: las semanas asignadas con corte del viernes pasan al domingo 23:59 */
   let cutsChecked = false;
@@ -288,7 +289,7 @@
         arr.push(root.HalterReads.feedPlan(r, planId, (parts, m) => {
           const ok = !(m && m.fromCache) /* solo vale la lista que confirma el servidor */;
           put(parts && parts.stages, parts && parts.weeks, ok);
-          if (parts && ok) { fast.parts[planId] = parts; tryFast(planId); }
+          if (parts && ok) { fast.parts[planId] = parts; if (!repairPlan(planId)) tryFast(planId); }
           rerender();
         }, () => { /* sin permiso o sin conexión */ }));
         return;
@@ -297,6 +298,31 @@
       arr.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { wk = list; put(sg, wk, !(m && m.fromCache)); rerender(); }, () => { /* sin permiso o sin conexión */ }));
       arr.push(r.watchCol('plans/' + planId + '/stages', list => { sg = list; put(sg, wk, A.plans[planId].ok); rerender(); }, () => { /* idem */ }));
     });
+  }
+  /* Corrección automática de planes ya publicados (4.17.0): cada ejercicio guarda el texto de su prescripción («presc»), así que se
+     vuelve a leer con el lector corregido (series pegadas al % siguiente, listas de %, opcionales entre paréntesis, «A / B» con
+     prescripción «X / Y» = dos ejercicios). Solo se reescriben las semanas que cambian; los ajustes de % del entrenador se mueven al
+     mismo ejercicio y %. Sin botón y sin volver a subir el Excel; una vez corregido, volver a leerlo no cambia nada. */
+  const repairing = {};
+  function repairPlan(planId) {
+    const I = root.PlanImport, P = A.plans[planId], meta = (A.planList || []).find(x => x.id === planId);
+    if (!I || !I.reparseWeek || A.role !== 'coach' || repairing[planId] || !P || !P.ok || !meta) return false;
+    const changes = P.weeks.map(w => I.reparseWeek(w)).filter(c => c.changed);
+    if (!changes.length) return false;
+    repairing[planId] = true;
+    const r = H.remote();
+    (async () => {
+      const adjs = await r.getCol('adjustments').catch(() => []);
+      const upd = [];
+      changes.forEach(c => adjs.filter(d => String(d.id).endsWith('_' + planId + '_' + c.id)).forEach(d => {
+        const np = I.remapAdj(d.pcts || {}, c.map); if (JSON.stringify(np) !== JSON.stringify(d.pcts || {})) upd.push({ id: d.id, pcts: np });
+      }));
+      await r.publishPlan({ planId: planId, meta: { name: meta.name, year: meta.year || (new Date()).getFullYear(), format: meta.format || '', stages: meta.stages || 0, weeks: meta.weeks || 0 },
+        stages: [], weeks: changes.map(c => ({ id: c.id, data: c.data })), exercises: [] });
+      for (const u of upd) await r.setAdjust(u.id, u.pcts);
+      if (root.console) console.info('Plan «' + meta.name + '» corregido: ' + changes.length + ' semana(s), ' + upd.length + ' ajuste(s) movidos');
+    })().catch(() => { repairing[planId] = false; /* sin conexión o sin permiso: se intenta la próxima vez */ });
+    return true;
   }
   /* Plan en un solo documento (4.15.0; desde 4.16.0 uno por cada plan publicado): con las semanas, etapas y catálogo que el servidor
      confirmó, reads.js lo arma o lo renueva solo */
@@ -413,11 +439,12 @@
         const kg = ref.kg > 0 && s.pct > 0 ? ' → ' + roundTo(ref.kg * s.pct / 100, rounding) + ' kg' : '';
         return (s.pct ? s.pct + ' %' + (s.adjusted ? ' (ajustado)' : s.adjustable ? ' (referencia)' : '') : '') + (s.orMore ? ' o más' : '') + (s.reps ? ' · ' + s.reps + ' rep' : '') + (r.n > 1 || (it.sets[s.k] && it.sets[s.k].sets) ? ' × ' + r.n : '') + kg;
       }).join(' | ');
+      const optTxt = (it.sets || []).filter(p => p.opt).map(p => p.pct + ' % · ' + (p.reps ? p.reps + ' rep' : '') + ' × ' + (p.sets > 0 ? p.sets : 1) + (ref.kg > 0 && p.pct > 0 ? ' → ' + roundTo(ref.kg * p.pct / 100, rounding) + ' kg' : '')).join(' | ');
       const nb = ps.map(p => both(p, A.names, lang)), prim = nb.map(q => q.p).join(' + '), sec = nb.map(q => q.s || q.p).join(' + ');
       const alt = (it.alts || []).slice(1).map(a => (a.p || []).map(p => both(p, A.names, lang).p).join(' + ')).join(' o ');
       const cxHow = ps.length > 1 ? (ref.via ? ' · % de tu ' + both({ ex: ref.via, src: ref.via }, A.names, lang).p + ' (primer movimiento con máximo)' : '') : '';
       const how = cxHow + (ref.how === 'derived' ? ' · calculado desde tu ' + both({ ex: ref.base, src: ref.base }, A.names, lang).p + (ref.f !== 1 ? ' × ' + ref.f + (ref.set ? ' (indicado por tu entrenador)' : '') : (ref.set ? ' (indicado por tu entrenador)' : '')) : '');
-      h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? (ps.length > 1 ? ' · sin máximo: anota el de uno de sus movimientos en «Máximos»' : ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)') : ''}</small></li>`;
+      h += `<li><b>${esc(ps.length ? prim : it.raw)}</b>${ps.length && sec !== prim ? `<small class="exsub">${esc(sec)}</small>` : ''}${alt ? `<small>o ${esc(alt)}</small>` : ''}${optTxt ? `<small>Opcional: ${esc(optTxt)}</small>` : ''}<small>${esc(line || it.presc || '')}${esc(how)}${ref.how === 'none' && sets.some(s => s.pct) ? (ps.length > 1 ? ' · sin máximo: anota el de uno de sus movimientos en «Máximos»' : ' · sin tu máximo (anótalo en «Máximos» al iniciar la sesión)') : ''}</small></li>`;
     });
     h += '</ul>';
     if (w.kind !== 'transition') h += `<div class="actions"><button class="btn block${done ? ' ghost' : ''}" data-act="as-start" data-i="${si}">${done ? 'Registrar de nuevo' : '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor"/></svg><span>Iniciar esta sesión</span>'}</button></div>`;
