@@ -109,8 +109,16 @@ const WEEKS = {
   await shot('02-plancha');
 
   console.log('2b. Confirmaciones al centro de la pantalla (4.18.0)');
+  const nEx = () => page.evaluate(() => HalterApp.state().sessions.find(x => !x.endedAt).items.length);
+  const n0 = await nEx();
+  await page.locator('[data-act="rm-ex"]').first().click(); await page.waitForSelector('#cfm[open]');
+  ok(/¿Quitar .+ de la sesión\?/.test(await txt('#cfmT')) && /Se borran sus 2 series/.test(await txt('#cfmX')) && (await txt('#cfmOk')) === 'Quitar ejercicio', '«Quitar ejercicio» pide confirmar al centro, con el ejercicio y sus series');
+  await page.click('#cfmNo'); await page.waitForTimeout(200);
+  ok(await nEx() === n0, '«Cancelar» deja el ejercicio');
+  await page.locator('[data-act="rm-ex"]').first().click(); await page.waitForSelector('#cfm[open]'); await page.click('#cfmOk'); await page.waitForTimeout(300);
+  ok(await nEx() === n0 - 1, 'confirmando se quita');
   await page.click('[data-act="cancel-sess"]'); await page.waitForSelector('#cfm[open]');
-  ok(/¿Descartar la sesión\?/.test(await txt('#cfmT')) && /Se borra 1 serie registrada en 6 ejercicios/.test(await txt('#cfmX')) && (await txt('#cfmOk')) === 'Descartar sesión', 'dice qué se pierde y el botón lleva el nombre de la acción');
+  ok(/¿Descartar la sesión\?/.test(await txt('#cfmT')) && /Se borra 1 serie registrada en 5 ejercicios/.test(await txt('#cfmX')) && (await txt('#cfmOk')) === 'Descartar sesión', 'dice qué se pierde y el botón lleva el nombre de la acción');
   ok(await page.evaluate(() => document.activeElement && document.activeElement.id === 'cfmNo'), '«Cancelar» queda seleccionado');
   await shot('03-confirmar');
   await page.click('#cfmNo'); await page.waitForTimeout(200);
