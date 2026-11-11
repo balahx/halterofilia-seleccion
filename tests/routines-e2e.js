@@ -161,7 +161,7 @@ const WEEKS = {
   const setToday = async mode => {
     await page.evaluate(({ id, mode, n, W, a }) => {
       const d = JSON.parse(JSON.stringify(__fake.srv().docs[id])); d.mode = mode; d.sessions[0].day = n % 7 + 1; d.sessions[0].days = [n % 7 + 1, n]; __fake.admin(id, d);
-      const w = JSON.parse(JSON.stringify(W.e1_1)); w.sessions[0].day = n; __fake.admin('plans/p1/weeks/e1_1', w);
+      const w = JSON.parse(JSON.stringify(W.e1_1)); w.sessions[0].day = n; if (w.sessions[1] && w.sessions[1].day === n) w.sessions[1].day = n % 7 + 1; /* un miércoles no deben quedar dos sesiones del plan hoy */ __fake.admin('plans/p1/weeks/e1_1', w);
     }, { id: rid, mode: mode, n: todayNo, W: WEEKS, a: auid });
   };
   await setToday('replace');
