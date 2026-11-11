@@ -95,7 +95,11 @@
     (item.sets || []).forEach((p, k) => {
       if (p.opt) return;   // «(65% 3X2)»: opcional, no es serie planificada (se muestra aparte)
       const key = adjKey(si, ii, k), ov = adj && adj[key], n = p.sets > 0 ? p.sets : 1;
-      const pct = p.adjustable && typeof ov === 'number' && ov > 0 ? ov : p.pct;
+      let pct = p.adjustable && typeof ov === 'number' && ov > 0 ? ov : p.pct;
+      if (item.hold > 0) {   // isométrico con segundos en el nombre («plancha peso 30"»): tiempo planificado y kilos libres (sin máximo)
+        for (let j = 0; j < n && out.length < MAX_PLAN_SETS; j++) out.push({ k: k, key: key, pct: 0, basePct: 0, reps: String(item.hold), secs: item.hold, adjustable: false, max: false, orMore: false, adjusted: false });
+        return;
+      }
       for (let j = 0; j < n && out.length < MAX_PLAN_SETS; j++) out.push({ k: k, key: key, pct: pct, basePct: p.pct, reps: p.reps || '', adjustable: !!p.adjustable, max: !!p.max, orMore: !!p.orMore, adjusted: pct !== p.pct });
     });
     return out;
@@ -130,7 +134,8 @@
       const ps = mainParts(it); if (!ps.length) return;
       const x = exerciseFor(it, names);
       let e = S.exercises.find(q => q.id === x.id);
-      if (!e) { e = { id: x.id, name: x.name, en: x.en, es: x.es, cat: x.cat, rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }; S.exercises.push(e); }
+      if (!e) { e = Object.assign({ id: x.id, name: x.name, en: x.en, es: x.es, cat: x.cat, rest: S.profile.rest || 120, max: 0, maxDate: null, builtin: false }, it.meas ? { meas: it.meas } : {}); S.exercises.push(e); }
+      else if (it.meas && !e.meas) e.meas = it.meas;   // el plan indica cómo se mide (p. ej. plancha: peso y tiempo)
       // el % es del máximo propio del ejercicio o, si no lo tiene, del derivado del principal (ver DERIVED)
       const ref = refFor(S, it, adj);
       const sets = expandSets(it, adj, si, ii).map(s => {
@@ -426,10 +431,11 @@
   function sessionCard(w, si, ses) {
     const S = window.HalterApp.state(), done = !!A.me.done[si], adj = A.me.adj, rounding = (S.profile && S.profile.rounding) || 1, lang = (S.profile && S.profile.exLang) || 'en';
     const todayNo = ((new Date().getDay() + 6) % 7) + 1;
-    let block = null, h = `<div class="card sec${ses.day === todayNo && !done ? ' today' : ''}"><div class="person"><div><b>${esc(dayLabel(ses.day))}${ses.name && ses.name !== dayLabel(ses.day) ? ' · ' + esc(ses.name) : ''}</b><small>${(ses.items || []).length} ${(ses.items || []).length === 1 ? 'ejercicio' : 'ejercicios'}</small></div>` +
+    let block = null, sub = null, h = `<div class="card sec${ses.day === todayNo && !done ? ' today' : ''}"><div class="person"><div><b>${esc(dayLabel(ses.day))}${ses.name && ses.name !== dayLabel(ses.day) ? ' · ' + esc(ses.name) : ''}</b><small>${(ses.items || []).length} ${(ses.items || []).length === 1 ? 'ejercicio' : 'ejercicios'}</small></div>` +
       (done ? '<span class="badge ok">Cumplida</span>' : ses.day === todayNo ? '<span class="badge gd">Hoy</span>' : '') + '</div><ul class="plain">';
     (ses.items || []).forEach((it, ii) => {
-      if (it.block && it.block !== block) { block = it.block; h += `<li class="blk"><span class="eyebrow">${esc(block)}</span></li>`; }
+      if (it.block && it.block !== block) { block = it.block; sub = null; h += `<li class="blk"><span class="eyebrow">${esc(block)}</span></li>`; }
+      if ((it.sub || null) !== sub) { sub = it.sub || null; if (sub) h += `<li class="blk sub"><span class="eyebrow">${esc(sub)}</span></li>`; }   // título dentro del bloque («Core»)
       const ps = mainParts(it), ref = refFor(S, it, adj);
       const sets = expandSets(it, adj, si, ii);
       const rows = [], seen = {};
@@ -437,6 +443,7 @@
       const line = rows.map(r => {
         const s = r.s; if (s.max) return 'Máximo (100 % o nuevo 100 %)' + (s.adjusted ? ' · ajustado' : '');
         const kg = ref.kg > 0 && s.pct > 0 ? ' → ' + roundTo(ref.kg * s.pct / 100, rounding) + ' kg' : '';
+        if (s.secs > 0) return s.secs + ' s' + (r.n > 1 || (it.sets[s.k] && it.sets[s.k].sets) ? ' × ' + r.n : '') + ' · kilos a elección (discos)';
         return (s.pct ? s.pct + ' %' + (s.adjusted ? ' (ajustado)' : s.adjustable ? ' (referencia)' : '') : '') + (s.orMore ? ' o más' : '') + (s.reps ? ' · ' + s.reps + ' rep' : '') + (r.n > 1 || (it.sets[s.k] && it.sets[s.k].sets) ? ' × ' + r.n : '') + kg;
       }).join(' | ');
       const optTxt = (it.sets || []).filter(p => p.opt).map(p => p.pct + ' % · ' + (p.reps ? p.reps + ' rep' : '') + ' × ' + (p.sets > 0 ? p.sets : 1) + (ref.kg > 0 && p.pct > 0 ? ' → ' + roundTo(ref.kg * p.pct / 100, rounding) + ' kg' : '')).join(' | ');
@@ -776,9 +783,10 @@
       case 'rt-ses-rm': if (A.rt && A.rt.sessions.length > 1) { A.rt.sessions.splice(+el.dataset.d, 1); A.rt.dirty = true; rerender(); } else H.toast('Una rutina necesita al menos una sesión.'); return true;
       case 'rt-save': rtSave(); return true;
       case 'rt-del': {
-        const id = el.dataset.id;
-        if (A.rtDel !== id) { A.rtDel = id; rerender(); return true; }
-        A.rtDel = ''; guard(() => H.remote().deleteRoutine(id), 'Rutina quitada'); return true;
+        const id = el.dataset.id, r = A.routines.find(x => x.id === id);
+        window.HalterApp.ask({ title: '¿Quitar la rutina' + (r ? ' «' + r.name + '»' : '') + '?', text: 'Deja de verla ' + memberName(r ? r.uid : A.sel) + '. Las sesiones que ya entrenó con ella se conservan en su Historial.', ok: 'Quitar rutina' })
+          .then(ok => { if (ok) guard(() => H.remote().deleteRoutine(id), 'Rutina quitada'); });
+        return true;
       }
       case 'rt-start': startRoutine(el.dataset.r, +el.dataset.i); return true;
     }

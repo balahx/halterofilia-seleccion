@@ -130,7 +130,7 @@ function restSelect(val, attrs, auto) {
   return '<select class="sel" ' + attrs + ' aria-label="Descanso entre series">' + (auto ? '<option value="0"' + (!val ? ' selected' : '') + '>Auto</option>' : '') +
     opts.map(s => '<option value="' + s + '"' + (s === val ? ' selected' : '') + '>' + fmtTime(s) + '</option>').join('') + '</select>';
 }
-function confirmLabel(key, normal, ask) { return ui.confirm === key ? ask : normal; }
+function confirmLabel(key, normal) { return normal; }   // desde 4.18.0 se confirma en la ventana del centro (ask)
 
 function legendHTML() {
   const t = ['< 70', '70–79', '80–89', '90–94', '≥ 95'];
@@ -218,7 +218,7 @@ function setRowHTML(i, j, st, it) {
   const tmIn = '<input class="num" id="' + id + '-secs" data-f="secs" inputmode="text" autocomplete="off" aria-label="Tiempo en segundos, serie ' + n + (st.pr ? ' (planificado: ' + esc(st.pr) + ' s)' : '') + '" placeholder="' + esc(st.pr || 'seg') + '" value="' + (parseSecs(st.secs) > 0 ? secsIn(parseSecs(st.secs)) : '') + '">';
   const pctIn = '<div class="pctw"><input class="num" id="' + id + '-pct" data-f="pct" inputmode="decimal" autocomplete="off" aria-label="Porcentaje del máximo, serie ' + n + '" placeholder="%"' + (e.max > 0 ? '' : ' disabled') + ' value="' + (st.pct > 0 ? fmtNum(st.pct, 1) : '') + '">' + plateDot(zoneOf(st.pct)) + '</div>';
   return '<div class="set' + (rpe ? ' rpe' : '') + (m !== 'kg' ? ' m-' + m : '') + (st.done ? ' is-done' : '') + '" data-i="' + i + '" data-j="' + j + '">' +
-    '<span class="set-n">' + n + '</span>' + (m === 'kg' ? kgIn + repsIn + pctIn : m === 'reps' ? repsIn : tmIn) +
+    '<span class="set-n">' + n + '</span>' + (m === 'kg' ? kgIn + repsIn + pctIn : m === 'kgt' ? kgIn + tmIn : m === 'reps' ? repsIn : tmIn) +
     (rpe ? rpeSelect(st, id + '-rpe') : '') +
     '<button class="tick" data-act="tick" aria-pressed="' + st.done + '" aria-label="Marcar serie ' + n + ' como hecha">' + svg('check') + '</button></div>';
 }
@@ -229,11 +229,11 @@ function exerciseCard(it, i) {
   const e = ex(it.exId), rpe = S.profile.showRpe, m = measOf(e);
   return '<article class="card exc" data-i="' + i + '"><header class="exc-h"><div><h3>' + esc(nm(e)) + '</h3>' + nmSub(e) + descHTML(e) +
     (isComplex(e) ? '<span class="chip-note">Complejo: sin máximo propio, los kilos salen del máximo de su primer movimiento</span>'
-      : m !== 'kg' ? '<span class="chip-note">' + (m === 'time' ? 'Se mide en tiempo' : 'Solo repeticiones') + '</span>'
+      : m !== 'kg' ? '<span class="chip-note">' + (m === 'time' ? 'Se mide en tiempo' : m === 'kgt' ? 'Peso (opcional) y tiempo' : 'Solo repeticiones') + '</span>'
       : '<button class="chip" data-act="edit-max" data-ex="' + esc(e.id) + '">' + (e.max > 0 ? '1RM ' + fmtNum(e.max, 1) + ' kg' : 'Definir máximo') + '</button>') +
     (it.pause > 0 ? '<span class="chip-pause">Pausa de ' + it.pause + ' s en el movimiento</span>' : '') + '</div>' +
     '<label class="rest"><span>Descanso</span>' + restSelect(it.rest, 'id="rest-' + i + '" data-f="rest"') + '</label></header>' +
-    '<div class="set sethead' + (rpe ? ' rpe' : '') + (m !== 'kg' ? ' m-' + m : '') + '" aria-hidden="true"><span></span>' + (m === 'kg' ? '<span>kg</span><span>reps</span><span>%</span>' : m === 'reps' ? '<span>reps</span>' : '<span>tiempo (seg)</span>') + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
+    '<div class="set sethead' + (rpe ? ' rpe' : '') + (m !== 'kg' ? ' m-' + m : '') + '" aria-hidden="true"><span></span>' + (m === 'kg' ? '<span>kg</span><span>reps</span><span>%</span>' : m === 'kgt' ? '<span>kg</span><span>tiempo (seg)</span>' : m === 'reps' ? '<span>reps</span>' : '<span>tiempo (seg)</span>') + (rpe ? '<span>RPE</span>' : '') + '<span></span></div>' +
     it.sets.map((st, j) => setRowHTML(i, j, st, it)).join('') +
     '<label class="inote-l"><span class="sr-only">Observación de este ejercicio</span><input class="txt inote" data-f="inote" maxlength="200" autocomplete="off" placeholder="Observación (técnica, dolor…)" value="' + esc(it.note || '') + '"></label>' +
     '<div class="exc-f"><button class="btn ghost sm" data-act="add-set" data-i="' + i + '">+ Serie</button>' +
@@ -595,10 +595,31 @@ function render() {
   if (keep) { const n = document.getElementById(keep); if (n) { n.focus(); try { n.setSelectionRange(n.value.length, n.value.length); } catch (e) { /* select no admite rango */ } } }
 }
 function refresh() { render(); if (ui.sheet) renderSheet(); }
-function askConfirm(key) {
-  if (prevConfirm === key) { prevConfirm = null; return true; }
-  ui.confirm = key; refresh(); return false;
+/* Ventana de confirmación al centro de la pantalla (4.18.0), para lo que borra o no se puede deshacer.
+   o = { title, text, ok (nombre de la acción), word (opcional: hay que escribirla) } → Promise<boolean>.
+   «Cancelar» queda seleccionado; tocar fuera, «Esc» o atrás cierra sin hacer nada. */
+function ask(o) {
+  return new Promise(resolve => {
+    let d = document.getElementById('cfm');
+    if (d && d.open) d.close('');
+    if (!d) {
+      d = document.createElement('dialog'); d.id = 'cfm'; d.className = 'cfm'; d.setAttribute('aria-labelledby', 'cfmT'); d.setAttribute('aria-describedby', 'cfmX');
+      d.addEventListener('click', e => { if (e.target === d) d.close(''); });
+      document.body.appendChild(d);
+    }
+    d.innerHTML = '<form method="dialog" class="cfm-in"><h2 id="cfmT">' + esc(o.title) + '</h2><p id="cfmX">' + esc(o.text || '') + '</p>' +
+      (o.word ? '<label class="fl"><span>Escribe ' + esc(o.word) + ' para confirmar</span><input class="txt" id="cfmW" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>' : '') +
+      '<div class="cfm-b"><button class="btn ghost" value="" id="cfmNo" autofocus>Cancelar</button><button class="btn danger" value="ok" id="cfmOk"' + (o.word ? ' disabled' : '') + '>' + esc(o.ok || 'Confirmar') + '</button></div></form>';
+    const w = d.querySelector('#cfmW'), okB = d.querySelector('#cfmOk');
+    if (w) w.addEventListener('input', () => { okB.disabled = w.value.trim().toUpperCase() !== String(o.word).toUpperCase(); });
+    d.returnValue = '';
+    d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true });
+    try { d.showModal(); } catch (e) { d.setAttribute('open', ''); }
+    (w || d.querySelector('#cfmNo')).focus();
+  });
 }
+const plural = (n, a, b) => n + ' ' + (n === 1 ? a : b);
+const setsTxt = it => { const n = it.sets.length, h = it.sets.filter(x => x.done).length; return plural(n, 'serie', 'series') + (h ? ' (' + plural(h, 'hecha', 'hechas') + ')' : ''); };
 let toastT = null;
 function hideToast() {
   const el = $('#toast');
@@ -708,7 +729,7 @@ function toggleDone(i, j) {
   const s = activeSession(), it = s.items[i], st = it.sets[j], e = ex(it.exId);
   if (!st.done) {
     const m = measOf(e);
-    if (!setReady(st, m)) { toast(m === 'time' ? 'Anota el tiempo antes de marcar la serie.' : m === 'reps' ? 'Anota las repeticiones antes de marcar la serie.' : 'Anota el peso y las repeticiones antes de marcar la serie.'); return; }
+    if (!setReady(st, m)) { toast(m === 'time' || m === 'kgt' ? 'Anota el tiempo antes de marcar la serie.' : m === 'reps' ? 'Anota las repeticiones antes de marcar la serie.' : 'Anota el peso y las repeticiones antes de marcar la serie.'); return; }
   }
   st.done = !st.done; st.doneAt = st.done ? Date.now() : null;
   const row = $('.set[data-i="' + i + '"][data-j="' + j + '"]');
@@ -1058,10 +1079,14 @@ document.addEventListener('click', e => {
     case 'rm-set': {
       const it = s.items[+t.dataset.i], last = it.sets[it.sets.length - 1];
       if (!last) break;
-      if (last.done && !askConfirm('rs' + t.dataset.i)) break;
-      it.sets.pop(); save(); render(); break;
+      const drop = () => { it.sets.pop(); save(); render(); };
+      if (untouched(last)) { drop(); break; }   // una serie vacía se quita sin preguntar
+      ask({ title: '¿Quitar la serie ' + it.sets.length + '?', text: 'Ya tiene datos anotados en ' + nm(ex(it.exId)) + (last.done ? ' y está marcada como hecha' : '') + '. Se borrará.', ok: 'Quitar serie' }).then(ok => { if (ok && activeSession() === s) drop(); });
+      break;
     }
-    case 'rm-ex': if (askConfirm('rm' + t.dataset.i)) { s.items.splice(+t.dataset.i, 1); save(); render(); } break;
+    case 'rm-ex': { const i = +t.dataset.i, it = s.items[i]; if (!it) break;
+      ask({ title: '¿Quitar ' + nm(ex(it.exId)) + ' de la sesión?', text: (it.sets.length === 1 ? 'Se borra su ' : 'Se borran sus ') + setsTxt(it) + '.', ok: 'Quitar ejercicio' }).then(ok => { if (ok && s.items[i] === it) { s.items.splice(i, 1); save(); render(); } });
+      break; }
     case 'add-ex': openSheet('pick', { cb: addExerciseToSession }); break;
     case 'plates': {
       const it = s.items[+t.dataset.i], nxt = it.sets.find(x => !x.done && x.kg > 0) || it.sets[it.sets.length - 1];
@@ -1082,7 +1107,11 @@ document.addEventListener('click', e => {
     case 'fin-drop': finalize('drop'); break;
     case 'fin-mark': finalize('mark'); break;
     case 'discard': discardActive(); break;
-    case 'cancel-sess': if (askConfirm('cancel')) discardActive(); break;
+    case 'cancel-sess': {
+      const n = s.items.reduce((a, it) => a + it.sets.filter(x => !untouched(x)).length, 0);
+      ask({ title: '¿Descartar la sesión?', text: (n ? (n === 1 ? 'Se borra ' : 'Se borran ') + plural(n, 'serie registrada', 'series registradas') + ' en ' + plural(s.items.length, 'ejercicio', 'ejercicios') + '.' : 'Todavía no hay series registradas.') + ' No se puede deshacer.', ok: 'Descartar sesión' })
+        .then(ok => { if (ok && activeSession() === s) discardActive(); });
+      break; }
     case 'demo-clear': clearDemo(); break;
     case 't-toggle':
       primeAudio();
@@ -1096,11 +1125,16 @@ document.addEventListener('click', e => {
     case 'range': ui.range = +t.dataset.v; render(); break;
     case 'hist-toggle': ui.openSess = ui.openSess === t.dataset.id ? null : t.dataset.id; render(); break;
     case 'hist-more': ui.histN += 10; render(); break;
-    case 'del-sess': if (askConfirm('ds' + t.dataset.id)) {
-      const gone = S.sessions.find(x => x.id === t.dataset.id);
-      S.sessions = S.sessions.filter(x => x.id !== t.dataset.id); ui.openSess = null; save(); render();
-      if (gone && APP.onDelete) { try { APP.onDelete(gone); } catch (e) { /* no debe frenar el borrado */ } }
-    } break;
+    case 'del-sess': {
+      const id = t.dataset.id, gone = S.sessions.find(x => x.id === id); if (!gone) break;
+      const n = gone.items.reduce((a, it) => a + it.sets.filter(x => x.done).length, 0);
+      ask({ title: '¿Eliminar la sesión del ' + shortDate(parseYmd(gone.date)) + '?', text: 'Se borra «' + (gone.name || 'Entrenamiento') + '» del Historial (' + plural(n, 'serie hecha', 'series hechas') + ').' + (gone.plan ? ' Si era una sesión del plan, vuelve a quedar pendiente.' : '') + ' No se puede deshacer.', ok: 'Eliminar sesión' })
+        .then(ok => {
+          if (!ok || !S.sessions.some(x => x.id === id)) return;
+          S.sessions = S.sessions.filter(x => x.id !== id); ui.openSess = null; save(); render();
+          if (APP.onDelete) { try { APP.onDelete(gone); } catch (e) { /* no debe frenar el borrado */ } }
+        });
+      break; }
     case 'plan-add': {
       const di = +t.dataset.d;
       openSheet('pick', { cb: id => { S.plan.days[di].items.push({ exId: id, sets: 3, reps: '3', pct: 70, kg: 0, rest: 0, pause: 0 }); save(); render(); } }); break;
@@ -1137,7 +1171,10 @@ document.addEventListener('click', e => {
       }
       break;
     }
-    case 'ex-del': S.exercises = S.exercises.filter(x => x.id !== t.dataset.ex); save(); closeSheet(); render(); toast('Ejercicio eliminado.'); break;
+    case 'ex-del': { const id = t.dataset.ex, e = ex(id);
+      ask({ title: '¿Eliminar ' + nm(e) + '?', text: 'Se quita de «Mis ejercicios» junto con su máximo' + (e && e.max > 0 ? ' (' + fmtNum(e.max, 1) + ' kg)' : '') + '.', ok: 'Eliminar ejercicio' })
+        .then(ok => { if (ok) { S.exercises = S.exercises.filter(x => x.id !== id); save(); closeSheet(); render(); toast('Ejercicio eliminado.'); } });
+      break; }
     case 'mx-use': $('#mxKg').value = fmtNum(parseNum(t.dataset.v), 2); break;
     case 'mx-save': {
       const e = ex(t.dataset.ex), v = parseNum($('#mxKg').value), g = parseNum($('#mxGoal') ? $('#mxGoal').value : ''), gd = $('#mxGoalDate') ? $('#mxGoalDate').value : '';
@@ -1152,8 +1189,10 @@ document.addEventListener('click', e => {
     case 'calc-save': {
       const e = ex(ui.calc.exId), v = ui.calc.kg > 0 && ui.calc.reps >= 1 ? roundTo(e1rm(ui.calc.kg, Math.round(ui.calc.reps)), S.profile.rounding) : 0;
       if (!(v > 0)) { toast('Escribe un peso y repeticiones válidos.'); break; }
-      if (e.max > 0 && !askConfirm('csave')) break;
-      e.max = v; e.maxDate = ymd(new Date()); save(); render(); toast('Máximo de ' + nm(e) + ' guardado: ' + fmtNum(v, 1) + ' kg.'); break;
+      const put = () => { e.max = v; e.maxDate = ymd(new Date()); save(); render(); toast('Máximo de ' + nm(e) + ' guardado: ' + fmtNum(v, 1) + ' kg.'); };
+      if (e.max > 0 && v < e.max) ask({ title: '¿Bajar tu máximo?', text: nm(e) + ': pasa de ' + fmtNum(e.max, 1) + ' a ' + fmtNum(v, 1) + ' kg. Los kilos de tus sesiones se calcularán con el nuevo.', ok: 'Guardar máximo' }).then(ok => { if (ok) put(); });
+      else put();
+      break;
     }
     case 'export-json': saveFile('halterofilia-respaldo-' + ymd(new Date()) + '.json', JSON.stringify(S, null, 1)); break;
     case 'export-csv': saveFile('halterofilia-historial-' + ymd(new Date()) + '.csv', csvHistory()); break;
@@ -1162,7 +1201,7 @@ document.addEventListener('click', e => {
       if (ui.pendingImport) { S = normalize(ui.pendingImport); ui.pendingImport = null; tReset(S.profile.rest); T.mode = S.profile.timerMode; ui.calc = null; ui.progEx = null; save(true); closeSheet(); render(); toast('Respaldo importado.'); }
       break;
     case 'import-cancel': ui.pendingImport = null; ui.sheet.imp = null; renderSheet(); break;
-    case 'wipe': if (askConfirm('wipe')) { S = freshState(); tReset(S.profile.rest); T.mode = S.profile.timerMode; ui.calc = null; ui.progEx = null; save(true); closeSheet(); render(); toast('Datos borrados.'); } break;
+    case 'wipe': ask({ title: '¿Borrar todos tus datos?', text: 'Se borran tus sesiones, máximos, ejercicios y ajustes' + (APP.cloud ? ', también en la nube y en tus otros dispositivos' : '') + '. No se puede deshacer.', ok: 'Borrar todo', word: 'BORRAR' }).then(ok => { if (ok && S) { S = freshState(); tReset(S.profile.rest); T.mode = S.profile.timerMode; ui.calc = null; ui.progEx = null; save(true); closeSheet(); render(); toast('Datos borrados.'); } }); break;
     case 'copy-text': {
       const ta = $('#bkText');
       ta.select();
@@ -1250,7 +1289,7 @@ let refreshLater = false;
 function typing() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.dataset && a.dataset.f); }
 function softRefresh() { if (!S) return; if (typing()) refreshLater = true; else { refreshLater = false; refresh(); } }
 document.addEventListener('focusout', () => { setTimeout(() => { if (refreshLater && S && !typing()) { refreshLater = false; refresh(); } }, 0); });
-window.HalterApp = { csvHistory: csvHistory, icon: svg, empty: emptyHTML, rt: { bind: rtBind, card: rtCard, ex: rtEx }, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
+window.HalterApp = { ask: ask, csvHistory: csvHistory, icon: svg, empty: emptyHTML, rt: { bind: rtBind, card: rtCard, ex: rtEx }, errorBox: errorHTML, start: start, stop: stop, render: () => { softRefresh(); }, toast: toast, esc: esc, state: () => S, fresh: freshState, commit: commit, startPlanned: startPlanned,
   /* cálculos compartidos con la vista del entrenador (compare.js) */
   pure: { categoryOf: categoryOf, catText: catText, catOptions: catOptions, catSortKey: catSortKey, fmtNum: fmtNum, SEX_LABEL: SEX_LABEL, shortDate: shortDate, parseYmd: parseYmd, ymd: ymd } };
 })();

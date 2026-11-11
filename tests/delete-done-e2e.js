@@ -119,7 +119,7 @@ const WEEKS = {
   await page.evaluate(() => document.querySelector('[data-act="hist-toggle"]')?.click()); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(200);   // pide confirmar
   ok(!!(await docs())[doneDoc], 'el primer toque solo pide confirmar: todavía sigue cumplida');
-  await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(600);
+  await page.click('#cfmOk'); await page.waitForTimeout(600);
   ok(!(await docs())[doneDoc], 'al confirmar, se elimina la marca de la nube');
   await tab('semana');
   ok(!/Cumplida/.test(await txt('#view')), 'la pestaña Semana ya no la marca como cumplida');
@@ -139,14 +139,14 @@ const WEEKS = {
   await tab('mas'); await page.click('.mrow[data-tab="hist"]'); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="hist-toggle"]')?.click()); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(200);
-  await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(600);
+  await page.click('#cfmOk'); await page.waitForTimeout(600);
   ok(!!(await docs())[doneDoc], 'si queda otra sesión igual en el Historial, la marca se conserva');
   await tab('semana');
   ok(/Cumplida/.test(await txt('#view')), 'la semana sigue mostrándola cumplida');
   await tab('mas'); await page.click('.mrow[data-tab="hist"]'); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="hist-toggle"]')?.click()); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(200);
-  await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(600);
+  await page.click('#cfmOk'); await page.waitForTimeout(600);
   ok(!(await docs())[doneDoc], 'al borrar la última, la marca desaparece');
 
   console.log('Sin conexión: el borrado de una sesión aún no enviada cancela el envío');
@@ -156,7 +156,7 @@ const WEEKS = {
   await tab('mas'); await page.click('.mrow[data-tab="hist"]'); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="hist-toggle"]')?.click()); await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(200);
-  await page.evaluate(() => document.querySelector('[data-act="del-sess"]')?.click()); await page.waitForTimeout(500);
+  await page.click('#cfmOk'); await page.waitForTimeout(500);
   const pendBefore = await page.evaluate(() => JSON.stringify(Object.keys(localStorage).filter(k => /\.pend$/.test(k)).map(k => localStorage.getItem(k))));
   await page.evaluate(() => localStorage.setItem('fake.offline', '0')); await page.evaluate(() => HalterAssign.flush()); await page.waitForTimeout(800);
   ok(/\[\]/.test(pendBefore) || pendBefore === '[]', 'sin conexión no queda nada en cola tras borrar (' + pendBefore + ')');

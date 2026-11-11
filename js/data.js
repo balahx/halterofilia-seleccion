@@ -2,9 +2,10 @@
 import { parseNum, parseReps, roundTo, ymd, addDays, mondayOf, mulberry32, uid, catOptions } from './logic.js';
 
 export const CATS = [['comp', 'Competencia'], ['cmplx', 'Complejos'], ['tec', 'Técnica'], ['tiron', 'Tirones'], ['fuerza', 'Fuerza'], ['acc', 'Accesorios'], ['mov', 'Movilidad'], ['pc', 'Peso corporal']];
-/* Cómo se mide un ejercicio: 'kg' (peso y repeticiones), 'reps' (solo repeticiones) o 'time' (segundos). Movilidad y peso corporal parten sin kilos. */
-export const MEAS = [['kg', 'Peso y repeticiones'], ['reps', 'Solo repeticiones'], ['time', 'Tiempo']];
-export const measOf = e => e && (e.meas === 'kg' || e.meas === 'reps' || e.meas === 'time') ? e.meas : (e && e.cat === 'mov' ? 'time' : e && e.cat === 'pc' ? 'reps' : 'kg');
+/* Cómo se mide un ejercicio: 'kg' (peso y repeticiones), 'reps' (solo repeticiones), 'time' (segundos) o 'kgt' (peso y tiempo:
+   isométricos con carga, p. ej. plancha con discos; desde 4.18.0). Movilidad y peso corporal parten sin kilos. */
+export const MEAS = [['kg', 'Peso y repeticiones'], ['reps', 'Solo repeticiones'], ['time', 'Tiempo'], ['kgt', 'Peso y tiempo']];
+export const measOf = e => e && (e.meas === 'kg' || e.meas === 'reps' || e.meas === 'time' || e.meas === 'kgt') ? e.meas : (e && e.cat === 'mov' ? 'time' : e && e.cat === 'pc' ? 'reps' : 'kg');
 /* «45» o «1:30» → segundos; 0 si no es válido. */
 export function parseSecs(v) {
   const t = String(v == null ? '' : v).trim(); if (!t) return 0;
@@ -15,7 +16,7 @@ export const secsIn = n => n >= 60 ? Math.floor(n / 60) + ':' + String(n % 60).p
 export const fmtSecs = n => n >= 60 ? secsIn(n) + ' min' : n + ' s';
 /* ¿La serie tiene lo necesario para marcarla como hecha? */
 export function setReady(st, m) {
-  if (m === 'time') return parseSecs(st.secs) > 0;
+  if (m === 'time' || m === 'kgt') return parseSecs(st.secs) > 0;   // en «peso y tiempo» los kilos son opcionales (puede hacerse sin discos)
   if (m === 'reps') return parseReps(st.reps).total >= 1;
   return parseNum(st.kg) > 0 && parseReps(st.reps).total >= 1;
 }

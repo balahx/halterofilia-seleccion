@@ -131,8 +131,8 @@ function cristianGrid() {
 
   console.log('5. Eliminar un plan (con confirmación)');
   await page.click('[data-act="pl-delete"] >> nth=0');
-  ok(/Confirmar/.test(await txt('#view')), 'pide confirmar');
-  await page.click('[data-act="pl-delete"]:has-text("Confirmar")');
+  ok(await page.locator('#cfm[open]').count() === 1, 'pide confirmar');
+  await page.click('#cfmOk');
   await page.waitForFunction(() => document.querySelectorAll('[data-act="pl-delete"]').length === 1);
   const d3 = await docs();
   ok(Object.keys(d3).filter(k => /^plans\/[^/]+$/.test(k)).length === 1, 'queda 1 plan');

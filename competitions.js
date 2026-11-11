@@ -225,8 +225,11 @@
     }, err => { CP.busy = false; CP.err = H.err(err); H.render(); });
   }
   function remove(id) {
-    if (CP.delAsk !== id) { CP.delAsk = id; H.render(); return; }
-    CP.delAsk = '';
+    const c = (CP.list || []).find(x => x.id === id);
+    window.HalterApp.ask({ title: '¿Eliminar ' + (c ? '«' + c.name + '»' : 'la competencia') + '?', text: 'Se borran su fecha, los atletas inscritos y sus marcas oficiales. No se puede deshacer.', ok: 'Eliminar competencia' })
+      .then(ok => { if (ok) removeNow(id); });
+  }
+  function removeNow(id) {
     Promise.resolve(H.remote().deleteCompetition(id)).then(() => { CP.list = (CP.list || []).filter(x => x.id !== id); H.toast('Competencia eliminada.'); H.render(); }, err => { CP.err = H.err(err); H.render(); });
   }
   function onAct(act, el) {

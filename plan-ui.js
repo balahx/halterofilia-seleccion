@@ -173,8 +173,10 @@
       case 'pl-template': downloadTemplate(); return true;
       case 'pl-delete':
         if (usage(id).length) { P.blocked = id; H.render(); return true; }   // un plan con atletas no se elimina (4.16.0)
-        if (prev !== 'del' + id) { P.confirm = 'del' + id; H.render(); return true; }
-        H.remote().deletePlan(id, P.active === id).then(() => H.toast('Plan eliminado'), e => { P.err = H.err(e); H.render(); }); return true;
+        { const pl = P.plans.find(x => x.id === id);
+          window.HalterApp.ask({ title: '¿Eliminar el plan' + (pl ? ' «' + pl.name + '»' : '') + '?', text: 'Se borran sus ' + ((pl && pl.weeks) || 0) + ' semanas y etapas. Ningún atleta lo tiene asignado. No se puede deshacer.', ok: 'Eliminar plan' })
+            .then(ok => { if (ok) H.remote().deletePlan(id, P.active === id).then(() => H.toast('Plan eliminado'), e => { P.err = H.err(e); H.render(); }); }); }
+        return true;
     }
     return false;
   }

@@ -85,8 +85,8 @@ const ok = (c, m) => { if (!c) { fails++; console.log('  ✗ ' + m); } else cons
   await login('cristian@correo.cl', 'clave123'); await page.waitForSelector('#appRoot:not([hidden])');
   await page.click('#nav button[data-tab="equipo"]'); await page.waitForSelector('[data-act="eq-reject"]');
   await page.click('[data-act="eq-reject"]');
-  ok((await txt('[data-act="eq-reject"]')) === 'Confirmar', 'primer toque pide confirmar');
-  await page.click('[data-act="eq-reject"]');
+  ok(await page.locator('#cfm[open]').count() === 1 && /Rechazar la solicitud/.test(await txt('#cfm')), 'primer toque pide confirmar al centro');
+  await page.click('#cfmOk');
   await page.waitForFunction(() => /Rechazadas \(1\)/i.test(document.querySelector('#view').innerText));
   ok(true, 'segunda vez rechaza');
 

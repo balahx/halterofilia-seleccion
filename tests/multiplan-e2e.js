@@ -121,8 +121,8 @@ const WEEKS = {
   await page.evaluate(({ b }) => __fake.admin('assignments/' + b, { planId: 'p1', weekId: 'e1_1', week: 1, stageId: 'e1', weekEndsAt: Date.now() + 86400000, setBy: 'x' }), { b: bea });
   await page.waitForTimeout(500); await tab('planual');
   await delBtn('Nivel 2').click(); await page.waitForTimeout(200);
-  ok(/Confirmar/.test(await txt('#view')), 'un plan sin atletas pide confirmar');
-  await page.locator('[data-act="pl-delete"]:has-text("Confirmar")').click(); await page.waitForTimeout(800);
+  ok(/¿Eliminar el plan «Nivel 2»\?/.test(await txt('#cfm')), 'un plan sin atletas pide confirmar');
+  await page.click('#cfmOk'); await page.waitForTimeout(800);
   ok(!(await docs())['plans/p2'] && !(await docs())['plans/p2/fast/all'], 'se elimina con su documento único');
   await logout();
 

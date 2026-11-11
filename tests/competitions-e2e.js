@@ -108,8 +108,8 @@ const dayStr = n => { const d = new Date(Date.now() + n * 86400000); return new 
   console.log('5. Eliminar');
   await login('cristian@correo.cl'); await goComp();
   await page.click('.cp-card:has-text("Copa Chile") [data-act="cp-del"]'); await page.waitForTimeout(200);
-  ok(/Confirmar: eliminar/.test(await txt('#view')), 'pide confirmar antes de eliminar');
-  await page.click('.cp-card:has-text("Copa Chile") [data-act="cp-del"]'); await page.waitForTimeout(500);
+  ok(await page.locator('#cfm[open]').count() === 1 && /¿Eliminar «Copa Chile»\?/.test(await txt('#cfm')), 'pide confirmar al centro antes de eliminar');
+  await page.click('#cfmOk'); await page.waitForTimeout(500);
   d = await docs();
   ok(!Object.keys(d).some(k => k.startsWith('competitions/') && d[k].name === 'Copa Chile') && !/Copa Chile/.test(await txt('#view')), 'la competencia se elimina');
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), 'sin desborde horizontal');

@@ -225,6 +225,29 @@
     }
     return [Object.assign({}, it, { sets: parsePresc(parts.length > 1 ? parts[0] : pr) })];
   }
+  /* Títulos dentro de una sesión (4.18.0): «Core» no es un ejercicio, es el título de los que siguen (plancha, dorsal…).
+     Rige para los ejercicios siguientes del mismo bloque hasta uno con su propia prescripción escrita («12x2 / 20x2»). */
+  const TITLES = { core: 'Core' };
+  const titleOf = it => { const t = String((it && it.raw) || '').replace(/[\s:.\-]+$/g, '').trim().toLowerCase(); return TITLES[t] || null; };
+  const ownPresc = it => !!(it.inline || /\d+\s*[xX]\s*\d+/.test(String(it.raw || '')));
+  /* Segundos en el nombre («plancha peso 30"»): ejercicio isométrico medido en peso (discos) y tiempo; las series salen de la
+     prescripción del bloque, el tiempo planificado es ese y no se calculan kilos por % (no tiene máximo). Solo ejercicios simples. */
+  const holdIn = it => { const a = it.alts || []; if (a.length !== 1) return 0; const pp = a[0].p || a[0]; if (!Array.isArray(pp) || pp.length !== 1) return 0;
+    const m = /(?:^|\s)(\d{1,3})\s*(?:"|''|”|″|¨)/.exec(String(it.raw || '')); return m ? +m[1] : 0; };
+  /* Ejercicios de una sesión → sin títulos (pasan a «sub» de los siguientes) y con «hold» en los isométricos.
+     Devuelve { items, to } (to[i] = posición nueva del ejercicio i, o -1 si era un título). */
+  function fixItems(list) {
+    const items = [], to = []; let sub = null, subBlock = null;
+    (list || []).forEach(it0 => {
+      const tt = titleOf(it0);
+      if (tt) { sub = tt; subBlock = it0.block || ''; to.push(-1); return; }
+      const it = Object.assign({}, it0);
+      if (sub && (it.block || '') === subBlock && !ownPresc(it)) it.sub = sub; else { sub = null; if (it.sub && !titleOf({ raw: it.sub })) delete it.sub; }
+      const h = holdIn(it); if (h > 0) { it.hold = h; it.meas = 'kgt'; }
+      to.push(items.length); items.push(it);
+    });
+    return { items: items, to: to };
+  }
   /* Texto estable (las claves de Firestore pueden volver en otro orden) */
   const stable = v => Array.isArray(v) ? '[' + v.map(stable).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v);
   /* Semana ya publicada → semana con el lector corregido. map[sesión][ejercicio anterior] = { old, to: [índices nuevos], parts } */
@@ -233,8 +256,10 @@
     const sessions = (w.sessions || []).map(s => {
       const items = [], m = [];
       (s.items || []).forEach(it => { const parts = reparseItem(it), to = []; parts.forEach(p => { to.push(items.length); items.push(p); }); m.push({ old: it, to: to, parts: parts }); });
+      const fx = fixItems(items);   // títulos («Core») fuera y segundos en el nombre; las posiciones se corren
+      m.forEach(e => { const keep = []; e.to.forEach((t, j) => { if (fx.to[t] >= 0) keep.push(j); }); e.parts = keep.map(j => fx.items[fx.to[e.to[j]]]); e.to = keep.map(j => fx.to[e.to[j]]); });
       map.push(m);
-      return Object.assign({}, s, { items: items });
+      return Object.assign({}, s, { items: fx.items });
     });
     const changed = stable(sessions) !== stable(w.sessions || []);
     const data = JSON.parse(JSON.stringify({ stageId: w.stageId, week: w.week, label: w.label || '', kind: w.kind || '', notes: w.notes || [], sessions: sessions, next: w.next || '' }));
@@ -249,6 +274,7 @@
       const si = +mm[1], oi = +mm[2], k = +mm[3], e = map[si] && map[si][oi];
       if (!e) { out[key] = pcts[key]; return; }
       const os = (e.old.sets || [])[k];
+      if (!e.parts.length) return;   // era un título («Core»): sin ajuste
       for (let j = 0; j < e.parts.length; j++) {
         const ss = e.parts[j].sets || [];
         let nk = os ? ss.findIndex((x, q) => x.pct === os.pct && String(x.reps || '') === String(os.reps || '') && out['s' + si + '_i' + e.to[j] + '_k' + q] === undefined) : -1;
@@ -333,7 +359,7 @@
             items.push(it); nItems++;
           });
         }
-        if (items.length) wk.sessions.push({ day: c - 2, name: DAY_NAMES[c - 3], items: items });
+        if (items.length) { const fx = fixItems(items); if (fx.items.length) wk.sessions.push({ day: c - 2, name: DAY_NAMES[c - 3], items: fx.items }); }
       }
       weeks.push(wk);
     });
@@ -418,6 +444,6 @@
     return created;
   }
 
-  const api = { GLOSSARY: GLOSSARY, TEMPLATE_HEAD: TEMPLATE_HEAD, parsePlan: parsePlan, applyNames: applyNames, makeDictionary: makeDictionary, slug: slug, norm: norm, parsePresc: parsePresc, reparseItem: reparseItem, reparseWeek: reparseWeek, remapAdj: remapAdj };
+  const api = { GLOSSARY: GLOSSARY, TEMPLATE_HEAD: TEMPLATE_HEAD, parsePlan: parsePlan, applyNames: applyNames, makeDictionary: makeDictionary, slug: slug, norm: norm, parsePresc: parsePresc, reparseItem: reparseItem, fixItems: fixItems, reparseWeek: reparseWeek, remapAdj: remapAdj };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PlanImport = api;
 })(typeof window !== 'undefined' ? window : globalThis);

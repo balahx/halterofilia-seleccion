@@ -515,7 +515,13 @@
     const uid = el && el.dataset ? el.dataset.uid : null;
     const find = id => C.requests.find(x => x.id === id) || C.members.find(x => x.id === id);
     const prev = C.confirm; C.confirm = null;
-    const twoStep = key => { if (prev === key + uid) return true; C.confirm = key + uid; window.HalterApp.render(); return false; };
+    /* Confirmación en la ventana del centro (4.18.0) */
+    const who = () => { const p = find(uid); return p ? p.name || p.email || 'esta persona' : 'esta persona'; };
+    const Q = { 'eq-reject': () => ({ title: '¿Rechazar la solicitud de ' + who() + '?', text: 'No podrá entrar al equipo. Puede volver a pedir acceso.', ok: 'Rechazar' }),
+      'eq-delreq': () => ({ title: '¿Borrar la solicitud de ' + who() + '?', text: 'Desaparece de la lista de solicitudes.', ok: 'Borrar solicitud' }),
+      'eq-remove': () => ({ title: '¿Quitar el acceso de ' + who() + '?', text: 'Deja de ver el plan y sus datos dejan de sincronizarse con el equipo. Sus registros se conservan.', ok: 'Quitar acceso' }) };
+    const twoStep = key => { if (prev === '__ok') return true;   // ya confirmó en la ventana
+      window.HalterApp.ask(Q[key]()).then(ok => { if (ok) { C.confirm = '__ok'; onAct(key, el); } }); return false; };
     switch (act) {
       case 'cl-logout': doLogout(); break;
       case 'sync-now': if (C.sync) { C.sync.syncNow(); toast('Sincronizando…'); } break;

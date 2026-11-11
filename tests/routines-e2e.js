@@ -216,8 +216,8 @@ const WEEKS = {
 
   console.log('5. Quitar la rutina');
   await tab('equipo'); await page.locator('.person', { hasText: 'Ana Rojas' }).locator('[data-act="as-open"]').click(); await page.waitForSelector('[data-act="rt-del"]');
-  await page.click('[data-act="rt-del"]'); ok(/Confirmar/.test(await txt('[data-act="rt-del"]')), 'pide confirmar antes de quitar');
-  await page.click('[data-act="rt-del"]'); await page.waitForTimeout(400);
+  await page.click('[data-act="rt-del"]'); ok(/¿Quitar la rutina/.test(await txt('#cfm')), 'pide confirmar antes de quitar');
+  await page.click('#cfmOk'); await page.waitForTimeout(400);
   d = await docs(); ok(!Object.keys(d).some(k => k.startsWith('routines/')), 'la rutina se quitó');
 
   ok(errors.length === 0, 'sin errores en la consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
