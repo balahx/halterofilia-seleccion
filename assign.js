@@ -379,7 +379,7 @@
     // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
     meUnsub.push(r.watchCol('users/' + A.uid + '/completions', list => {
       const done = {}; list.forEach(x => { if (x.id.indexOf(pre) === 0 && typeof x.sessionIdx === 'number') done[x.sessionIdx] = true; });
-      A.me.done = done; saveCache(); rerender();
+      A.me.done = done; saveCache(); rerender(); healDone(a);
     }, () => { /* sin conexión */ }, { planId: a.planId, weekId: a.weekId }));
   }
   function saveCache() {
@@ -408,6 +408,21 @@
       }
     } finally { flushing = false; }
   }
+  /* Sesiones de la semana asignada que están terminadas en el Historial pero sin «Cumplida» (p. ej. el envío se perdió o se
+     entrenó con la app cerrada a medias): se vuelven a registrar solas (4.19.0). Solo las de la semana asignada ahora mismo. */
+  function healDone(a) {
+    if (!a || !A.role || A.role === 'coach' || !H) return;
+    const S = window.HalterApp.state(), w = A.me.week, n = w && w.sessions ? w.sessions.length : 0, q = readPend();
+    let add = false;
+    (S && S.sessions || []).forEach(x => {
+      const p = x.plan;
+      if (!x.endedAt || !p || p.planId !== a.planId || p.weekId !== a.weekId || typeof p.idx !== 'number' || A.me.done[p.idx] || (n && p.idx >= n)) return;
+      if (!x.items || !x.items.some(it => (it.sets || []).some(st => st.done))) return;   // sin nada hecho no cuenta
+      if (q.some(y => y.planId === p.planId && y.weekId === p.weekId && y.idx === p.idx)) return;
+      q.push({ planId: p.planId, weekId: p.weekId, idx: p.idx }); add = true;
+    });
+    if (add) { writePend(q); flush(); }
+  }
   function onFinish(s) {
     if (!s || !s.plan || !A.role) return;
     const q = readPend(); if (!q.some(x => x.planId === s.plan.planId && x.weekId === s.plan.weekId && x.idx === s.plan.idx)) q.push(s.plan);
@@ -428,7 +443,18 @@
   }
 
   /* ---------- Atleta ---------- */
-  function sessionCard(w, si, ses) {
+  /* Días plegables (4.19.0): en «Semana» solo el día de hoy queda abierto; el resto se abre tocándolo (se recuerda mientras la app esté abierta) */
+  const openKeys = {};
+  function foldable(html, key, open) {
+    const i = html.indexOf('<ul class="plain">'), cls = (/^<div class="([^"]*)"/.exec(html) || [])[1] || 'card sec';
+    if (i < 0) return html;
+    const head = html.slice(html.indexOf('>') + 1, i), body = html.slice(i, html.length - '</div>'.length);
+    const isOpen = openKeys[key] !== undefined ? openKeys[key] : open;
+    return `<details class="${cls} fold" data-fold="${esc(key)}"${isOpen ? ' open' : ''}><summary>${head}</summary>${body}</details>`;
+  }
+  if (root.document) root.document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.fold) openKeys[d.dataset.fold] = d.open; }, true);
+  function sessionCard(w, si, ses, opt) {
+    if (opt && opt.fold) { const todayNo = ((new Date().getDay() + 6) % 7) + 1; return foldable(sessionCard(w, si, ses), 'w:' + (w.id || w.week) + ':' + si, ses.day === todayNo); }
     const S = window.HalterApp.state(), done = !!A.me.done[si], adj = A.me.adj, rounding = (S.profile && S.profile.rounding) || 1, lang = (S.profile && S.profile.exLang) || 'en';
     const todayNo = ((new Date().getDay() + 6) % 7) + 1;
     let block = null, sub = null, h = `<div class="card sec${ses.day === todayNo && !done ? ' today' : ''}"><div class="person"><div><b>${esc(dayLabel(ses.day))}${ses.name && ses.name !== dayLabel(ses.day) ? ' · ' + esc(ses.name) : ''}</b><small>${(ses.items || []).length} ${(ses.items || []).length === 1 ? 'ejercicio' : 'ejercicios'}</small></div>` +
@@ -514,10 +540,17 @@
       (w.kind === 'transition' ? '<p class="muted">Semana de transición: actividad física y ejercicio libre para la descarga física y mental. Descanso de halterofilia.</p>' : '') +
       (w.notes && w.notes.length && w.kind !== 'transition' ? '<ul class="plain">' + w.notes.map(n => `<li><small>${esc(n)}</small></li>`).join('') + '</ul>' : '') +
       (coach ? '' : `<small class="muted">Cambia de semana desde el ${esc(fmtCut(a.weekEndsAt))}</small>`) + '</div>';
-    h += (w.sessions || []).map((s, i) => sessionCard(w, i, s)).join('');
+    h += (w.sessions || []).map((s, i) => sessionCard(w, i, s, { fold: true })).join('');
     if (coach) return h + selfPicker(a);
-    const st = advanceState(a, w, m.done, Date.now());
-    h += `<div class="card sec"><span class="eyebrow">Cambiar de semana</span><p class="muted">${st.ok ? 'Cumpliste la última sesión y ya pasó el corte: puedes pasar a la semana siguiente.' : esc(st.why)}</p>` +
+    const now = Date.now(), st = advanceState(a, w, m.done, now);
+    /* Las dos condiciones a la vista (4.19.0): sesiones cumplidas y corte del domingo */
+    const nS = (w.sessions || []).length, need = w.kind !== 'transition' && nS > 0, miss = need ? (w.sessions || []).map((x, k) => k).filter(k => !m.done[k]) : [];
+    const cutOk = now >= a.weekEndsAt, ck = ok => `<span class="cond ${ok ? 'ok' : 'no'}" aria-hidden="true">${ok ? '✓' : '✗'}</span>`;
+    const conds = !w.next ? '' : '<ul class="plain conds">' +
+      (need ? `<li>${ck(!miss.length)}<span>Sesiones cumplidas: ${nS - miss.length} de ${nS}${miss.length ? ' · falta' + (miss.length === 1 ? ' ' : 'n ') + esc(miss.map(k => dayLabel((w.sessions[k] || {}).day) || 'sesión ' + (k + 1)).join(', ')) : ''}</span></li>` : '') +
+      `<li>${ck(cutOk)}<span>Corte: ${esc(fmtCut(a.weekEndsAt))}${cutOk ? ' · ya pasó' : ''}</span></li></ul>` +
+      (miss.length ? '<small class="muted">Una sesión cuenta como cumplida cuando la inicias desde esta semana (botón «Iniciar») y la terminas con al menos una serie hecha.</small>' : '');
+    h += `<div class="card sec"><span class="eyebrow">Cambiar de semana</span><p class="muted">${st.ok ? 'Cumpliste todas las sesiones y ya pasó el corte: puedes pasar a la semana siguiente.' : esc(st.why)}</p>` + conds +
       `<div class="actions"><button class="btn ghost block" data-act="as-advance"${st.ok && !A.busy ? '' : ' disabled'}>${A.busy || 'Pasar a la semana siguiente'}</button></div></div>`;
     return h;
   }
@@ -551,6 +584,24 @@
     const rt = (A.me.routines || []).find(x => x.id === rid); if (!rt) return;
     window.HalterApp.startPlanned(S => buildRoutineSession(S, rt, i));
   }
+  /* Vista previa de una sesión de rutina para el atleta (4.19.0): ejercicios, series × repeticiones, kilos (fijos o desde su
+     máximo), pausa y descanso, antes de iniciarla. No registra nada. */
+  function rtItemsHTML(items, S) {
+    const rounding = (S && S.profile && S.profile.rounding) || 1, rnd = v => Math.round(v / rounding) * rounding;
+    return '<ul class="plain rt-items">' + (items || []).map(p => {
+      const e = (S && S.exercises || []).find(x => x.id === p.exId) || null, meas = (e && e.meas) || p.meas || 'kg', parts = [];
+      const reps = p.reps || '?';
+      parts.push((p.sets || 1) + ' × ' + (meas === 'time' || meas === 'kgt' ? reps + ' s' : reps + (meas === 'reps' ? ' rep' : '')));
+      if (meas === 'kg' || meas === 'kgt') {
+        if (p.kg > 0) parts.push(String(p.kg).replace('.', ',') + ' kg');
+        else if (p.pct > 0) parts.push(String(p.pct).replace('.', ',') + ' %' + (e && e.max > 0 ? ' → ' + String(rnd(e.max * p.pct / 100)).replace('.', ',') + ' kg' : ' de tu máximo'));
+      }
+      if (p.pause > 0) parts.push('pausa de ' + p.pause + ' s en el movimiento');
+      if (p.rest > 0) parts.push('descanso ' + Math.floor(p.rest / 60) + ':' + String(p.rest % 60).padStart(2, '0'));
+      const desc = (e && e.desc) || p.desc;
+      return `<li><div><b>${esc((e && (e.name || e.en)) || p.name || p.exId)}</b><small>${esc(parts.join(' · '))}</small>${desc ? `<small class="edesc">${esc(desc)}</small>` : ''}</div></li>`;
+    }).join('') + '</ul>';
+  }
   /* Rutinas especiales que el entrenador armó para mí (se muestran antes que la semana del plan) */
   const replacing = () => (A.me.routines || []).some(r => r.mode === 'replace');
   function routinesHTML(opt) {
@@ -565,7 +616,9 @@
       return `<div class="card sec rt-card${todayOnly ? ' today' : ''}"><span class="eyebrow gd">${todayOnly ? 'Hoy · ' : ''}${r.mode === 'replace' ? 'Rutina en lugar del plan semanal' : 'Rutina complementaria'}</span><h2>${esc(r.name)}</h2>` + (r.note ? `<p class="muted">${esc(r.note)}</p>` : '') +
         '<ul class="plain">' + rows.map(o => {
           const x = o.x, i = o.i, d = done[r.id + ':' + i], n = (x.items || []).length, ds = daysOf(x), dl = ds.map(k => dayLabel(k).slice(0, 3)).join(' · '), today = ds.indexOf(todayNo) >= 0;
-          return `<li><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${dl ? esc(dl) + (today ? ' (hoy)' : '') + ' · ' : ''}${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm${today ? '' : ' ghost'}" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></li>`;
+          const pk = 'rt:' + r.id + ':' + i, pOpen = openKeys[pk] === true;
+          return `<li class="rt-row"><div class="rt-top"><div><b>${esc(x.name || 'Sesión ' + (i + 1))}</b><small>${dl ? esc(dl) + (today ? ' (hoy)' : '') + ' · ' : ''}${n} ${n === 1 ? 'ejercicio' : 'ejercicios'}${d ? ' · hecha el ' + esc(d.split('-').reverse().join('-')) : ''}</small></div><button class="btn sm${today ? '' : ' ghost'}" data-act="rt-start" data-r="${esc(r.id)}" data-i="${i}">Iniciar</button></div>` +
+            (n ? `<details class="rt-prev" data-fold="${esc(pk)}"${pOpen ? ' open' : ''}><summary>Ver ejercicios</summary>${rtItemsHTML(x.items, S)}</details>` : '') + '</li>';
         }).join('') + '</ul></div>';
     }).join('');
   }

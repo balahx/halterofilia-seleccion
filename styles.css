@@ -537,6 +537,20 @@ dialog .actions > .lnk { margin: 0 auto; }
 .updbar > div, .wknote > div { flex: 1 1 200px; min-width: 0; font-size: 13.5px; line-height: 1.35; }
 .updbar b, .wknote b { display: block; font-size: 14.5px; }
 .updbar .btn, .updbar .lnk, .wknote .btn, .wknote .lnk { flex: none; }
+/* 4.19.0: días plegables en «Semana», vista previa de rutinas y condiciones para cambiar de semana */
+details.fold > summary { list-style: none; cursor: pointer; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary .person { position: relative; padding-right: 26px; }
+details.fold > summary .person::after { content: '▾'; position: absolute; right: 2px; top: 50%; transform: translateY(-50%); color: var(--muted); transition: transform .15s; }
+details.fold:not([open]) > summary .person::after { transform: translateY(-50%) rotate(-90deg); }
+details.fold:not([open]) { padding-bottom: 12px; }
+.rt-row { display: block !important; }
+.rt-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+details.rt-prev { margin-top: 6px; }
+details.rt-prev > summary { cursor: pointer; color: var(--focus); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.rt-items li { padding: 6px 0 6px 10px; border-left: 2px solid var(--line); }
+.conds li { display: flex; gap: 8px; align-items: baseline; }
+.cond { font-weight: 700; } .cond.ok { color: var(--ok); } .cond.no { color: var(--bad); }
 .person small.err-txt { display: block; margin-top: 4px; color: var(--bad); font-weight: 600; }
 .plan-tag { margin: 4px 0 8px; }
 .wknote.warn { background: var(--warn-bg); color: var(--warn-ink); border-left-color: transparent; }

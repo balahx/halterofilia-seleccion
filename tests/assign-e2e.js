@@ -97,6 +97,7 @@ const WEEKS = {
   ok(/Arranque\s*\n\s*Snatch/.test(await txt('#view')), 'al cambiar el ajuste, español principal e inglés debajo');
   await page.click('#gear'); await page.waitForSelector('#sLang'); await page.selectOption('#sLang', 'en'); await page.keyboard.press('Escape'); await page.waitForTimeout(300);
   await shot('03-atleta-semana');
+  await page.evaluate(() => document.querySelectorAll('details.fold').forEach(d => { d.open = true; }));   // 4.19.0: días plegados
   await page.click('[data-act="as-start"][data-i="0"]'); await page.waitForSelector('.tick');
   ok(/Hoy|Arranque/.test(await txt('#view')), 'la sesión se abre lista para registrar');
   const kgs = await page.locator('[data-f="kg"]').evaluateAll(l => l.map(x => x.value));
@@ -131,6 +132,7 @@ const WEEKS = {
   const past = await page.evaluate(() => HalterAssign.pure.cutoffFor(Date.now() - 8 * 86400000));
   await page.evaluate(({ u, past }) => { const s = __fake.srv(), x = s.docs['assignments/' + u]; __fake.admin('assignments/' + u, Object.assign({}, x, { weekEndsAt: past })); }, { u: auid, past });
   await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelectorAll('details.fold').forEach(d => { d.open = true; }));
   await page.click('[data-act="as-start"][data-i="1"]'); await page.waitForSelector('.tick');
   const k0 = page.locator('[data-f="kg"]').first(); await k0.fill('80');
   const kg2 = page.locator('[data-f="kg"]'); for (let i = 1; i < await kg2.count(); i++) await kg2.nth(i).fill('80');
@@ -191,8 +193,10 @@ const WEEKS = {
     __fake.admin('plans/p1/weeks/e1_1', w);
   }, WEEKS.e1_1);
   await tab('semana'); await page.waitForTimeout(800);
+  await page.evaluate(() => document.querySelectorAll('details.fold').forEach(d => { d.open = true; }));
   ok(/Snatch \+ Overhead Squat/.test(await txt('#view')), 'la semana muestra el complejo');
   ok(/80 %[^|]*→ 80 kg/.test(await txt('#view')) && /primer movimiento con máximo/.test(await txt('#view')), '80 % del arranque (100 kg) = 80 kg, y avisa de dónde sale');
+  await page.evaluate(() => document.querySelectorAll('details.fold').forEach(d => { d.open = true; }));
   await page.click('[data-act="as-start"][data-i="2"]'); await page.waitForTimeout(500); await tab('hoy'); await page.waitForTimeout(300);
   ok(/Snatch \+ Overhead Squat/.test(await txt('#view')) && (await page.locator('#view .exc [data-act="edit-max"]').filter({ hasText: /máximo|1RM/ }).count()) === 0 && /sin máximo propio/.test(await txt('#view')), 'en la sesión, el complejo no ofrece «Definir máximo»: avisa que usa el de su primer movimiento');
   ok((await page.locator('#view .exc [data-act="edit-max"]').count()) === 0, 'tampoco el complejo «Arranque con pausa + tirón» (un solo ejercicio del glosario con «+»)');
