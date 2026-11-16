@@ -179,7 +179,7 @@
   /* ¿Puede el atleta pasar a la semana siguiente? → { ok, why } */
   function advanceState(asg, week, done, now) {
     if (!asg || !week) return { ok: false, why: '' };
-    if (!week.next) return { ok: false, why: 'Es la última semana del plan.' };
+    if (!week.next) return { ok: false, why: 'Es la última semana del plan.', last: true };
     const n = (week.sessions || []).length, need = week.kind !== 'transition' && n > 0;
     if (need) {
       // Se exigen todas las sesiones (con más de 7, las reglas exigen las 5 primeras y la última: ver firestore.rules)
@@ -313,6 +313,17 @@
     const I = root.PlanImport, P = A.plans[planId], meta = (A.planList || []).find(x => x.id === planId);
     if (!I || !I.reparseWeek || A.role !== 'coach' || repairing[planId] || !P || !P.ok || !meta) return false;
     const changes = P.weeks.map(w => I.reparseWeek(w)).filter(c => c.changed);
+    /* Enlace a la semana siguiente (4.19.1): una semana sin «next» (o apuntando a una que no existe) que no es la última se
+       enlaza con la que sigue en el orden del plan (etapa y número). Sin enlace el atleta veía «Es la última semana del plan»
+       y las reglas no lo dejaban avanzar. Un enlace válido distinto no se toca. */
+    const ids = {}; P.weeks.forEach(w => { ids[w.id] = true; });
+    P.weeks.forEach((w, k) => {
+      const want = k + 1 < P.weeks.length ? P.weeks[k + 1].id : '', has = w.next || '';
+      if (!want || (has && ids[has])) return;
+      let c = changes.find(x => x.id === w.id);
+      if (!c) { c = I.reparseWeek(w); changes.push(c); }
+      c.data.next = want; c.changed = true;
+    });
     if (!changes.length) return false;
     repairing[planId] = true;
     const r = H.remote();
@@ -341,7 +352,7 @@
   function startAthlete(uid, offline) { reset(); A.uid = uid; A.role = 'athlete'; if (root.HalterReads && root.HalterReads.useFast) root.HalterReads.useFast(true); selfStart(uid, offline, false); }
   /* Mi propia semana (atleta, y el entrenador cuando entrena el plan). noEx: el entrenador ya escucha los ejercicios */
   function selfStart(uid, offline, noEx) {
-    try { const c = JSON.parse(LS.get(cacheKey()) || 'null'); if (c && (c.asg || (c.routines && c.routines.length))) { A.me = { asg: c.asg || null, week: c.week || null, adj: c.adj || {}, done: c.done || {}, savedAt: c.savedAt || 0, routines: c.routines || [], planName: c.planName || '' }; A.names = c.names || {}; A.stages = c.stages || []; } } catch (e) { /* caché dañada */ }
+    try { const c = JSON.parse(LS.get(cacheKey()) || 'null'); if (c && (c.asg || (c.routines && c.routines.length))) { A.me = { asg: c.asg || null, week: c.week || null, adj: c.adj || {}, done: c.done || {}, savedAt: c.savedAt || 0, routines: c.routines || [], planName: c.planName || '', planWeeks: c.planWeeks || 0 }; A.names = c.names || {}; A.stages = c.stages || []; } } catch (e) { /* caché dañada */ }
     if (offline) return;
     const r = H.remote();
     unsub.push(r.watchDoc('assignments/' + uid, (d, m) => {
@@ -373,7 +384,7 @@
       : r.watchCol('plans/' + a.planId + '/stages', onStages, () => { /* sin conexión: queda la copia guardada */ }));
     /* Nombre del plan para «Hoy» y «Semana» (4.16.0): sale de la ficha del plan, que ya se lee para saber su versión */
     if (A.role !== 'coach') Promise.resolve(RDw && RDw.planMeta ? RDw.planMeta(r, a.planId).then(pm => pm && pm.meta) : r.getDoc('plans/' + a.planId))
-      .then(d => { const n = (d && d.name) || ''; if (n !== A.me.planName) { A.me.planName = n; saveCache(); rerender(); } }).catch(() => { /* sin conexión: queda el guardado */ });
+      .then(d => { const n = (d && d.name) || '', nw = (d && d.weeks) || 0; if (n !== A.me.planName || nw !== A.me.planWeeks) { A.me.planName = n; A.me.planWeeks = nw; saveCache(); rerender(); } }).catch(() => { /* sin conexión: queda el guardado */ });
     meUnsub.push(RDw ? RDw.feedWeek(r, a.planId, a.weekId, onWeek, onWeekErr) : r.watchDoc('plans/' + a.planId + '/weeks/' + a.weekId, onWeek, onWeekErr));
     meUnsub.push(r.watchDoc('adjustments/' + A.uid + '_' + a.planId + '_' + a.weekId, d => { A.me.adj = (d && d.pcts) || {}; saveCache(); rerender(); }, () => { /* sin ajustes */ }));
     // solo las sesiones cumplidas de la semana asignada (no las de todo el año: son muchas lecturas)
@@ -385,7 +396,7 @@
   function saveCache() {
     if (!A.role || !(A.me.asg || (A.me.routines && A.me.routines.length))) return;
     A.me.savedAt = Date.now();
-    LS.set(cacheKey(), JSON.stringify({ asg: A.me.asg, week: A.me.week, adj: A.me.adj, done: A.me.done, routines: A.me.routines, names: A.names, stages: A.stages, savedAt: A.me.savedAt, planName: A.me.planName || '' }));
+    LS.set(cacheKey(), JSON.stringify({ asg: A.me.asg, week: A.me.week, adj: A.me.adj, done: A.me.done, routines: A.me.routines, names: A.names, stages: A.stages, savedAt: A.me.savedAt, planName: A.me.planName || '', planWeeks: A.me.planWeeks || 0 }));
   }
 
   /* ---------- Sesiones cumplidas (se envían con la hora del servidor; si no hay conexión quedan en cola) ---------- */
@@ -550,7 +561,8 @@
       (need ? `<li>${ck(!miss.length)}<span>Sesiones cumplidas: ${nS - miss.length} de ${nS}${miss.length ? ' · falta' + (miss.length === 1 ? ' ' : 'n ') + esc(miss.map(k => dayLabel((w.sessions[k] || {}).day) || 'sesión ' + (k + 1)).join(', ')) : ''}</span></li>` : '') +
       `<li>${ck(cutOk)}<span>Corte: ${esc(fmtCut(a.weekEndsAt))}${cutOk ? ' · ya pasó' : ''}</span></li></ul>` +
       (miss.length ? '<small class="muted">Una sesión cuenta como cumplida cuando la inicias desde esta semana (botón «Iniciar») y la terminas con al menos una serie hecha.</small>' : '');
-    h += `<div class="card sec"><span class="eyebrow">Cambiar de semana</span><p class="muted">${st.ok ? 'Cumpliste todas las sesiones y ya pasó el corte: puedes pasar a la semana siguiente.' : esc(st.why)}</p>` + conds +
+    const broken = st.last && m.planWeeks > 0 && w.week < m.planWeeks;   // el plan tiene más semanas, pero esta no está enlazada con la siguiente
+    h += `<div class="card sec"><span class="eyebrow">Cambiar de semana</span><p class="muted">${st.ok ? 'Cumpliste todas las sesiones y ya pasó el corte: puedes pasar a la semana siguiente.' : broken ? 'Esta semana no está enlazada con la siguiente en el plan (tiene ' + m.planWeeks + ' semanas). Se corrige sola cuando tu entrenador abra la app; mientras tanto, él puede moverte a la semana siguiente desde «Equipo».' : esc(st.why)}</p>` + conds +
       `<div class="actions"><button class="btn ghost block" data-act="as-advance"${st.ok && !A.busy ? '' : ' disabled'}>${A.busy || 'Pasar a la semana siguiente'}</button></div></div>`;
     return h;
   }

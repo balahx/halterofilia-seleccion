@@ -102,6 +102,11 @@ const WEEKS = {
   ok(await page.locator('details.rt-prev').first().evaluate(e => e.open), 'queda abierta al redibujar');
   await shot('02-rutina');
 
+  console.log('5. Semana sin enlace a la siguiente (4.19.1): lo dice claro');
+  await page.evaluate(({ today, other }) => { const w = JSON.parse(JSON.stringify(__fake.srv().docs['plans/p1/weeks/e1_1'])); w.next = ''; __fake.admin('plans/p1/weeks/e1_1', w); }, { today, other });
+  await page.reload(); await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(1200); await tab('semana'); await page.waitForTimeout(400);
+  ok(/no está enlazada con la siguiente en el plan \(tiene 2 semanas\)/.test(await txt('#view')), 'avisa que la semana no está enlazada y qué hacer');
+
   await br.close(); srv.close();
   ok(errors.length === 0, 'sin errores en consola' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
   console.log(fails ? '\nFALLAS: ' + fails : '\nTodo bien'); process.exit(fails ? 1 : 0);

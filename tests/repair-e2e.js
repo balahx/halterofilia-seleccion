@@ -60,9 +60,10 @@ const WEEKS = {
     { block: 'Fortalecimiento', tag: '', raw: 'dorsal banco romano', presc: '70% 10-12repsX2', inline: null, alts: [{ p: [{ src: 'dorsal banco romano', ex: 'back-ext', mult: 1, max: false }] }], sets: [{ pct: 70, reps: '10-12', sets: 2 }] }] }] };
   await page.evaluate(({ OLD, u, c }) => {
     ['snatch', 'jerk', 'jerk-balance', 'split-jerk', 'clean-deadlift', 'core-training', 'plank', 'back-ext'].forEach(id => __fake.admin('exercises/' + id, { en: id, es: id, aliases: [] }));
-    __fake.admin('plans/p1', { name: 'Plan 2026', year: 2026, format: 'cristian', stages: 1, weeks: 1, createdAt: Date.now() });
+    __fake.admin('plans/p1', { name: 'Plan 2026', year: 2026, format: 'cristian', stages: 1, weeks: 2, createdAt: Date.now() });
     __fake.admin('plans/p1/stages/e1', { name: 'Competitivo', order: 1 });
-    __fake.admin('plans/p1/weeks/e1_28', OLD);
+    __fake.admin('plans/p1/weeks/e1_28', OLD);   // sin «next» aunque existe la semana 29 (4.19.1)
+    __fake.admin('plans/p1/weeks/e1_29', { stageId: 'e1', week: 29, label: '', kind: '', notes: [], next: '', sessions: [{ day: 1, name: 'Lunes', items: [{ block: '', tag: '', raw: 'AA', presc: '70% 3X3', inline: null, alts: [{ p: [{ src: 'AA', ex: 'snatch', mult: 1, max: false }] }], sets: [{ pct: 70, reps: '3', sets: 3 }] }] }] });
     __fake.admin('assignments/' + u, { planId: 'p1', weekId: 'e1_28', week: 28, stageId: 'e1', weekEndsAt: Date.now() + 5 * 86400000, setBy: c });
     __fake.admin('adjustments/' + u + '_p1_e1_28', { pcts: { s0_i2_k2: 97 }, at: Date.now() });
   }, { OLD, u: auid, c: cuid });
@@ -79,6 +80,7 @@ const WEEKS = {
   ok(items[2].sets.map(x => x.pct + 'x' + x.sets).join(' ') === '85x1 70x1', 'clean deadlift: 1 serie al 85 % y 1 al 70 % (antes 170 series)');
   ok(d['adjustments/' + auid + '_p1_e1_28'].pcts.s0_i3_k2 === 97 && !d['adjustments/' + auid + '_p1_e1_28'].pcts.s0_i2_k2, 'el ajuste del 95 % del arranque sigue en su ejercicio (bajó una posición)');
   ok(d['plans/p1'].name === 'Plan 2026' && d['assignments/' + auid].weekId === 'e1_28', 'el plan y la semana asignada siguen igual');
+  ok(w.next === 'e1_29' && d['plans/p1/weeks/e1_29'].next === '', 'la semana 28 queda enlazada con la 29 (la última sigue sin siguiente)');
   await page.waitForTimeout(1200);
   const f = (await docs())['plans/p1/fast/all'];
   ok(f && f.v.indexOf('p1|') === 0 && f.v !== 'p1|0|1', 'el documento único se arma con el plan corregido');
