@@ -58,5 +58,31 @@ ok(g.left === 10 && g.weeks === 10 && Math.abs(g.need - 10 / 6) < 1e-9, 'meta: f
 ok(A.goalInfo(95, 90, '', 1, t0).done === true, 'meta lograda');
 ok(A.goalInfo(80, 90, '', 0, t0).weeks === null, 'sin tendencia, no se inventa un plazo');
 ok(A.goalInfo(0, 90, '', 1, t0) === null, 'sin máximo no hay meta que medir');
+// ---- 4.20.0: resumen semanal, muro de marcas, fichas y mini-tendencias
+{
+  const mk = (id, date, at, sets, extra) => Object.assign({ id: id, date: date, startedAt: at - 3600e3, endedAt: at, items: [{ exId: 'snatch', sets: sets.map(([kg, reps]) => ({ kg: kg, reps: String(reps), done: true })) }] }, extra || {});
+  const T = d => new Date(d + 'T12:00:00').getTime();
+  const ss = [
+    mk('a', '2026-11-02', T('2026-11-02'), [[60, 3], [65, 1]]),            // base: no es marca
+    mk('b', '2026-11-04', T('2026-11-04'), [[70, 1]]),                      // marca a 1 rep (65 → 70)
+    mk('c', '2026-11-06', T('2026-11-06'), [[66, 3]]),                      // 1RM estimado ≈ 71,9 > 70 + 0,4 → marca
+    mk('d', '2026-11-10', T('2026-11-10'), [[69, 1], [60, 3]], { rpe: 7 }), // nada nuevo
+    mk('e', '2026-11-11', T('2026-11-11'), [[72, 1]])                       // marca a 1 rep
+  ];
+  const rec = A.recordsTimeline(ss, () => true);
+  ok(rec.length === 3 && rec[0].sessId === 'e' && rec[0].kind === 'single' && rec[0].before === 70, 'muro: 3 marcas, la más reciente primero, con lo de antes');
+  ok(rec[1].kind === 'e1rm' && rec[1].set.kg === 66 && rec[2].sessId === 'b', 'muro: marca de 1RM estimado con su serie; la primera sesión es la base');
+  ok(A.recordsTimeline(ss, id => id !== 'snatch').length === 0, 'muro: solo ejercicios con kilos');
+  const now = new Date('2026-11-11T18:00:00');   // miércoles
+  const w = A.weekSummary(ss, now, { done: 2, total: 4 });
+  ok(w.cur.n === 2 && w.prev.n === 2 && w.metric === 'kg', 'semana a esta altura (lun–mié) frente a la anterior (lun–mié); sin RPE en ambas → tonelaje');
+  ok(Math.round(w.ch) === Math.round(((69 + 180 + 72) - (180 + 65 + 70)) / (180 + 65 + 70) * 100) && w.plan.total === 4, 'cambio en % y sesiones del plan');
+  ok(A.weekSummary(ss, new Date('2026-11-18T10:00:00'), null).cur.n === 0, 'semana sin entrenar');
+  const last = A.lastSessionsOf(ss, 'snatch', 2);
+  ok(last.length === 2 && last[0].id === 'e' && last[1].best.kg === 69 && last[1].sets === 2, 'últimas sesiones: mejor serie y series hechas');
+  ok(A.bestSetOf(ss, 'snatch', '2026-11-05').kg === 72, 'mejor serie desde una fecha');
+  ok(A.sparkPoints([1], 100, 20) === '' && A.sparkPoints([70, 75], 100, 20) === '2.0,18.0 98.0,2.0', 'mini-tendencia: puntos');
+  ok(A.trendText([70, 74], 6) === 'sube 4 kg en 6 semanas' && A.trendText([70, 70.2], 3) === 'estable en 3 semanas' && A.trendText([75, 70], 1) === 'baja 5 kg en 1 semana', 'mini-tendencia: frase');
+}
 console.log(fails ? 'HAY FALLAS' : 'Todo bien'); process.exit(fails ? 1 : 0);
 })();
