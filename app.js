@@ -1,5 +1,5 @@
 /* App Halterofilia · selección. Código de la aplicación (sin paso de compilación). Módulo ES: lógica pura en js/logic.js, datos base en js/data.js, íconos en js/icons.js y gráficos en js/charts.js. */
-import { DAYS_SHORT, DAYS_LONG, PLATES, PLATE_COLOR, ZONES, esc, parseNum, roundTo, fmtNum, fmtTime, fmtClock, fmtDur, ymd, parseYmd, addDays, weekdayIdx, mondayOf, daysBetween, uid, mulberry32, parseReps, kRep, e1rm, weightForReps, zoneOf, platesFor, setE1rm, setTon, sessionStats, WEIGHT_CATS, SEX_LABEL, catOptions, categoryOf, catText, catSortKey, sessionDurMin, sessionRpe, sessionLoad, doneSets, planCount, periodStats, complianceByExercise, RATIOS, ratiosOf, goalInfo, weeklyBest, topSingle, bestSetE1rm, project, shortDate } from './js/logic.js';
+import { DAYS_SHORT, DAYS_LONG, PLATES, PLATE_COLOR, ZONES, esc, parseNum, roundTo, fmtNum, fmtTime, fmtClock, fmtDur, ymd, parseYmd, addDays, weekdayIdx, mondayOf, daysBetween, uid, mulberry32, parseReps, kRep, e1rm, weightForReps, zoneOf, platesFor, setE1rm, setTon, sessionStats, WEIGHT_CATS, SEX_LABEL, catOptions, categoryOf, catText, catSortKey, sessionDurMin, sessionRpe, sessionLoad, doneSets, planCount, periodStats, complianceByExercise, RATIOS, ratiosOf, goalInfo, weeklyBest, topSingle, bestSetE1rm, project, shortDate, weekSummary, recordsTimeline, lastSessionsOf, bestSetOf, sparkPoints, trendText } from './js/logic.js';
 import { svg, emptyHTML, errorHTML } from './js/icons.js';
 import { drawLine, drawBars } from './js/charts.js';
 import { CATS, MEAS, measOf, parseSecs, secsIn, fmtSecs, setReady, REST_OPTS, DEFAULT_PROFILE, EN_NAMES, defaultExercises, freshState, demoState, normalize } from './js/data.js';
@@ -380,7 +380,9 @@ function viewMax() {
     for (const e of list) {
       const est = bestSetE1rm(S.sessions, e.id, since);
       const better = est > e.max + 0.9;
+      const w12 = last12(e.id), sv = w12.map(p => p.y);   // mini-tendencia de 12 semanas (4.20.0)
       h += '<div class="mrow"><button class="mmain" data-act="edit-max" data-ex="' + esc(e.id) + '"><span class="mn">' + esc(nm(e)) + nmSub(e) + descHTML(e) + '</span><span class="mv">' + (e.max > 0 ? fmtNum(e.max, 1) + '<small> kg</small>' : '<small>definir</small>') + '</span></button>' +
+        (sv.length >= 2 ? '<span class="msp">' + sparkSVG(sv) + '<small>1RM estimado ' + esc(trendText(sv, spanWeeks(w12))) + '</small></span>' : '') +
         (est > 0 ? '<span class="me">mejor serie ≈ ' + fmtNum(est, 1) + '</span>' : '') +
         (better ? '<button class="btn ghost sm" data-act="use-est" data-ex="' + esc(e.id) + '">Usar ' + fmtNum(roundTo(est, S.profile.rounding), 1) + '</button>' : '') + goalHTML(e) + '</div>';
     }
@@ -428,15 +430,94 @@ function histRow(s) {
 function tableTwin(head, rows) {
   return '<details class="tv"><summary>Ver tabla</summary><div class="tv-s"><table><thead><tr>' + head.map(x => '<th scope="col">' + esc(x) + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div></details>';
 }
+/* ===== 4.20.0: progreso más cómodo (todo con datos del dispositivo: sin lecturas de la nube) ===== */
+const MAIN_LIFTS = ['snatch', 'cj', 'clean', 'jerk', 'bsq', 'fsq', 'ohsq'];   // levantamientos principales (muro de marcas)
+const isKgEx = id => { const e = S.exercises.find(x => x.id === id); return !!e && measOf(e) === 'kg' && !isComplex(e); };
+const kgTxt = v => fmtNum(v, 1) + ' kg';
+function agoTxt(dateYmd) {
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const d = daysBetween(parseYmd(dateYmd), t0);
+  if (d <= 0) return 'hoy'; if (d === 1) return 'ayer'; if (d < 7) return 'hace ' + d + ' días';
+  if (d < 63) { const w = Math.round(d / 7); return 'hace ' + w + (w === 1 ? ' semana' : ' semanas'); }
+  return 'el ' + shortDate(parseYmd(dateYmd)) + (parseYmd(dateYmd).getFullYear() !== t0.getFullYear() ? ' de ' + parseYmd(dateYmd).getFullYear() : '');
+}
+function sparkSVG(vals, cls) {
+  const pts = sparkPoints(vals, 120, 32); if (!pts) return '';
+  const last = pts.split(' ').pop().split(',');
+  return '<svg class="spark' + (cls ? ' ' + cls : '') + '" viewBox="0 0 120 32" aria-hidden="true" focusable="false"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="' + last[0] + '" cy="' + last[1] + '" r="3" fill="currentColor"/></svg>';
+}
+/* Últimas 12 semanas del 1RM estimado semanal de un ejercicio (para las mini-tendencias) */
+function last12(exId) { const since = ymd(mondayOf(addDays(new Date(), -77))); return weeklyBest(S.sessions, exId).filter(p => p.week >= since); }
+const spanWeeks = w => w.length >= 2 ? Math.max(1, Math.round(daysBetween(parseYmd(w[0].week), parseYmd(w[w.length - 1].week)) / 7)) : 0;
+
+/* 1. «Esta semana» en palabras */
+function weekSummaryHTML(recs) {
+  const HA = window.HalterAssign, wp = HA && HA.weekProgress ? HA.weekProgress() : null;
+  const ws = weekSummary(S.sessions, new Date(), wp), c = ws.cur, mk = recs.filter(r => r.date >= ws.from).length;
+  const what = ws.metric === 'ua' ? 'carga' : 'tonelaje';
+  let txt;
+  if (!c.n) txt = 'Aún no entrenas esta semana' + (ws.prev.n ? '; la semana pasada a esta altura llevabas ' + ws.prev.n + (ws.prev.n === 1 ? ' sesión' : ' sesiones') : '') + '.';
+  else {
+    const parts = [ws.plan ? ws.plan.done + ' de ' + ws.plan.total + ' sesiones del plan' : c.n + (c.n === 1 ? ' sesión' : ' sesiones')];
+    if (ws.ch != null) parts.push(Math.abs(ws.ch) < 1 ? 'el mismo ' + what + ' que la semana pasada a esta altura' : fmtNum(Math.abs(ws.ch), 0) + ' % ' + (ws.ch > 0 ? 'más' : 'menos') + ' ' + what + ' que la semana pasada a esta altura');
+    else if (ws.value > 0 && !ws.before) parts.push('la semana pasada a esta altura no habías entrenado');
+    if (mk) parts.push(mk + (mk === 1 ? ' marca nueva' : ' marcas nuevas'));
+    txt = 'Esta semana: ' + (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' y ' + parts[parts.length - 1] : parts[0]) + '.';
+  }
+  const arrow = ws.ch == null ? '' : ws.ch >= 1 ? ' ↑' : ws.ch <= -1 ? ' ↓' : '';
+  const big = ws.metric === 'ua' && ws.ch != null && ws.ch > 30;
+  return '<section class="card sec wsum" aria-label="Esta semana"><p class="eyebrow gd">Esta semana</p><p class="wsum-t">' + esc(txt) + '</p>' +
+    '<div class="stats mini"><div>' + statB(ws.plan ? ws.plan.done + '/' + ws.plan.total : String(c.n)) + '<span>' + (ws.plan ? 'sesiones del plan' : c.n === 1 ? 'sesión' : 'sesiones') + '</span></div>' +
+    '<div>' + statB(c.cump != null ? fmtNum(c.cump, 0) + ' %' : '–') + '<span>cumplimiento</span></div>' +
+    '<div>' + statB(ws.value > 0 ? fmtNum(ws.value, 0) + arrow : '–') + '<span>' + (ws.metric === 'ua' ? 'carga (UA)' : 'tonelaje (kg)') + '</span></div></div>' +
+    (big ? '<p class="warn-t">Es un salto grande de carga: conviene que lo veas con tu entrenador.</p>' : '') +
+    (ws.metric === 'kg' && c.n ? '<p class="muted small">Se compara el tonelaje porque falta el RPE en alguna de las dos semanas.</p>' : '') + '</section>';
+}
+
+/* 2a. Fichas de arranque y dos tiempos */
+function liftCardsHTML(cutYmd) {
+  let h = '';
+  for (const id of ['snatch', 'cj']) {
+    const e = S.exercises.find(x => x.id === id); if (!e) continue;
+    const last = lastSessionsOf(S.sessions, id, 5); if (!last.length) continue;
+    const best = bestSetOf(S.sessions, id, cutYmd), w12 = last12(id), vals = w12.map(p => p.y);
+    const gi = e.goal > 0 && e.max > 0 ? goalInfo(e.max, e.goal, e.goalDate, slopeOf(id), new Date()) : null;
+    h += '<article class="card sec lift"><div class="lift-h"><div><p class="eyebrow">' + esc(nm(e)) + '</p><p class="lift-max">' + (e.max > 0 ? fmtNum(e.max, 1) + ' <small>kg máximo</small>' : '<small>sin máximo</small>') + '</p></div>' +
+      (vals.length >= 2 ? '<div class="lift-sp">' + sparkSVG(vals) + '<small>1RM estimado: ' + esc(trendText(vals, spanWeeks(w12))) + '</small></div>' : '') + '</div>' +
+      (best ? '<p class="muted">Mejor serie de las últimas ' + ui.range + ' semanas: <b>' + fmtNum(best.kg, 1) + ' kg × ' + esc(best.reps) + '</b> (≈ ' + kgTxt(best.e1rm) + ' de 1RM)</p>' : '') +
+      (gi ? '<p class="muted">' + (gi.done ? '¡Meta de ' + kgTxt(gi.goal) + ' lograda!' : 'Meta ' + kgTxt(gi.goal) + ' · faltan ' + kgTxt(gi.left)) + '</p>' : '') +
+      '<ul class="plain lift-last" aria-label="Últimas sesiones">' + last.map(x => '<li><span>' + esc(shortDate(parseYmd(x.date))) + '</span><span>' + (x.best ? 'mejor ' + fmtNum(x.best.kg, 1) + ' kg × ' + esc(x.best.reps) : '—') + '</span><span>' + x.sets + (x.sets === 1 ? ' serie' : ' series') + '</span></li>').join('') + '</ul>' +
+      '<div class="row-end"><button class="btn ghost sm" data-act="prog-ex" data-ex="' + esc(id) + '">Ver en el gráfico</button></div></article>';
+  }
+  return h ? '<section class="sec"><h2>Tus levantamientos</h2>' + h + '</section>' : '';
+}
+
+/* 3. Muro de marcas */
+function recordsHTML(recs) {
+  const list = ui.recAll ? recs : recs.filter(r => MAIN_LIFTS.indexOf(r.exId) >= 0), shown = list.slice(0, ui.recN || 10);
+  let h = '<section class="sec"><div class="sec-h"><h2>Tus marcas</h2><button class="pill" data-act="rec-all" aria-pressed="' + !!ui.recAll + '">Todos los ejercicios</button></div>' +
+    '<p class="muted">Cada vez que superaste tu mejor peso a 1 repetición o tu 1RM estimado. ' + (ui.recAll ? 'Todos los ejercicios con kilos.' : 'Levantamientos principales.') + '</p>';
+  if (!shown.length) return h + '<p class="muted">' + (recs.length ? 'Aún no hay marcas en los levantamientos principales.' : 'Aún no hay marcas: aparecen cuando superas lo que ya habías registrado.') + '</p></section>';
+  h += '<ul class="plain recwall">' + shown.map(r => {
+    const t = r.kind === 'single' ? kgTxt(r.kg) + ' a 1 rep' : '1RM estimado ' + kgTxt(r.kg) + (r.set ? ' (' + fmtNum(r.set.kg, 1) + ' × ' + r.set.reps + ')' : '');
+    return '<li><button class="rec-b" data-act="rec-open" data-id="' + esc(r.sessId) + '">' + svg('trophy') + '<span><b>' + esc(nm(ex(r.exId))) + ' · ' + esc(t) + '</b><small>' + esc(agoTxt(r.date)) + ' · antes ' + esc(kgTxt(r.before)) + '</small></span></button></li>';
+  }).join('') + '</ul>';
+  if (list.length > shown.length) h += '<div class="row-end"><button class="btn ghost sm" data-act="rec-more">Ver más</button></div>';
+  return h + '</section>';
+}
+
 function viewProg() {
   ui.charts = {};
   const now = new Date(), cutYmd = ymd(addDays(now, -ui.range * 7));
   const all = endedSessions(), ss = all.filter(s => s.date >= cutYmd);
   let h = '<section class="sec"><h1>Progreso</h1><div class="rangebar" role="group" aria-label="Período">' + [4, 8, 12].map(n => '<button class="pill" data-act="range" data-v="' + n + '" aria-pressed="' + (ui.range === n) + '">' + n + ' semanas</button>').join('') + '</div></section>';
+  if (all.length) { const recs = recordsTimeline(S.sessions, isKgEx); h = '<section class="sec"><h1>Progreso</h1></section>' + weekSummaryHTML(recs) + h.replace('<section class="sec"><h1>Progreso</h1>', '<section class="sec">'); ui._recs = recs; }
   if (!all.length) return h + emptyHTML('prog', 'Aún no hay sesiones', 'Cuando termines tu primera sesión aquí verás tu tonelaje, tus intensidades y la proyección de tus máximos.', '<button class="btn" data-act="tab" data-tab="hoy">Ir a Hoy</button>');
   const tot = { ton: 0, sets: 0, reps: 0 };
   ss.forEach(s => { const t = sessionStats(s); tot.ton += t.ton; tot.sets += t.sets; tot.reps += t.reps; });
   h += '<section class="stats" aria-label="Resumen del período"><div>' + statB(ss.length) + '<span>sesiones</span></div><div>' + statB(fmtNum(tot.sets, 0)) + '<span>series</span></div><div>' + statB(fmtNum(tot.ton, 0)) + '<span>kg de tonelaje</span></div></section>';
+
+  h += liftCardsHTML(cutYmd) + recordsHTML(ui._recs || []);
 
   /* 1RM estimado semanal + proyección */
   const withData = S.exercises.filter(e => weeklyBest(S.sessions, e.id).length);
@@ -447,7 +528,7 @@ function viewProg() {
     const b0 = parseYmd(base[0].week);
     const pr = project(base.map(p => ({ x: daysBetween(b0, parseYmd(p.week)) / 7, y: p.y })));
     const e = ex(ui.progEx);
-    h += '<section class="sec"><div class="sec-h"><h2>1RM estimado</h2><select class="sel" id="progEx" data-f="progEx" aria-label="Ejercicio">' + withData.map(x => '<option value="' + esc(x.id) + '"' + (x.id === ui.progEx ? ' selected' : '') + '>' + esc(nm(x)) + '</option>').join('') + '</select></div>' +
+    h += '<section class="sec" id="c1sec"><div class="sec-h"><h2>1RM estimado</h2><select class="sel" id="progEx" data-f="progEx" aria-label="Ejercicio">' + withData.map(x => '<option value="' + esc(x.id) + '"' + (x.id === ui.progEx ? ' selected' : '') + '>' + esc(nm(x)) + '</option>').join('') + '</select></div>' +
       '<p class="muted">Mejor serie de cada semana. Con pocas repeticiones es un piso, no tu máximo real.</p>';
     const pts = shown.map(p => ({ t: parseYmd(p.week), y: p.y, label: 'Semana del ' + shortDate(parseYmd(p.week)) }));
     let proj = null;
@@ -1123,6 +1204,15 @@ document.addEventListener('click', e => {
     case 't-mode': setMode(t.dataset.v); break;
     case 'dock-min': ui.dockMin = !ui.dockMin; renderDock(); break;
     case 'range': ui.range = +t.dataset.v; render(); break;
+    case 'prog-ex': { ui.progEx = t.dataset.ex; render(); const c = document.getElementById('c1sec'); if (c) c.scrollIntoView({ block: 'start' }); break; }
+    case 'rec-all': ui.recAll = !ui.recAll; ui.recN = 10; render(); break;
+    case 'rec-more': ui.recN = (ui.recN || 10) + 10; render(); break;
+    case 'rec-open': {
+      const id = t.dataset.id, list = endedSessions().sort((a, b) => b.endedAt - a.endedAt), i = list.findIndex(x => x.id === id);
+      if (i < 0) break;
+      ui.tab = 'hist'; ui.openSess = id; ui.histN = Math.max(ui.histN, Math.ceil((i + 1) / 10) * 10); render();
+      const b = document.querySelector('[data-act="hist-toggle"][data-id="' + id + '"]'); if (b) b.scrollIntoView({ block: 'center' }); else window.scrollTo(0, 0);
+      break; }
     case 'hist-toggle': ui.openSess = ui.openSess === t.dataset.id ? null : t.dataset.id; render(); break;
     case 'hist-more': ui.histN += 10; render(); break;
     case 'del-sess': {

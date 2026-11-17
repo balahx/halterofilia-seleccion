@@ -2,6 +2,12 @@
    Imita Auth + Firestore con las mismas reglas que firestore.rules y guarda su estado en localStorage,
    así sobrevive a recargas de página igual que una sesión real. */
 (function () {
+  /* 4.19.0 pliega en «Semana» los días que no son hoy. Las pruebas que no tratan de eso los abren solas para que su resultado
+     no dependa del día de la semana en que se corren (una prueba puede poner window.__keepFolds = true para verlos plegados). */
+  try {
+    new MutationObserver(() => { if (window.__keepFolds) return; document.querySelectorAll('details.fold:not([open])').forEach(d => { d.open = true; }); })
+      .observe(document, { childList: true, subtree: true });
+  } catch (e) { /* sin MutationObserver: nada */ }
   const L = localStorage;
   const rd = () => JSON.parse(L.getItem('fake.srv') || '{"docs":{},"users":{},"n":0}');
   const wr = s => L.setItem('fake.srv', JSON.stringify(s));

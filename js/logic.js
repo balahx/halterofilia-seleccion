@@ -309,3 +309,85 @@ export function project(pts) {
 /* Fecha corta en español de Chile («5 nov») */
 export const fmtShort = new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short' });
 export function shortDate(d) { return fmtShort.format(d).replace('.', ''); }
+
+/* ===== 4.20.0: resumen semanal en palabras, muro de marcas y progreso por ejercicio (todo con datos locales) ===== */
+
+/* «Esta semana» (lunes → hoy) frente a la semana pasada hasta el mismo día. La carga se compara en UA (duración × RPE) si
+   ambas semanas la tienen; si no, en tonelaje. plan = { done, total } de la semana asignada (o null). */
+export function weekSummary(sessions, now, plan) {
+  const mon = mondayOf(now), k0 = ymd(mon), k1 = ymd(addDays(now, 1)), p0 = ymd(addDays(mon, -7)), p1 = ymd(addDays(now, -6));
+  const cur = periodStats(sessions, k0, k1), prev = periodStats(sessions, p0, p1);
+  const ua = cur.load > 0 && prev.load > 0, metric = ua ? 'ua' : 'kg';
+  const a = ua ? cur.load : cur.ton, b = ua ? prev.load : prev.ton;
+  const ch = b > 0 && a > 0 ? (a - b) / b * 100 : null;
+  return { cur: cur, prev: prev, metric: metric, value: a, before: b, ch: ch, plan: plan && plan.total > 0 ? plan : null, from: k0 };
+}
+
+/* Marcas en el tiempo: misma regla que «Marcas de hoy» al terminar una sesión. Por cada sesión (en orden), un ejercicio
+   marca si su mejor peso a 1 repetición supera el anterior, o si no, si su 1RM estimado supera el anterior en más de 0,4 kg.
+   La primera vez de cada ejercicio es la base (no es marca). isKg(exId) decide qué ejercicios cuentan (los medidos en kilos). */
+export function recordsTimeline(sessions, isKg) {
+  const list = sessions.filter(s => s.endedAt).slice().sort((a, b) => a.endedAt - b.endedAt);
+  const bestS = {}, bestE = {}, out = [];
+  for (const s of list) {
+    for (const it of s.items || []) {
+      if (isKg && !isKg(it.exId)) continue;
+      let single = 0, best = 0, bestSet = null;
+      for (const st of it.sets || []) {
+        if (!st.done || st.miss) continue;
+        const r = parseReps(st.reps), kg = parseNum(st.kg);
+        if (r.total === 1 && !r.complex && kg > single) single = kg;
+        const v = setE1rm(st); if (v > best) { best = v; bestSet = st; }
+      }
+      const ps = bestS[it.exId] || 0, pb = bestE[it.exId] || 0;
+      if (single > 0 && ps > 0 && single > ps) out.push({ exId: it.exId, kind: 'single', kg: single, before: ps, date: s.date, at: s.endedAt, sessId: s.id });
+      else if (best > 0 && pb > 0 && best > pb + 0.4) out.push({ exId: it.exId, kind: 'e1rm', kg: best, before: pb, date: s.date, at: s.endedAt, sessId: s.id, set: bestSet ? { kg: parseNum(bestSet.kg), reps: String(bestSet.reps) } : null });
+      if (single > ps) bestS[it.exId] = single;
+      if (best > pb) bestE[it.exId] = best;
+    }
+  }
+  return out.reverse();   // lo más reciente primero
+}
+
+/* Últimas n sesiones con un ejercicio: fecha, mejor serie (por 1RM estimado) y series hechas */
+export function lastSessionsOf(sessions, exId, n) {
+  const out = [];
+  const list = sessions.filter(s => s.endedAt).slice().sort((a, b) => b.endedAt - a.endedAt);
+  for (const s of list) {
+    let best = null, bv = 0, done = 0;
+    for (const it of s.items || []) if (it.exId === exId) for (const st of it.sets || []) {
+      if (!st.done || st.miss) continue;
+      done++;
+      const v = setE1rm(st); if (v > bv) { bv = v; best = { kg: parseNum(st.kg), reps: String(st.reps) }; }
+    }
+    if (done) out.push({ id: s.id, date: s.date, best: best, e1rm: bv, sets: done });
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+/* Mejor serie desde una fecha (la de mayor 1RM estimado) */
+export function bestSetOf(sessions, exId, sinceYmd) {
+  let best = null, bv = 0;
+  for (const s of sessions) {
+    if (!s.endedAt || (sinceYmd && s.date < sinceYmd)) continue;
+    for (const it of s.items || []) if (it.exId === exId) for (const st of it.sets || []) {
+      if (!st.done) continue;
+      const v = setE1rm(st); if (v > bv) { bv = v; best = { kg: parseNum(st.kg), reps: String(st.reps), e1rm: v, date: s.date }; }
+    }
+  }
+  return best;
+}
+
+/* Mini-tendencia: puntos de una polilínea en una caja w × h (SVG) y una frase para lectores de pantalla */
+export function sparkPoints(vals, w, h) {
+  if (!vals || vals.length < 2) return '';
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1, pad = 2;
+  return vals.map((v, i) => (pad + i * (w - 2 * pad) / (vals.length - 1)).toFixed(1) + ',' + (h - pad - (v - lo) / span * (h - 2 * pad)).toFixed(1)).join(' ');
+}
+export function trendText(vals, weeks) {
+  if (!vals || vals.length < 2) return '';
+  const d = vals[vals.length - 1] - vals[0], per = weeks ? ' en ' + weeks + (weeks === 1 ? ' semana' : ' semanas') : '';
+  if (Math.abs(d) < 0.5) return 'estable' + per;
+  return (d > 0 ? 'sube ' : 'baja ') + fmtNum(Math.abs(d), 1) + ' kg' + per;
+}

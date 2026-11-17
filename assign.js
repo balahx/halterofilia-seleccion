@@ -891,6 +891,13 @@
 
   root.HalterAssign = {
     init: init, reset: reset, startCoach: startCoach, startAthlete: startAthlete, athleteView: athleteView, todayHTML: todayHTML, weekNotice: weekNotice, replaceDays: replaceDays, onFinish: onFinish, onDelete: onDelete, flush: flush,
+    /* 4.20.0: avance de la semana asignada para el resumen de Progreso (datos del dispositivo) */
+    weekProgress: () => {
+      const m = A.me, a = m && m.asg, w = m && m.week;
+      if (!a || !w || replacing() || w.kind === 'transition') return null;
+      const n = (w.sessions || []).length; if (!n) return null;
+      return { done: Object.keys(m.done || {}).filter(k => +k < n && m.done[k]).length, total: n };
+    },
     selected: () => A.sel, detail: detailHTML, planUsage: planUsage, MAX_PLANS: MAX_PLANS, summary: asgLine, isStale: isStale, stale: staleList, onAct: onAct, state: A, pure: pure
   };
 })(typeof window !== 'undefined' ? window : globalThis);

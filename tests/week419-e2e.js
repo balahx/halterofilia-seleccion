@@ -37,6 +37,7 @@ const WEEKS = {
   const remoteTry = (fn) => page.evaluate(async src => { try { await (new Function('r', 'return (async()=>{' + src + '})()'))(window.HALTER_REMOTE_FACTORY()); return 'ok'; } catch (e) { return e.code || String(e.message); } }, fn);
 
   console.log('0. Preparación');
+  await page.addInitScript(() => { window.__keepFolds = true; });   // esta prueba revisa los días plegados
   await page.goto(URL); await page.waitForSelector('#gForm');
   await signup('Cristian Mateluna', 'cristian@correo.cl');
   const cuid = await page.evaluate(() => __fake.uid('cristian@correo.cl'));
