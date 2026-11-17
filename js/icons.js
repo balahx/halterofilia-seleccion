@@ -20,6 +20,7 @@ export const IC = {
   pause: '<path d="M8 5.5v13M16 5.5v13" stroke-width="3"/>',
   reset: '<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5V9h4.5"/>',
   hist: '<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4.5V9h4.5"/><path d="M12 8v4.5l3 1.8"/>',
+  share: '<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M5 12v7.5h14V12"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 6H5v1.5A3 3 0 008 10.5M16 6h3v1.5a3 3 0 01-3 3M12 13v4M8.5 20h7M10 17h4"/>',
   warn: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5M12 17.2v.1"/>',
   scale: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 9.5a4.5 4.5 0 017 0M12 14l2-3"/>'

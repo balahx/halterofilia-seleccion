@@ -2,6 +2,7 @@
 import { DAYS_SHORT, DAYS_LONG, PLATES, PLATE_COLOR, ZONES, esc, parseNum, roundTo, fmtNum, fmtTime, fmtClock, fmtDur, ymd, parseYmd, addDays, weekdayIdx, mondayOf, daysBetween, uid, mulberry32, parseReps, kRep, e1rm, weightForReps, zoneOf, platesFor, setE1rm, setTon, sessionStats, WEIGHT_CATS, SEX_LABEL, catOptions, categoryOf, catText, catSortKey, sessionDurMin, sessionRpe, sessionLoad, doneSets, planCount, periodStats, complianceByExercise, RATIOS, ratiosOf, goalInfo, weeklyBest, topSingle, bestSetE1rm, project, shortDate, weekSummary, recordsTimeline, lastSessionsOf, bestSetOf, sparkPoints, trendText } from './js/logic.js';
 import { svg, emptyHTML, errorHTML } from './js/icons.js';
 import { drawLine, drawBars } from './js/charts.js';
+import { FORMATS, drawRecord, shareText, toBlob } from './js/share.js';
 import { CATS, MEAS, measOf, parseSecs, secsIn, fmtSecs, setReady, REST_OPTS, DEFAULT_PROFILE, EN_NAMES, defaultExercises, freshState, demoState, normalize } from './js/data.js';
 (function () {
 'use strict';
@@ -500,7 +501,8 @@ function recordsHTML(recs) {
   if (!shown.length) return h + '<p class="muted">' + (recs.length ? 'Aún no hay marcas en los levantamientos principales.' : 'Aún no hay marcas: aparecen cuando superas lo que ya habías registrado.') + '</p></section>';
   h += '<ul class="plain recwall">' + shown.map(r => {
     const t = r.kind === 'single' ? kgTxt(r.kg) + ' a 1 rep' : '1RM estimado ' + kgTxt(r.kg) + (r.set ? ' (' + fmtNum(r.set.kg, 1) + ' × ' + r.set.reps + ')' : '');
-    return '<li><button class="rec-b" data-act="rec-open" data-id="' + esc(r.sessId) + '">' + svg('trophy') + '<span><b>' + esc(nm(ex(r.exId))) + ' · ' + esc(t) + '</b><small>' + esc(agoTxt(r.date)) + ' · antes ' + esc(kgTxt(r.before)) + '</small></span></button></li>';
+    return '<li><button class="rec-b" data-act="rec-open" data-id="' + esc(r.sessId) + '">' + svg('trophy') + '<span><b>' + esc(nm(ex(r.exId))) + ' · ' + esc(t) + '</b><small>' + esc(agoTxt(r.date)) + ' · antes ' + esc(kgTxt(r.before)) + '</small></span></button>' +
+      '<button class="icon-btn rec-sh" data-act="rec-share" data-k="' + recs.indexOf(r) + '" aria-label="Compartir: ' + esc(nm(ex(r.exId)) + ' ' + t) + '">' + svg('share') + '</button></li>';
   }).join('') + '</ul>';
   if (list.length > shown.length) h += '<div class="row-end"><button class="btn ghost sm" data-act="rec-more">Ver más</button></div>';
   return h + '</section>';
@@ -858,18 +860,21 @@ function finalize(mode) {
   const skip = s.items.filter(it => !it.sets.length && it.p > 0).map(it => ({ exId: it.exId, p: it.p }));
   if (skip.length) s.skip = skip;
   s.items = s.items.filter(it => it.sets.length);
-  const prior = endedSessions(), records = [];
+  const prior = endedSessions(), records = [], recData = [];
   s.items.forEach(it => {
     const e = ex(it.exId), best = Math.max(0, ...it.sets.map(setE1rm)), pb = bestSetE1rm(prior, it.exId);
     const single = Math.max(0, ...it.sets.filter(x => { const r = parseReps(x.reps); return r.total === 1 && !r.complex && !x.miss; }).map(x => x.kg)), ps = topSingle(prior, it.exId);
-    if (single > 0 && ps > 0 && single > ps) records.push(nm(e) + ': ' + fmtNum(single, 1) + ' kg a 1 repetición (antes ' + fmtNum(ps, 1) + ')');
-    else if (best > 0 && pb > 0 && best > pb + 0.4) records.push(nm(e) + ': 1RM estimado ' + fmtNum(best, 1) + ' kg (antes ' + fmtNum(pb, 1) + ')');
+    if (single > 0 && ps > 0 && single > ps) { records.push(nm(e) + ': ' + fmtNum(single, 1) + ' kg a 1 repetición (antes ' + fmtNum(ps, 1) + ')'); recData.push({ exId: it.exId, kind: 'single', kg: single, before: ps, date: s.date, set: null }); }
+    else if (best > 0 && pb > 0 && best > pb + 0.4) {
+      const bs = it.sets.reduce((a, x) => setE1rm(x) > setE1rm(a || {}) ? x : a, null);
+      records.push(nm(e) + ': 1RM estimado ' + fmtNum(best, 1) + ' kg (antes ' + fmtNum(pb, 1) + ')'); recData.push({ exId: it.exId, kind: 'e1rm', kg: best, before: pb, date: s.date, set: bs ? { kg: parseNum(bs.kg), reps: String(bs.reps) } : null });
+    }
   });
   s.endedAt = Date.now();
   const stt = sessionStats(s), ps = periodStats([s], s.date, ymd(addDays(parseYmd(s.date), 1)));
   tPause(); tReset(); save(true); syncWake();
   if (APP.onFinish) { try { APP.onFinish(s); } catch (e) { /* no debe frenar el cierre de la sesión */ } }
-  openSheet('summary', { sum: { name: s.name, dur: (s.endedAt - s.startedAt) / 1000, sets: stt.sets, ton: stt.ton, records: records, plan: ps.planSets, done: ps.planDone, intAvg: ps.intAvg, min: sessionDurMin(s), rpe: sessionRpe(s), load: sessionLoad(s) } });
+  openSheet('summary', { sum: { name: s.name, dur: (s.endedAt - s.startedAt) / 1000, sets: stt.sets, ton: stt.ton, records: records, recData: recData, plan: ps.planSets, done: ps.planDone, intAvg: ps.intAvg, min: sessionDurMin(s), rpe: sessionRpe(s), load: sessionLoad(s) } });
   render();
 }
 function discardActive() {
@@ -917,6 +922,43 @@ function openSheet(kind, data) {
   if (!d.open) { try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
 }
 function closeSheet() { const d = $('#dlg'); ui.sheet = null; if (d.open) d.close(); }
+
+/* ===== 4.21.0: compartir una marca como imagen (historia o publicación), hecha en el teléfono ===== */
+function shareRec(r) { return { exName: nm(ex(r.exId)), kind: r.kind, kg: r.kg, before: r.before, date: r.date, set: r.set || null }; }
+function openShare(r) { openSheet('share', { rec: shareRec(r), fmt: (ui.shareFmt || 'story'), showName: false }); refreshShare(); }
+function shareSheetHTML(sh) {
+  const name = String((S.profile && S.profile.name) || '').trim(), r = sh.rec;
+  return '<div class="rangebar" role="group" aria-label="Formato">' + Object.keys(FORMATS).map(k => '<button class="pill" data-act="share-fmt" data-v="' + k + '" aria-pressed="' + (sh.fmt === k) + '">' + FORMATS[k].label + '</button>').join('') + '</div>' +
+    (name ? '<div class="rangebar"><button class="pill" data-act="share-name" aria-pressed="' + !!sh.showName + '">Mostrar mi nombre (' + esc(name) + ')</button></div>' : '') +
+    '<div class="share-pv ' + esc(sh.fmt) + '"><img id="shareImg" alt="Vista previa: nueva marca personal, ' + esc(r.exName) + ' ' + esc(fmtNum(r.kg, 1)) + ' kg"></div>' +
+    '<p class="muted small">La imagen se arma en tu teléfono. Solo muestra el ejercicio, los kilos, la mejora y la fecha' + (name ? '; tu nombre, solo si lo eliges' : '') + '. Nunca tu peso corporal.</p>' +
+    '<div class="stack"><button class="btn" data-act="share-go">' + svg('share') + ' Compartir</button><button class="btn ghost" data-act="share-dl">Descargar imagen</button></div>';
+}
+let shareUrl = null, shareSeq = 0;
+async function refreshShare() {
+  const sh = ui.sheet; if (!sh || sh.kind !== 'share') return;
+  const seq = ++shareSeq, cv = document.createElement('canvas');
+  try {
+    await drawRecord(cv, sh.rec, { fmt: sh.fmt, name: sh.showName ? (S.profile && S.profile.name) : '' });
+    const b = await toBlob(cv); if (seq !== shareSeq || !ui.sheet || ui.sheet.kind !== 'share') return;
+    if (shareUrl) URL.revokeObjectURL(shareUrl);
+    shareUrl = URL.createObjectURL(b); ui.shareBlob = b;
+    const im = document.getElementById('shareImg'); if (im) im.src = shareUrl;
+  } catch (e) { toast('No se pudo armar la imagen en este navegador.'); }
+}
+const shareFile = () => new File([ui.shareBlob], 'marca-wl-' + (ui.sheet.rec.date || '') + '.png', { type: 'image/png' });
+function shareDownload() {
+  if (!ui.shareBlob || !shareUrl) return;
+  const a = document.createElement('a'); a.href = shareUrl; a.download = shareFile().name; document.body.appendChild(a); a.click(); a.remove();
+  toast('Imagen descargada.');
+}
+async function shareGo() {
+  if (!ui.shareBlob) { toast('La imagen aún se está armando.'); return; }
+  const f = shareFile(), data = { files: [f], text: shareText(ui.sheet.rec) };
+  if (navigator.canShare && navigator.canShare({ files: [f] }) && navigator.share) {
+    try { await navigator.share(data); } catch (e) { if (e && e.name !== 'AbortError') shareDownload(); }
+  } else shareDownload();   // en el computador (o sin «compartir archivos»): se descarga
+}
 function pickList(q) {
   q = q.trim().toLowerCase();
   let h = '';
@@ -987,7 +1029,7 @@ function summaryHTML(d) {
   if (d.intAvg > 0) extra.push('Intensidad media: <b>' + fmtNum(d.intAvg, 0) + ' %</b> del máximo');
   if (d.plan > 0) extra.push('Cumplimiento: <b>' + fmtNum(d.done / d.plan * 100, 0) + ' %</b> (' + d.done + ' de ' + d.plan + ' series planificadas)');
   if (extra.length) h += '<ul class="recs">' + extra.map(x => '<li>' + x + '</li>').join('') + '</ul>';
-  h += d.records.length ? '<p class="eyebrow">Marcas de hoy</p><ul class="recs prs">' + d.records.map(r => '<li>' + svg('trophy') + '<span>' + esc(r) + '</span></li>').join('') + '</ul>' : '<p class="muted">Sin marcas nuevas hoy. La constancia también suma.</p>';
+  h += d.records.length ? '<p class="eyebrow">Marcas de hoy</p><ul class="recs prs">' + d.records.map((r, i) => '<li>' + svg('trophy') + '<span>' + esc(r) + '</span>' + (d.recData && d.recData[i] ? '<button class="icon-btn rec-sh" data-act="rec-share-today" data-i="' + i + '" aria-label="Compartir esta marca">' + svg('share') + '</button>' : '') + '</li>').join('') + '</ul>' : '<p class="muted">Sin marcas nuevas hoy. La constancia también suma.</p>';
   return h + '<div class="actions"><button class="btn" data-act="sheet-close">Listo</button><button class="lnk" data-act="to-prog">Ver progreso</button></div>';
 }
 function renderSheet() {
@@ -1004,6 +1046,7 @@ function renderSheet() {
     case 'plates': title = 'Discos'; body = platesBlock('s', sh.kg, sh.bar); break;
     case 'finish': title = 'Terminar sesión'; body = sh.empty ? '<p>No marcaste ninguna serie como hecha.</p><div class="actions"><button class="btn" data-act="discard">Descartar sesión</button><button class="btn ghost" data-act="sheet-close">Volver</button></div>' : '<p>Tienes <b>' + sh.pending + '</b> ' + (sh.pending === 1 ? 'serie sin marcar' : 'series sin marcar') + '.</p><div class="stack"><button class="btn" data-act="fin-mark">Marcarlas como hechas y terminar</button><button class="btn ghost" data-act="fin-drop">Descartarlas y terminar</button><button class="btn ghost" data-act="sheet-close">Volver a la sesión</button></div>'; break;
     case 'summary': title = 'Sesión terminada'; body = summaryHTML(sh.sum); break;
+    case 'share': title = 'Compartir marca'; body = shareSheetHTML(sh); break;
     case 'sex': title = 'Indica tu sexo'; body = '<p>Se usa para ubicarte en tu categoría de peso y comparar tus marcas con las de atletas de tu misma categoría. Solo lo ven tú y tu entrenador. Puedes cambiarlo después en Ajustes.</p><div class="stack"><button class="btn" data-act="set-sex" data-v="F">Femenino</button><button class="btn" data-act="set-sex" data-v="M">Masculino</button></div>'; break;
     case 'demo': title = 'Datos de ejemplo'; body = '<p>Estás viendo una cuenta de ejemplo. Para no mezclar tus marcas con las del ejemplo, empieza primero con tus datos.</p><div class="stack"><button class="btn" data-act="demo-clear">Empezar con mis datos</button><button class="btn ghost" data-act="sheet-close">Seguir mirando el ejemplo</button></div>'; break;
     case 'backup': title = 'Copia tu archivo'; body = '<p class="muted">Tu navegador no permite descargar desde aquí. Copia este texto y guárdalo en un archivo llamado <b>' + esc(sh.name) + '</b>.</p><textarea class="txt area" id="bkText" rows="8" readonly>' + esc(sh.text) + '</textarea><div class="actions"><button class="btn" data-act="copy-text">Copiar</button></div>'; break;
@@ -1204,6 +1247,12 @@ document.addEventListener('click', e => {
     case 't-mode': setMode(t.dataset.v); break;
     case 'dock-min': ui.dockMin = !ui.dockMin; renderDock(); break;
     case 'range': ui.range = +t.dataset.v; render(); break;
+    case 'rec-share': { const r = (ui._recs || [])[+t.dataset.k]; if (r) openShare(r); break; }
+    case 'rec-share-today': { const r = ui.sheet && ui.sheet.sum && ui.sheet.sum.recData && ui.sheet.sum.recData[+t.dataset.i]; if (r) openShare(r); break; }
+    case 'share-fmt': if (ui.sheet && ui.sheet.kind === 'share') { ui.sheet.fmt = ui.shareFmt = t.dataset.v; renderSheet(); refreshShare(); } break;
+    case 'share-name': if (ui.sheet && ui.sheet.kind === 'share') { ui.sheet.showName = !ui.sheet.showName; renderSheet(); refreshShare(); } break;
+    case 'share-go': shareGo(); break;
+    case 'share-dl': shareDownload(); break;
     case 'prog-ex': { ui.progEx = t.dataset.ex; render(); const c = document.getElementById('c1sec'); if (c) c.scrollIntoView({ block: 'start' }); break; }
     case 'rec-all': ui.recAll = !ui.recAll; ui.recN = 10; render(); break;
     case 'rec-more': ui.recN = (ui.recN || 10) + 10; render(); break;
@@ -1306,7 +1355,7 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.f && e.target.dataset.f !== 'impFile') onField(e.target); });
 document.addEventListener('change', e => {
   if (e.target.id === 'exCat' && $('#exMeas')) $('#exMeas').value = measOf({ cat: e.target.value });   // al cambiar la categoría propone cómo se mide
-  if (e.target.dataset && e.target.dataset.f === 'impFile') onField(e.target); });
+  if (e.target.dataset && e.target.dataset.f === 'impFile') onField(e.target);});
 
 /* ----- Inicio ----- */
 let started = false, tickId = null;

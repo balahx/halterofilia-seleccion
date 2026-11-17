@@ -569,6 +569,16 @@ details.rt-prev > summary { cursor: pointer; color: var(--focus); font-weight: 6
 .rec-b { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; padding: 10px 0; min-height: 44px; color: inherit; font: inherit; cursor: pointer; }
 .rec-b svg { color: var(--gold); flex: none; width: 22px; height: 22px; margin-top: 2px; }
 .rec-b small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+/* 4.21.0: compartir marca */
+.recwall li { display: flex; align-items: center; gap: 6px; }
+.recwall .rec-b { flex: 1; min-width: 0; }
+.rec-sh { flex: none; color: var(--focus); }
+.recs.prs li { display: flex; align-items: center; gap: 8px; }
+.recs.prs li > span { flex: 1; }
+.share-pv { display: flex; justify-content: center; margin: 12px 0; }
+.share-pv img { width: 100%; max-width: 280px; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.25); background: #0E1A2E; aspect-ratio: 1080 / 1920; }
+.share-pv.post img { aspect-ratio: 1080 / 1350; max-width: 320px; }
+.btn .ic { width: 18px; height: 18px; vertical-align: -3px; margin-right: 4px; }
 .person small.err-txt { display: block; margin-top: 4px; color: var(--bad); font-weight: 600; }
 .plan-tag { margin: 4px 0 8px; }
 .wknote.warn { background: var(--warn-bg); color: var(--warn-ink); border-left-color: transparent; }

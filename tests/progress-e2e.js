@@ -12,7 +12,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   const browser = await chromium.launch({  });
   const errs = [];
   const mk = async (scheme, w, h) => {
-    const ctx = await browser.newContext({ viewport: { width: w || 390, height: h || 844 }, deviceScaleFactor: 2, colorScheme: scheme || 'light' });
+    const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: w || 390, height: h || 844 }, deviceScaleFactor: 2, colorScheme: scheme || 'light' });
     await ctx.addInitScript(() => { window.HALTER_REMOTE_FACTORY = () => ({ init: () => new Promise(() => {}) }); }); /* la nube no responde: la prueba usa el modo local */
     const page = await ctx.newPage(); await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
     page.on('pageerror', e => errs.push('PAGEERROR ' + e.message));
@@ -52,8 +52,32 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log((c ? '  ✓ '
   ok((await page.getAttribute('[data-act="rec-all"]', 'aria-pressed')) === 'true', '«Todos los ejercicios» se puede activar');
   await page.click('[data-act="rec-all"]'); await page.waitForTimeout(200);
   const recSec = page.locator('section:has(.recwall)'); await recSec.scrollIntoViewIfNeeded(); await shot('02-marcas');
-  await wall.first().locator('button').click(); await page.waitForTimeout(300);
+  await wall.first().locator('.rec-b').click(); await page.waitForTimeout(300);
   ok(/Historial/.test(await txt('#view h1')) && await page.locator('.hist.open').count() === 1, 'tocar una marca abre esa sesión en el Historial');
+
+  console.log('3b. Compartir una marca (4.21.0)');
+  await page.click('[data-act="tab"][data-tab="prog"]'); await page.waitForTimeout(300);
+  await page.locator('.recwall [data-act="rec-share"]').first().click(); await page.waitForSelector('#dlg[open] #shareImg');
+  await page.waitForFunction(() => { const i = document.getElementById('shareImg'); return i && i.complete && i.naturalWidth > 0; }, null, { timeout: 8000 });
+  let dim = await page.evaluate(() => { const i = document.getElementById('shareImg'); return [i.naturalWidth, i.naturalHeight]; });
+  ok(/Compartir marca/.test(await txt('#dlg h2')) && dim.join('x') === '1080x1920', 'arma la imagen en formato historia (1080 × 1920)');
+  ok((await page.getAttribute('[data-act="share-name"]', 'aria-pressed')) === 'false', 'el nombre va apagado por defecto');
+  const img1 = await page.evaluate(() => { const i = document.getElementById('shareImg'), c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight; c.getContext('2d').drawImage(i, 0, 0); return Array.from(atob(c.toDataURL('image/png').split(',')[1]), ch => ch.charCodeAt(0)); });
+  require('fs').writeFileSync('tests/shots/prog-share-historia.png', Buffer.from(img1));
+  await page.click('[data-act="share-fmt"][data-v="post"]');
+  await page.waitForFunction(() => { const i = document.getElementById('shareImg'); return i && i.complete && i.naturalHeight === 1350; }, null, { timeout: 8000 });
+  ok(true, 'cambia a publicación (1080 × 1350)');
+  const before = await page.getAttribute('#shareImg', 'src');
+  await page.click('[data-act="share-name"]');
+  await page.waitForFunction(b => { const i = document.getElementById('shareImg'); return i && i.src && i.src !== b && i.complete && i.naturalHeight === 1350; }, before, { timeout: 8000 });
+  const img2 = await page.evaluate(() => { const i = document.getElementById('shareImg'), c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight; c.getContext('2d').drawImage(i, 0, 0); return Array.from(atob(c.toDataURL('image/png').split(',')[1]), ch => ch.charCodeAt(0)); });
+  require('fs').writeFileSync('tests/shots/prog-share-publicacion.png', Buffer.from(img2));
+  ok(img2.length > 20000, 'con el nombre, la imagen se vuelve a armar');
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('[data-act="share-dl"]')]);
+  ok(/^marca-wl-\d{4}-\d{2}-\d{2}\.png$/.test(dl.suggestedFilename()), 'descarga el PNG: ' + dl.suggestedFilename());
+  await shot('05-compartir');
+  await page.click('[data-act="share-go"]'); await page.waitForTimeout(400);   // en el computador de prueba no hay «compartir archivos»: descarga
+  await page.click('[data-act="sheet-close"]'); await page.waitForTimeout(200);
 
   console.log('4. Mini-tendencias en Máximos');
   await page.click('[data-act="tab"][data-tab="max"]'); await page.waitForTimeout(300);
