@@ -63,7 +63,10 @@ const WEEKS = {
     __fake.admin('plans/p1', { name: 'Plan 2026', year: 2026, format: 'cristian', stages: 1, weeks: 2, createdAt: Date.now() });
     __fake.admin('plans/p1/stages/e1', { name: 'Competitivo', order: 1 });
     __fake.admin('plans/p1/weeks/e1_28', OLD);   // sin «next» aunque existe la semana 29 (4.19.1)
-    __fake.admin('plans/p1/weeks/e1_29', { stageId: 'e1', week: 29, label: '', kind: '', notes: [], next: '', sessions: [{ day: 1, name: 'Lunes', items: [{ block: '', tag: '', raw: 'AA', presc: '70% 3X3', inline: null, alts: [{ p: [{ src: 'AA', ex: 'snatch', mult: 1, max: false }] }], sets: [{ pct: 70, reps: '3', sets: 3 }] }] }] });
+    const it29 = (raw, ex, block) => ({ block: block || '', tag: '', raw: raw, presc: '70% 3X3', inline: null, alts: [{ p: [{ src: raw, ex: ex, mult: 1, max: false }] }], sets: [{ pct: 70, reps: '3', sets: 3 }] });
+    __fake.admin('plans/p1/weeks/e1_29', { stageId: 'e1', week: 29, label: '', kind: '', notes: [], next: '', sessions: [{ day: 1, name: 'Lunes', items: [it29('AA fuerza Cadera', 'hip-power-snatch'),
+      it29('superior push', 'upper-body-push-exercises', 'Fortalecimiento'), it29('snatch press', 'snatch-press', 'Fortalecimiento'), it29('press frances barra parado', 'french-press', 'Fortalecimiento'), it29('pull up', 'pull-up', 'Fortalecimiento')] }] });
+    __fake.admin('exercises/hip-power-snatch', { en: 'Hip Power Snatch', es: 'Arranque de fuerza desde cadera', aliases: [] });
     __fake.admin('assignments/' + u, { planId: 'p1', weekId: 'e1_28', week: 28, stageId: 'e1', weekEndsAt: Date.now() + 5 * 86400000, setBy: c });
     __fake.admin('adjustments/' + u + '_p1_e1_28', { pcts: { s0_i2_k2: 97 }, at: Date.now() });
   }, { OLD, u: auid, c: cuid });
@@ -81,6 +84,10 @@ const WEEKS = {
   ok(d['adjustments/' + auid + '_p1_e1_28'].pcts.s0_i3_k2 === 97 && !d['adjustments/' + auid + '_p1_e1_28'].pcts.s0_i2_k2, 'el ajuste del 95 % del arranque sigue en su ejercicio (bajó una posición)');
   ok(d['plans/p1'].name === 'Plan 2026' && d['assignments/' + auid].weekId === 'e1_28', 'el plan y la semana asignada siguen igual');
   ok(w.next === 'e1_29' && d['plans/p1/weeks/e1_29'].next === '', 'la semana 28 queda enlazada con la 29 (la última sigue sin siguiente)');
+  const i29 = d['plans/p1/weeks/e1_29'].sessions[0].items;
+  ok(i29.length === 4 && !i29.some(x => x.raw === 'superior push'), '«superior push» deja de ser ejercicio (4.22.0)');
+  ok(i29[1].sub === 'Upper-Body Push Exercises' && i29[2].sub === 'Upper-Body Push Exercises' && !i29[3].sub && !i29[0].sub, '«Upper-Body Push Exercises» es el título de snatch press y del press francés, no del pull up');
+  ok(d['exercises/hip-power-snatch'].en === 'Muscle Snatch hip' && d['exercises/hip-power-snatch'].es === 'Arranque muscle desde cadera' && d['exercises/hip-power-snatch'].aliases.indexOf('Hip Power Snatch') >= 0, '«Hip Power Snatch» se llama ahora «Muscle Snatch hip» en el catálogo (mismo id; el nombre anterior queda como alias)');
   await page.waitForTimeout(1200);
   const f = (await docs())['plans/p1/fast/all'];
   ok(f && f.v.indexOf('p1|') === 0 && f.v !== 'p1|0|1', 'el documento único se arma con el plan corregido');
@@ -90,7 +97,11 @@ const WEEKS = {
   await logout();
 
   console.log('2. La atleta ve el plan corregido');
-  await login('ana@correo.cl'); await page.waitForTimeout(1200); await tab('semana');
+  await login('ana@correo.cl'); await page.waitForTimeout(600);
+  await page.evaluate(() => { const S = HalterApp.state(); S.exercises.push({ id: 'hip-power-snatch', name: 'Arranque de fuerza desde cadera', en: 'Hip Power Snatch', es: 'Arranque de fuerza desde cadera', cat: 'oly', rest: 120, max: 50, maxDate: null, builtin: false }); });
+  await page.reload(); await page.waitForSelector('#appRoot:not([hidden])'); await page.waitForTimeout(800);
+  const hp = await page.evaluate(() => HalterApp.state().exercises.find(e => e.id === 'hip-power-snatch'));
+  ok(hp && hp.en === 'Muscle Snatch hip' && hp.name === 'Arranque muscle desde cadera' && hp.max === 50, 'en el teléfono de la atleta el ejercicio toma el nombre nuevo y conserva su máximo'); await page.waitForTimeout(1200); await tab('semana');
   const v = await txt('#view');
   ok(/Opcional: 65 % · 3 rep × 2/.test(v), 've el 65 % como opcional');
   ok(/split-jerk/.test(v) && /100 %[\s\S]*105 %[\s\S]*110 %/.test(v), 've el desliz jerk con 100-105-110 %');

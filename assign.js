@@ -262,7 +262,7 @@
     if (root.HalterReads && root.HalterReads.useFast) root.HalterReads.useFast(false);   // el entrenador lee las piezas del plan y con ellas arma el documento único
     unsub.push(r.watchCol('assignments', list => { A.asg = {}; list.forEach(x => { A.asg[x.id] = x; }); migrateCuts(list); A.ready = true; if (A.sel) { watchAdj(); watchDone(); } rerender(); }, e => { A.err = H.err(e); A.ready = true; rerender(); }));
     /* Catálogo: con reads.js se baja una vez por versión del plan y se reutiliza (cloud.js lo pide igual y comparte la misma copia) */
-    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => newestPlan(), (list, m) => { setNames(list || []); if (list && !(m && m.fromCache)) { fast.cat = list; fast.catPlan = newestPlan(); Object.keys(A.plans).forEach(tryFast); } rerender(); }, () => { /* opcional */ })
+    unsub.push(root.HalterReads ? root.HalterReads.feedCatalog(r, () => newestPlan(), (list, m) => { setNames(list || []); if (list && !(m && m.fromCache)) { fast.cat = list; fast.catPlan = newestPlan(); if (!fixCatalog(list)) Object.keys(A.plans).forEach(tryFast); } rerender(); }, () => { /* opcional */ })
       : r.watchCol('exercises', list => { setNames(list); rerender(); }, () => { /* opcional */ }));
     /* Todos los planes publicados (hasta 6): cada uno con su copia local por versión; ya no hay «plan activo» */
     const onPlans = list => { A.planList = (list || []).slice(); A.planListOk = true; watchPlans(A.planList.map(x => x.id)); rerender(); };
@@ -303,6 +303,20 @@
       arr.push(r.watchCol('plans/' + planId + '/weeks', (list, m) => { wk = list; put(sg, wk, !(m && m.fromCache)); rerender(); }, () => { /* sin permiso o sin conexión */ }));
       arr.push(r.watchCol('plans/' + planId + '/stages', list => { sg = list; put(sg, wk, A.plans[planId].ok); rerender(); }, () => { /* idem */ }));
     });
+  }
+  /* Ejercicios renombrados (4.22.0, p. ej. «Hip Power Snatch» → «Muscle Snatch hip»): la app del entrenador actualiza el nombre en
+     el catálogo de la nube (mismo id) y renueva la versión del plan más reciente para que todos lo vean (1 lectura por atleta). */
+  let catFixing = false;
+  function fixCatalog(list) {
+    const I = root.PlanImport, ren = I && I.RENAMED, nw = newestPlan(), meta = (A.planList || []).find(x => x.id === nw);
+    if (!ren || !ren.length || catFixing || A.role !== 'coach' || !meta) return false;
+    const fix = ren.map(x => { const d = list.find(e => e.id === x.id); return d && (d.en !== x.en || d.es !== x.es) ? { id: x.id, data: { en: x.en, es: x.es, aliases: (d.aliases || []).concat(d.en !== x.en ? [d.en] : []).filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 20) } } : null; }).filter(Boolean);
+    if (!fix.length) return false;
+    catFixing = true;
+    H.remote().publishPlan({ planId: nw, meta: { name: meta.name, year: meta.year || (new Date()).getFullYear(), format: meta.format || '', stages: meta.stages || 0, weeks: meta.weeks || 0 }, stages: [], weeks: [], exercises: fix })
+      .then(() => { if (root.console) console.info('Catálogo: ' + fix.length + ' ejercicio(s) renombrado(s)'); })
+      .catch(() => { catFixing = false; /* se intenta la próxima vez */ });
+    return true;
   }
   /* Corrección automática de planes ya publicados (4.17.0): cada ejercicio guarda el texto de su prescripción («presc»), así que se
      vuelve a leer con el lector corregido (series pegadas al % siguiente, listas de %, opcionales entre paréntesis, «A / B» con

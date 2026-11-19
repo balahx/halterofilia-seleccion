@@ -38,7 +38,7 @@ ok(A.isFridayCut(fri) && !A.isFridayCut(fri + 2 * 86400000), 'se reconoce el cor
 ok(iso(A.fridayToSunday(fri)) === '2026-11-09T02:59:00.000Z', 'viernes 6-nov 23:59 → domingo 8-nov 23:59 = ' + iso(A.fridayToSunday(fri)));
 
 console.log('2. Ejercicios del catálogo con id propio en la app');
-const slugs = new Set(P.GLOSSARY.map(g => P.slug(g[1].replace(/\s*\(.*\)\s*$/, ''))));
+const slugs = new Set(P.GLOSSARY.map(g => g[3] || P.slug(g[1].replace(/\s*\(.*\)\s*$/, ''))));   // g[3]: id fijo de un ejercicio renombrado (4.22.0)
 Object.keys(A.LOCAL).forEach(k => ok(slugs.has(k), 'existe en el glosario: ' + k + ' → ' + A.LOCAL[k]));
 
 console.log('3. Series y ajuste desde 90 %');

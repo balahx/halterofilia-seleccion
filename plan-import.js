@@ -14,14 +14,15 @@
   'use strict';
 
   /* ---------- Glosario base (Glosario_Halterofilia_Felipe_2026) ---------- */
-  // «término de la planilla» | inglés | español.  Varios términos para el mismo ejercicio se separan con « / ».
+  // «término de la planilla» | inglés | español [| id fijo, cuando se renombra un ejercicio que ya está en planes publicados].
+  // Varios términos para el mismo ejercicio se separan con « / ».
   const GLOSSARY = [
     ['AA', 'Snatch', 'Arranque'],
     ['Final AA', 'Parallel-Thigh Snatch Balance (descriptive)', 'Final de arranque quinta'],
     ['Hiper AA', 'Deficit Snatch', 'Arranque sobre altura'],
     ['AA cad', 'Hip Snatch (to confirm)', 'Arranque desde cadera (confirmar)'],
     ['AA fuerza', 'Power Snatch', 'Arranque de fuerza'],
-    ['AA fuerza Cadera', 'Hip Power Snatch', 'Arranque de fuerza desde cadera'],
+    ['AA fuerza Cadera', 'Muscle Snatch hip', 'Arranque muscle desde cadera', 'hip-power-snatch'],   // 4.22.0: antes «Hip Power Snatch» (se conserva el id)
     ['AA fuerza hang', 'Hang Power Snatch', 'Arranque de fuerza desde suspensión'],
     ['AA balance / snatchbalance / balance', 'Snatch Balance', 'Balance de arranque'],
     ['heaving AA balance', 'Heaving Snatch Balance', 'Balance de arranque con impulso'],
@@ -112,7 +113,7 @@
   function makeDictionary(extra) {
     const D = {};
     GLOSSARY.forEach(g => {
-      const e = cleanEntry(g[1], g[2]); e.exId = slug(e.en); e.known = true;
+      const e = cleanEntry(g[1], g[2]); e.exId = g[3] || slug(e.en); e.known = true;
       g[0].split(' / ').forEach(t => { D[norm(t)] = e; });
     });
     // Nombres que el entrenador ya completó en importaciones anteriores: [{id,en,es,aliases[]}]
@@ -227,8 +228,11 @@
   }
   /* Títulos dentro de una sesión (4.18.0): «Core» no es un ejercicio, es el título de los que siguen (plancha, dorsal…).
      Rige para los ejercicios siguientes del mismo bloque hasta uno con su propia prescripción escrita («12x2 / 20x2»). */
-  const TITLES = { core: 'Core' };
+  /* 4.22.0: también «superior push» → «Upper-Body Push Exercises». Un título rige para los 2 ejercicios siguientes como máximo
+     (Core: plancha y dorsal; Upper-Body Push: snatch press y el press que sigue, no los de tracción que vienen después). */
+  const TITLES = { core: 'Core', 'superior push': 'Upper-Body Push Exercises' }, TITLE_SPAN = 2;
   const titleOf = it => { const t = String((it && it.raw) || '').replace(/[\s:.\-]+$/g, '').trim().toLowerCase(); return TITLES[t] || null; };
+  const isTitleLabel = v => Object.keys(TITLES).some(k => TITLES[k] === v);
   const ownPresc = it => !!(it.inline || /\d+\s*[xX]\s*\d+/.test(String(it.raw || '')));
   /* Segundos en el nombre («plancha peso 30"»): ejercicio isométrico medido en peso (discos) y tiempo; las series salen de la
      prescripción del bloque, el tiempo planificado es ese y no se calculan kilos por % (no tiene máximo). Solo ejercicios simples. */
@@ -237,12 +241,13 @@
   /* Ejercicios de una sesión → sin títulos (pasan a «sub» de los siguientes) y con «hold» en los isométricos.
      Devuelve { items, to } (to[i] = posición nueva del ejercicio i, o -1 si era un título). */
   function fixItems(list) {
-    const items = [], to = []; let sub = null, subBlock = null;
+    const items = [], to = []; let sub = null, subBlock = null, left = 0;
     (list || []).forEach(it0 => {
       const tt = titleOf(it0);
-      if (tt) { sub = tt; subBlock = it0.block || ''; to.push(-1); return; }
+      if (tt) { sub = tt; subBlock = it0.block || ''; left = TITLE_SPAN; to.push(-1); return; }
       const it = Object.assign({}, it0);
-      if (sub && (it.block || '') === subBlock && !ownPresc(it)) it.sub = sub; else { sub = null; if (it.sub && !titleOf({ raw: it.sub })) delete it.sub; }
+      if (sub && left > 0 && (it.block || '') === subBlock && !ownPresc(it)) { it.sub = sub; left--; }
+      else { sub = null; if (it.sub && !isTitleLabel(it.sub)) delete it.sub; }
       const h = holdIn(it); if (h > 0) { it.hold = h; it.meas = 'kgt'; }
       to.push(items.length); items.push(it);
     });
@@ -444,6 +449,6 @@
     return created;
   }
 
-  const api = { GLOSSARY: GLOSSARY, TEMPLATE_HEAD: TEMPLATE_HEAD, parsePlan: parsePlan, applyNames: applyNames, makeDictionary: makeDictionary, slug: slug, norm: norm, parsePresc: parsePresc, reparseItem: reparseItem, fixItems: fixItems, reparseWeek: reparseWeek, remapAdj: remapAdj };
+  const api = { GLOSSARY: GLOSSARY, TEMPLATE_HEAD: TEMPLATE_HEAD, parsePlan: parsePlan, applyNames: applyNames, makeDictionary: makeDictionary, slug: slug, norm: norm, parsePresc: parsePresc, RENAMED: GLOSSARY.filter(g => g[3]).map(g => ({ id: g[3], en: g[1], es: g[2] })), reparseItem: reparseItem, fixItems: fixItems, reparseWeek: reparseWeek, remapAdj: remapAdj };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PlanImport = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1370,7 +1370,7 @@ function start(opts) {
   APP = { requireSex: !!opts.requireSex, tabs: opts.tabs || [], nav: opts.nav || null, more: opts.more || null, accountHTML: opts.accountHTML || null, onAct: opts.onAct || null, onSave: opts.onSave || null, onFinish: opts.onFinish || null, onDelete: opts.onDelete || null, hoyHTML: opts.hoyHTML || null, hoyNotice: opts.hoyNotice || null, replaceDays: opts.replaceDays || null, cloud: !!opts.cloud };
   storageOK = true;
   const saved = load(), fresh = !saved;
-  if (saved) { S = normalize(saved); if (trimPlanSets(S)) save(true); }
+  if (saved) { S = normalize(saved); const a = trimPlanSets(S), b = renameExercises(S); if (a || b) save(true); }
   else if (opts.demo) { S = demoState(); save(true); }
   else { S = freshState(); if (opts.name) S.profile.name = opts.name; save(true); }
   if (opts.sex && (opts.sex === 'F' || opts.sex === 'M') && !S.profile.sex) { S.profile.sex = opts.sex; S.profile.cat = ''; save(true); }
@@ -1415,11 +1415,24 @@ function trimPlanSets(st) {
   });
   return changed;
 }
+/* Ejercicios renombrados en el plan (4.22.0): la copia del ejercicio en el dispositivo del atleta toma el nombre nuevo
+   (solo si sigue con el nombre anterior; un nombre que el atleta cambió no se toca). */
+const RENAMES = [{ id: 'hip-power-snatch', from: { en: 'Hip Power Snatch', es: 'Arranque de fuerza desde cadera' }, to: { en: 'Muscle Snatch hip', es: 'Arranque muscle desde cadera' } }];
+function renameExercises(st) {
+  let changed = false;
+  (st.exercises || []).forEach(e => {
+    const r = RENAMES.find(x => x.id === e.id); if (!r) return;
+    if (e.en === r.from.en) { e.en = r.to.en; changed = true; }
+    if (e.es === r.from.es) { e.es = r.to.es; changed = true; }
+    if (e.name === r.from.es || e.name === r.from.en) { e.name = e.name === r.from.en ? r.to.en : r.to.es; changed = true; }
+  });
+  return changed;
+}
 function untouched(x) { return !x.done && !x.fail && !(String(x.reps || '').trim()) && !(x.secs > 0) && !(x.rpe > 0); }
 /* Lo usa sync.js: leer el estado, el estado inicial y aplicar cambios que llegan de la nube */
 function commit(fn) {
   if (!S) return;
-  fn(S); S = normalize(S); trimPlanSets(S);
+  fn(S); S = normalize(S); trimPlanSets(S); renameExercises(S);
   S.sessions.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
   save(true); softRefresh();
 }
